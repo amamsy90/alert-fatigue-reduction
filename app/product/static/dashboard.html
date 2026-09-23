@@ -94,8 +94,11 @@
           "Buffered batches: " + c.webhook.buffered_batches,
           c.webhook.last_ingest_at ? "Last ingest " + esc(c.webhook.last_ingest_at) : "No webhook yet",
         ]),
-        card("Prometheus", c.prometheus.configured, [
+        card("Prometheus", (c.prometheus.probe && c.prometheus.probe.reachable) ? true : c.prometheus.configured ? "warn" : false, [
           c.prometheus.configured ? esc(c.prometheus.url) : "Set PROM_URL to pull memory.",
+          c.prometheus.probe && c.prometheus.probe.reachable
+            ? "Reachable" + (c.prometheus.probe.version ? " (Prometheus " + esc(c.prometheus.probe.version) + ")" : "")
+            : (c.prometheus.probe && c.prometheus.probe.error ? "Unreachable: " + esc(c.prometheus.probe.error) : "Not probed"),
           c.prometheus.service_label ? "Service label " + esc(c.prometheus.service_label) : "Default service labels",
         ]),
         card("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [

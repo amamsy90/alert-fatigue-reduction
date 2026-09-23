@@ -30,11 +30,16 @@ def client(tmp_path, monkeypatch):
 def test_connectors_dashboard_hides_secrets(client, monkeypatch):
     monkeypatch.setenv("PAGERDUTY_ROUTING_KEY", "secret-key-must-not-appear")
     monkeypatch.setenv("PROM_URL", "http://prom.test:9090")
+    monkeypatch.setattr(
+        "product.app.probe_prometheus",
+        lambda url=None: {"reachable": True, "version": "2.54.0"},
+    )
     res = client.get("/connectors")
     assert res.status_code == 200
     body = res.json()
     assert body["prometheus"]["configured"] is True
     assert body["prometheus"]["url"] == "http://prom.test:9090"
+    assert body["prometheus"]["probe"] == {"reachable": True, "version": "2.54.0"}
     assert body["pagerduty"]["configured"] is True
     assert body["pagerduty"]["will_page"] is False
     assert "secret-key-must-not-appear" not in res.text

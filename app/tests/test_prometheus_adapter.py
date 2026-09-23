@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 from product.prometheus_adapter import (
     MAX_POINTS,
     fetch_memory_metrics,
+    probe_prometheus,
     service_from_labels,
     step_seconds,
 )
@@ -73,3 +74,17 @@ def test_pod_hash_is_stripped_and_replicas_are_summed(monkeypatch):
     assert len(frame) == 1
     assert frame["service"].iloc[0] == "webservice1"
     assert frame["value"].iloc[0] == 150.0
+
+
+def test_probe_reports_reachable_version(monkeypatch):
+    monkeypatch.setenv("PROM_URL", "http://prom.test")
+    payload = {"status": "success", "data": {"version": "2.54.0"}}
+    with patch("product.prometheus_adapter.urlopen", return_value=_Resp(payload)):
+        out = probe_prometheus()
+    assert out == {"reachable": True, "version": "2.54.0"}
+
+
+def test_probe_does_not_echo_url_on_failure():
+    out = probe_prometheus("http://user:secret@127.0.0.1:1")
+    assert out["reachable"] is False
+    assert "secret" not in str(out)

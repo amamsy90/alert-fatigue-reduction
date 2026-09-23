@@ -89,3 +89,20 @@ def fetch_memory_metrics(
     )
     frame["series_id"] = frame["service"]
     return frame.sort_values("timestamp").reset_index(drop=True)
+
+
+def probe_prometheus(base_url: str | None = None, timeout: float = 2.0) -> dict:
+    """Reach Prometheus `/api/v1/status/buildinfo`. Does not return the URL or secrets."""
+    base_url = (base_url or os.environ.get("PROM_URL") or "").rstrip("/")
+    if not base_url:
+        return {"reachable": False, "error": "PROM_URL is not set"}
+    url = f"{base_url}/api/v1/status/buildinfo"
+    try:
+        with urlopen(url, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001 — show type only; the URL may contain a password
+        return {"reachable": False, "error": type(exc).__name__}
+    if payload.get("status") != "success":
+        return {"reachable": False, "error": "Prometheus status was not success"}
+    version = (payload.get("data") or {}).get("version")
+    return {"reachable": True, "version": version}

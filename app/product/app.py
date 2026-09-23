@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from product.alertmanager import looks_like_alertmanager, normalize_ingest
 from product.model_store import load_model
 from product.pipeline import run_job
+from product.prometheus_adapter import probe_prometheus
 from product.store import QueueStore
 
 APP_DIR = Path(__file__).resolve().parent
@@ -119,6 +120,7 @@ def _connector_status() -> dict:
             "url": prom or None,
             "query_set": bool(os.environ.get("PROM_QUERY")),
             "service_label": os.environ.get("PROM_SERVICE_LABEL") or None,
+            "probe": probe_prometheus(prom or None) if prom else {"reachable": False, "error": "PROM_URL is not set"},
         },
         "pagerduty": {
             "configured": pd_on,

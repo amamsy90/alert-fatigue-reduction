@@ -304,9 +304,11 @@
           `Buffered batches: ${c.webhook.buffered_batches}`,
           c.webhook.last_ingest_at ? `Last ingest ${escapeHtml(c.webhook.last_ingest_at)}` : "No webhook received yet",
         ]),
-        connCard("Prometheus", c.prometheus.configured, [
+        connCard("Prometheus", c.prometheus.probe && c.prometheus.probe.reachable ? true : c.prometheus.configured ? "warn" : false, [
           c.prometheus.configured ? escapeHtml(c.prometheus.url) : "PROM_URL is not set",
-          c.prometheus.service_label ? `service label ${escapeHtml(c.prometheus.service_label)}` : "Default service labels",
+          c.prometheus.probe && c.prometheus.probe.reachable
+            ? "Reachable" + (c.prometheus.probe.version ? " (Prometheus " + escapeHtml(c.prometheus.probe.version) + ")" : "")
+            : (c.prometheus.probe && c.prometheus.probe.error ? "Unreachable: " + escapeHtml(c.prometheus.probe.error) : "Not probed"),
         ]),
         connCard("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [
           pd.configured ? "Routing key is set (not shown)." : "PAGERDUTY_ROUTING_KEY is not set",
