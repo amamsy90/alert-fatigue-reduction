@@ -1,0 +1,9 @@
+system,budget_k,surfaced,precision,recall,detection_rate,mtta_minutes,false_alerts_per_day,cost_weighted_error,reduction_rate,gate
+baseline,5,14,0.0,0.0,0.0,,0.4,5084.0,0.9996,False
+policy,5,11,0.0909,0.002,0.0008,4.03,0.29,5070.0,0.9996,False
+baseline,10,24,0.0,0.0,0.0,,0.69,5094.0,0.9992,False
+policy,10,11,0.0909,0.002,0.0008,4.03,0.29,5070.0,0.9996,False
+baseline,20,44,0.0,0.0,0.0,,1.26,5114.0,0.9986,False
+policy,20,11,0.0909,0.002,0.0008,4.03,0.29,5070.0,0.9996,False
+baseline,50,58,0.0,0.0,0.0,,1.61,5128.0,0.9981,False
+policy,50,11,0.0909,0.002,0.0008,4.03,0.29,5070.0,0.9996,False

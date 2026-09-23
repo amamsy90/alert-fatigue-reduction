@@ -1,0 +1,6 @@
+data/sample_product/
+product/data/
+__pycache__/
+.pytest_cache/
+*.db
+.venv/

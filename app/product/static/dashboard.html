@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connectors — on-call queue</title>
+  <style>
+    :root {
+      --navy: #1c3a5c;
+      --gold: #b0894b;
+      --ink: #2b3138;
+      --muted: #5c656d;
+      --line: #d7dde3;
+      --panel: #f6f4ef;
+    }
+    body { margin: 0; font-family: Calibri, "Segoe UI", sans-serif; color: var(--ink); }
+    header {
+      border-bottom: 1px solid var(--line);
+      padding: 1rem 1.5rem;
+      background: var(--panel);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    h1 { margin: 0; font-family: Arial, sans-serif; font-size: 1.35rem; color: var(--navy); }
+    a { color: var(--navy); }
+    main { padding: 1.25rem 1.5rem 2rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0.9rem; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.9rem 1rem;
+      background: var(--panel);
+      min-height: 8rem;
+    }
+    .card h2 { margin: 0 0 0.45rem; font-size: 1rem; color: var(--navy); font-family: Arial, sans-serif; }
+    .card p { margin: 0.25rem 0; font-size: 0.9rem; color: var(--muted); }
+    .dot { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; margin-right: 0.4rem; }
+    .dot.on { background: #2d6a4f; }
+    .dot.off { background: #adb5bd; }
+    .dot.warn { background: var(--gold); }
+    pre {
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 0.6rem 0.75rem;
+      overflow-x: auto;
+      font-size: 0.78rem;
+    }
+    .note { color: var(--muted); font-size: 0.85rem; margin-top: 1.25rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Connectors</h1>
+    <a href="/">Back to the queue</a>
+  </header>
+  <main>
+    <div id="cards" class="cards"></div>
+    <p class="note">
+      Secrets are never shown. Green = live. Gold = configured but not sending.
+      Grey = not set. Prometheus is used when you score an ingest job.
+    </p>
+    <h2 style="color:var(--navy);font-family:Arial,sans-serif;font-size:1rem">Alertmanager receiver</h2>
+    <pre>receivers:
+  - name: oncall-queue
+    webhook_configs:
+      - url: http://HOST:8080/ingest/alertmanager
+        send_resolved: false</pre>
+  </main>
+  <script>
+    function card(title, state, lines) {
+      const cls = state === true ? "on" : state === "warn" ? "warn" : "off";
+      return `<article class="card"><h2><span class="dot ${cls}"></span>${title}</h2>` +
+        lines.map(t => `<p>${t}</p>`).join("") + "</article>";
+    }
+    function esc(s) {
+      return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    }
+    fetch("/connectors").then(r => r.json()).then(c => {
+      const pd = c.pagerduty || {};
+      const last = pd.last;
+      const job = c.last_job;
+      document.getElementById("cards").innerHTML = [
+        card("Shadow mode", c.shadow_mode ? "warn" : true, [
+          c.shadow_mode ? "On — decisions are logged only." : "Off — escalations may page.",
+        ]),
+        card("Login", c.login_required ? true : "warn", [
+          c.login_required ? "APP_PASSWORD is set." : "Open to anyone who can reach this port.",
+        ]),
+        card("Alertmanager / webhook", true, [
+          "POST " + c.webhook.path + " (also " + c.webhook.also + ")",
+          "Buffered batches: " + c.webhook.buffered_batches,
+          c.webhook.last_ingest_at ? "Last ingest " + esc(c.webhook.last_ingest_at) : "No webhook yet",
+        ]),
+        card("Prometheus", c.prometheus.configured, [
+          c.prometheus.configured ? esc(c.prometheus.url) : "Set PROM_URL to pull memory.",
+          c.prometheus.service_label ? "Service label " + esc(c.prometheus.service_label) : "Default service labels",
+        ]),
+        card("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [
+          pd.configured ? "Routing key is set (hidden)." : "Set PAGERDUTY_ROUTING_KEY to page.",
+          pd.will_page ? "Will page escalations." : "Will not page until the key is set and shadow is off.",
+          last
+            ? "Last job: sent " + (last.sent ?? 0) + ", failed " + (last.failed ?? 0) +
+              (last.skipped ? " (" + last.skipped + ")" : "")
+            : "No page attempt yet",
+        ]),
+        card("Last job", job ? true : false, [
+          job ? job.source + " · " + job.job_id : "No job yet",
+          job && job.has_metrics ? "Had memory metrics" : "No memory on last job",
+        ]),
+      ].join("");
+    }).catch(err => {
+      document.getElementById("cards").innerHTML = "<p>Could not load /connectors: " + esc(err) + "</p>";
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+services:
+  oncall-queue:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SHADOW_MODE: "1"
+      QUEUE_DB: /app/product/data/queue.db
+      # The container listens on all interfaces, so set a password before sharing it.
+      APP_USER: ${APP_USER:-oncall}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      # PROM_URL: http://host.docker.internal:9090
+      # PROM_SERVICE_LABEL: app
+      # PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
+    volumes:
+      - queue-data:/app/product/data
+      - ./data/gaia_raw:/app/data/gaia_raw:ro
+      - ./data/gaia_metrics:/app/data/gaia_metrics:ro
+
+volumes:
+  queue-data:

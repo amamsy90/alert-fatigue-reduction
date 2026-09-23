@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>On-call alert queue</title>
+  <style>
+    :root {
+      --navy: #1c3a5c;
+      --gold: #b0894b;
+      --ink: #2b3138;
+      --muted: #5c656d;
+      --line: #d7dde3;
+      --panel: #f6f4ef;
+      --esc: #8b3a3a;
+      --ask: #8a6d3b;
+      --hide: #5c656d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Calibri, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: #fff;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      padding: 1rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+      justify-content: space-between;
+      background: var(--panel);
+    }
+    h1 {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      font-size: 1.35rem;
+      color: var(--navy);
+    }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+    label { font-size: 0.85rem; color: var(--muted); }
+    select, button, input[type="file"] {
+      font: inherit;
+      padding: 0.4rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fff;
+    }
+    button {
+      cursor: pointer;
+      background: var(--navy);
+      color: #fff;
+      border-color: var(--navy);
+    }
+    button.secondary { background: #fff; color: var(--navy); }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    main { padding: 1rem 1.5rem 2rem; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #fff;
+    }
+    .badge.escalate { background: var(--esc); }
+    .badge.review { background: var(--ask); }
+    .badge.suppress { background: var(--hide); }
+    .shadow {
+      border: 1px solid var(--gold);
+      color: var(--navy);
+      background: #fff8eb;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.45rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--navy); font-family: Arial, sans-serif; font-size: 0.8rem; }
+    .msg { max-width: 28rem; word-break: break-word; }
+    .err { color: var(--esc); margin: 0.5rem 0; }
+    .spike { color: var(--gold); font-weight: 700; }
+    h2.section {
+      color: var(--navy);
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      margin: 1.25rem 0 0.4rem;
+    }
+    .silent { color: var(--esc); font-weight: 700; }
+    .verdict { white-space: nowrap; }
+    .verdict button {
+      padding: 0.15rem 0.45rem;
+      font-size: 0.75rem;
+      background: #fff;
+      color: var(--navy);
+      border: 1px solid var(--line);
+    }
+    .verdict button.on.real { background: var(--esc); color: #fff; border-color: var(--esc); }
+    .verdict button.on.noise { background: var(--hide); color: #fff; border-color: var(--hide); }
+    .secondary-link { align-self: center; color: var(--navy); font-size: 0.85rem; }
+    .cards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.4rem 0 1rem; }
+    .card {
+      flex: 1 1 14rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.7rem 0.85rem;
+      background: var(--panel);
+    }
+    .card h3 { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--navy); }
+    .card p { margin: 0.2rem 0; font-size: 0.85rem; color: var(--muted); }
+    .dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.35rem; }
+    .dot.on { background: #2d6a4f; }
+    .dot.off { background: #adb5bd; }
+    .dot.warn { background: var(--gold); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>On-call alert queue</h1>
+      <div class="sub">Cloud microservice operations — escalate / ask / hide under budget K · <a href="/dashboard">Connectors dashboard</a></div>
+    </div>
+    <div class="controls">
+      <div>
+        <label for="k">Budget K</label><br />
+        <select id="k">
+          <option>5</option>
+          <option>10</option>
+          <option selected>20</option>
+          <option>50</option>
+        </select>
+      </div>
+      <div>
+        <label for="action">Filter</label><br />
+        <select id="action">
+          <option value="all">all</option>
+          <option value="escalate">escalate</option>
+          <option value="review">ask</option>
+          <option value="suppress">hide</option>
+        </select>
+      </div>
+      <div>
+        <label for="day">Day</label><br />
+        <select id="day"><option value="">latest job / all days</option></select>
+      </div>
+      <button id="btn-sample" type="button">Run sample</button>
+      <button id="btn-gaia" class="secondary" type="button">Run GAIA</button>
+      <button id="btn-refresh" class="secondary" type="button">Refresh</button>
+      <button id="btn-ingest" class="secondary" type="button">Score buffer</button>
+    </div>
+  </header>
+  <main>
+    <section id="connectors">
+      <h2 class="section">Connectors</h2>
+      <div id="conn-cards" class="cards"></div>
+    </section>
+    <div id="shadow" class="shadow" hidden>
+      Shadow mode is on — decisions are logged only; nothing is sent to a pager.
+    </div>
+    <form id="upload" class="controls" style="margin-bottom:1rem">
+      <div>
+        <label>Alerts CSV</label><br />
+        <input type="file" id="alerts" accept=".csv" required />
+      </div>
+      <div>
+        <label>Memory CSV (optional)</label><br />
+        <input type="file" id="metrics" accept=".csv" />
+      </div>
+      <div>
+        <label>Faults CSV (optional)</label><br />
+        <input type="file" id="faults" accept=".csv" />
+      </div>
+      <button type="submit" class="secondary">Upload &amp; score</button>
+      <a href="/feedback/faults.csv" class="secondary-link">Download confirmed faults</a>
+    </form>
+    <div id="weak" class="shadow" hidden>
+      No fault labels in this data — the model was trained using severity as a stand-in.
+      Treat these decisions as a demo, not a measured result. Mark items Real / Noise;
+      the next run trains on your marks instead.
+    </div>
+    <div id="retrain" class="shadow" hidden></div>
+    <div id="learning" class="meta"></div>
+    <div id="err" class="err" hidden></div>
+    <div id="meta" class="meta"></div>
+    <section id="jumps-box" hidden>
+      <h2 class="section">Memory jumps</h2>
+      <div id="jumps-note" class="meta"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Start</th>
+            <th>Minutes</th>
+            <th>Rise</th>
+            <th>Alerts inside</th>
+            <th>Already escalated</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody id="jump-rows"></tbody>
+      </table>
+      <h2 class="section">Alerts</h2>
+    </section>
+    <table>
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Service</th>
+          <th>Time</th>
+          <th>Score</th>
+          <th>Spike</th>
+          <th>Reason</th>
+          <th>Message</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+  <script>
+    let currentJob = null;
+
+    function showErr(msg) {
+      const el = document.getElementById("err");
+      if (!msg) { el.hidden = true; el.textContent = ""; return; }
+      el.hidden = false;
+      el.textContent = msg;
+    }
+
+    function setBusy(busy) {
+      document.querySelectorAll("button").forEach(b => b.disabled = busy);
+    }
+
+    async function runJob(mode) {
+      showErr("");
+      setBusy(true);
+      try {
+        const k = Number(document.getElementById("k").value);
+        const res = await fetch("/jobs/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode, budget_k: k }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+        currentJob = data.job_id;
+        fillDays(data.days || []);
+        await loadQueue();
+        await loadConnectors();
+      } catch (e) {
+        showErr(e.message || String(e));
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function connCard(title, on, lines) {
+      const cls = on === true ? "on" : on === "warn" ? "warn" : "off";
+      const body = lines.map(t => `<p>${t}</p>`).join("");
+      return `<article class="card"><h3><span class="dot ${cls}"></span>${title}</h3>${body}</article>`;
+    }
+
+    async function loadConnectors() {
+      const res = await fetch("/connectors");
+      if (!res.ok) {
+        document.getElementById("conn-cards").innerHTML =
+          "<p class=\"err\">Connectors API is missing on this server. Open the app on the port that was started after the dashboard was added (try 8082), or restart uvicorn.</p>";
+        return;
+      }
+      const c = await res.json();
+      const pd = c.pagerduty || {};
+      const last = pd.last;
+      const pageLine = last
+        ? `Last job: sent ${last.sent ?? 0}, failed ${last.failed ?? 0}${last.skipped ? " (" + last.skipped + ")" : ""}`
+        : "No page attempt yet";
+      document.getElementById("conn-cards").innerHTML = [
+        connCard("Shadow mode", c.shadow_mode ? "warn" : true, [
+          c.shadow_mode ? "On — nothing is sent to PagerDuty." : "Off — escalations may page.",
+        ]),
+        connCard("Alertmanager / webhook", true, [
+          `POST ${c.webhook.path}`,
+          `Buffered batches: ${c.webhook.buffered_batches}`,
+          c.webhook.last_ingest_at ? `Last ingest ${escapeHtml(c.webhook.last_ingest_at)}` : "No webhook received yet",
+        ]),
+        connCard("Prometheus", c.prometheus.configured, [
+          c.prometheus.configured ? escapeHtml(c.prometheus.url) : "PROM_URL is not set",
+          c.prometheus.service_label ? `service label ${escapeHtml(c.prometheus.service_label)}` : "Default service labels",
+        ]),
+        connCard("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [
+          pd.configured ? "Routing key is set (not shown)." : "PAGERDUTY_ROUTING_KEY is not set",
+          pd.will_page ? "Will page escalations." : "Will not page (need key + shadow off).",
+          pageLine,
+        ]),
+      ].join("");
+    }
+
+    function fillDays(days) {
+      const sel = document.getElementById("day");
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">all days in job</option>';
+      days.forEach(d => {
+        const o = document.createElement("option");
+        o.value = d;
+        o.textContent = d;
+        sel.appendChild(o);
+      });
+      if (days.includes(prev)) sel.value = prev;
+    }
+
+    async function loadQueue() {
+      showErr("");
+      const action = document.getElementById("action").value;
+      const day = document.getElementById("day").value;
+      const params = new URLSearchParams();
+      if (currentJob) params.set("job_id", currentJob);
+      if (day) params.set("day", day);
+      if (action && action !== "all") params.set("action", action);
+      const res = await fetch("/queue?" + params.toString());
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+      currentJob = data.job.job_id;
+      fillDays(data.days || []);
+      document.getElementById("shadow").hidden = !data.job.shadow_mode;
+      const m = data.job.meta || {};
+      document.getElementById("weak").hidden = m.label_source !== "weak_severity";
+      document.getElementById("meta").innerHTML = [
+        `Job <strong>${data.job.job_id}</strong>`,
+        `source ${data.job.source}`,
+        `K=${data.job.budget_k}`,
+        `escalate ${m.escalate ?? "—"}`,
+        `ask ${m.review ?? "—"}`,
+        `hide ${m.suppress ?? "—"}`,
+        `labels ${m.label_source ?? "—"}`,
+        `<span id="fb-count">${feedbackText(data.feedback)}</span>`,
+        `showing ${data.count}`,
+      ].join(" · ");
+      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k);
+      renderLearning(data.feedback || {}, data.model || {}, m);
+      const tbody = document.getElementById("rows");
+      tbody.innerHTML = "";
+      (data.items || []).forEach(item => {
+        const tr = document.createElement("tr");
+        const label = item.action === "review" ? "ask" : (item.action === "suppress" ? "hide" : item.action);
+        tr.innerHTML = `
+          <td><span class="badge ${item.action}">${label}</span></td>
+          <td>${escapeHtml(item.source)}</td>
+          <td>${escapeHtml(item.timestamp)}</td>
+          <td>${Number(item.score).toFixed(3)}</td>
+          <td class="spike">${item.during_memory_spike ? "yes" : ""}</td>
+          <td>${escapeHtml(item.reason)}</td>
+          <td class="msg">${escapeHtml(item.message)}</td>
+          <td class="verdict">${verdictButtons("alert", item.id, item.verdict)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    let feedbackCounts = { real: 0, noise: 0 };
+
+    function feedbackText(counts) {
+      feedbackCounts = { real: 0, noise: 0, ...(counts || {}) };
+      return `confirmed real ${feedbackCounts.real} / noise ${feedbackCounts.noise}`;
+    }
+
+    function verdictButtons(kind, id, verdict) {
+      const btn = (v, text) =>
+        `<button type="button" class="${v}${verdict === v ? " on" : ""}" ` +
+        `data-kind="${kind}" data-id="${id}" data-verdict="${v}" data-current="${verdict || ""}">${text}</button>`;
+      return btn("real", "Real") + " " + btn("noise", "Noise");
+    }
+
+    document.addEventListener("click", async (ev) => {
+      const b = ev.target.closest(".verdict button");
+      if (!b) return;
+      const verdict = b.dataset.current === b.dataset.verdict ? null : b.dataset.verdict;
+      try {
+        const res = await fetch("/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: b.dataset.kind, id: Number(b.dataset.id), verdict }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+        const counts = { ...feedbackCounts };
+        if (b.dataset.current) counts[b.dataset.current] -= 1;
+        if (verdict) counts[verdict] += 1;
+        const countEl = document.getElementById("fb-count");
+        if (countEl) countEl.textContent = feedbackText(counts);
+        b.parentElement.innerHTML = verdictButtons(b.dataset.kind, b.dataset.id, verdict);
+      } catch (e) {
+        showErr(e.message || String(e));
+      }
+    });
+
+    function precisionText(label, part) {
+      if (!part || part.precision === null || part.precision === undefined) return `${label}: no marks yet`;
+      return `${label}: ${Math.round(part.precision * 100)}% real ` +
+        `(${part.real} real / ${part.noise} noise)`;
+    }
+
+    function renderLearning(feedback, model, meta) {
+      const parts = [
+        "Marked so far — " + precisionText("jumps", feedback.jump),
+        precisionText("alerts", feedback.alert),
+      ];
+      if (meta.model_used) {
+        parts.push(meta.model_used === "saved"
+          ? "this job was scored with the saved model"
+          : "this job trained a new model");
+      }
+      if (meta.labelled_by_real_marks) parts.push(`${meta.labelled_by_real_marks} alerts labelled by Real marks`);
+      if (meta.cleared_by_noise_marks) parts.push(`${meta.cleared_by_noise_marks} labels cleared by Noise marks`);
+      document.getElementById("learning").textContent = parts.join(" · ");
+      const box = document.getElementById("retrain");
+      box.hidden = !model.retrain_due;
+      if (model.retrain_due) {
+        box.textContent = "Retrain recommended: " + model.retrain_reasons.join("; ") +
+          ". Run the next full batch (upload or GAIA) to train on the latest marks.";
+      }
+    }
+
+    function renderJumps(jumps, total, k) {
+      document.getElementById("jumps-box").hidden = total === 0;
+      document.getElementById("jumps-note").textContent =
+        `Biggest ${jumps.length} of ${total} jumps. Jumps take the first of the K=${k} daily slots; ` +
+        "escalations and asks fill what is left. A jump with no alerts inside may be a fault the logs missed.";
+      const tbody = document.getElementById("jump-rows");
+      tbody.innerHTML = "";
+      jumps.forEach(j => {
+        const minutes = Math.max(1, Math.round((new Date(j.end) - new Date(j.start)) / 60000));
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHtml(j.service)}</td>
+          <td>${escapeHtml(j.start.replace("T", " ").slice(0, 16))} UTC</td>
+          <td>${minutes}</td>
+          <td class="spike">+${Number(j.rise_gb).toFixed(2)} GB</td>
+          <td class="${j.alerts_inside ? "" : "silent"}">${j.alerts_inside || "none"}</td>
+          <td>${j.escalated_inside}</td>
+          <td class="verdict">${verdictButtons("jump", j.id, j.verdict)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    document.getElementById("btn-sample").onclick = () => runJob("sample");
+    document.getElementById("btn-gaia").onclick = () => runJob("gaia");
+    document.getElementById("btn-refresh").onclick = () => {
+      loadQueue().catch(e => showErr(e.message));
+      loadConnectors().catch(() => {});
+    };
+    document.getElementById("btn-ingest").onclick = () => runJob("ingest");
+    document.getElementById("action").onchange = () => loadQueue().catch(e => showErr(e.message));
+    document.getElementById("day").onchange = () => loadQueue().catch(e => showErr(e.message));
+    document.getElementById("k").onchange = () => {
+      /* K applies on next run */
+    };
+
+    document.getElementById("upload").onsubmit = async (ev) => {
+      ev.preventDefault();
+      showErr("");
+      setBusy(true);
+      try {
+        const fd = new FormData();
+        fd.append("alerts_file", document.getElementById("alerts").files[0]);
+        const metrics = document.getElementById("metrics").files[0];
+        if (metrics) fd.append("metrics_file", metrics);
+        const faults = document.getElementById("faults").files[0];
+        if (faults) fd.append("faults_file", faults);
+        fd.append("budget_k", document.getElementById("k").value);
+        fd.append("shadow_mode", "true");
+        const res = await fetch("/jobs/upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+        currentJob = data.job_id;
+        fillDays(data.days || []);
+        await loadQueue();
+      } catch (e) {
+        showErr(e.message || String(e));
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    loadQueue().catch(() => {});
+    loadConnectors().catch(() => {});
+  </script>
+</body>
+</html>

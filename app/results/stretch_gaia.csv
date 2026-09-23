@@ -1,0 +1,5 @@
+system,alerts,surfaced,precision,recall,reduction_rate,detection_rate,mtta_minutes,false_alerts_per_day,cost_weighted_error,budget_k,escalate,review,suppress,auto_recall,recall_held
+review,31233,275,0.04,0.0217,0.9912,0.0057,3.49,4.89,5224.0,5,11,264,30958,0.002,True
+review,31233,547,0.0293,0.0316,0.9825,0.0073,4.17,9.83,5441.0,10,11,536,30686,0.002,True
+review,31233,1087,0.0294,0.0631,0.9652,0.0171,4.48,19.18,5805.0,20,11,1076,30146,0.002,True
+review,31233,2707,0.0225,0.1203,0.9133,0.0269,3.78,48.11,7106.0,50,11,2696,28526,0.002,True

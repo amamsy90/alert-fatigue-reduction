@@ -1,0 +1,9 @@
+system,budget_k,surfaced,precision,recall,detection_rate,mtta_minutes,false_alerts_per_day,cost_weighted_error,reduction_rate
+baseline,5,14,0.0,0.0,0.0,,0.4,5084.0,0.9996
+memory_policy,5,203,0.9113,0.3649,0.093,3.23,0.33,3238.0,0.9935
+baseline,10,24,0.0,0.0,0.0,,0.69,5094.0,0.9992
+memory_policy,10,301,0.9037,0.5365,0.124,3.21,0.53,2379.0,0.9904
+baseline,20,44,0.0,0.0,0.0,,1.26,5114.0,0.9986
+memory_policy,20,311,0.8971,0.5503,0.1256,3.19,0.58,2312.0,0.99
+baseline,50,58,0.0,0.0,0.0,,1.61,5128.0,0.9981
+memory_policy,50,311,0.8971,0.5503,0.1256,3.19,0.58,2312.0,0.99

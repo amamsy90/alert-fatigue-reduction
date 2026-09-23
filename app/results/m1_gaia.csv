@@ -1,0 +1,5 @@
+system,budget_k,alerts,surfaced,precision,recall,reduction_rate,detection_rate,mtta_minutes,false_alerts_per_day,cost_weighted_error
+baseline_k5,5,31233,14,0.0,0.0,0.9996,0.0,,0.4,5084.0
+baseline_k10,10,31233,24,0.0,0.0,0.9992,0.0,,0.69,5094.0
+baseline_k20,20,31233,44,0.0,0.0,0.9986,0.0,,1.26,5114.0
+baseline_k50,50,31233,58,0.0,0.0,0.9981,0.0,,1.61,5128.0

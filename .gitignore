@@ -1,0 +1,23 @@
+# GAIA archives (large; keep local)
+app/data/gaia_raw/
+app/data/gaia_metrics/
+app/data/sample_product/
+
+# Runtime state and secrets
+app/product/data/
+*.db
+*.pkl
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+desktop.ini
