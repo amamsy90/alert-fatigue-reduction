@@ -1,0 +1,2 @@
+folds,mean,ci_low,ci_high,min,max,wins_vs_baseline,sign_n,sign_p,weakest_fold,weakest_faults,test_faults,signal_log_and_jump,signal_jump_only,signal_log_only,signal_silent,injection_tags,fold7_faults_per_day
+8,0.7474,0.6734,0.8078,0.526,0.845,8,8,0.00390625,7,173,1226,185,869,34,138,memory_anomalies:1367,24.57

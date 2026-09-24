@@ -16,7 +16,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | D3 | Memory-jump detector vs injected faults | Done (`results/memory_gaia_jump.csv`) — 86.1% overlap |
 | D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — 72.8% at K=20 |
 | D5 | Local on-call app (shadow mode, marks, saved model) | Done (`app/product/`) |
-| D6 | Final report + name / course / date on documents | Open |
+| D6 | Final report + name / course / date on documents | Report includes interval + silent-fault table; name / course / date still open |
 
 ## 2. Work breakdown
 
@@ -33,8 +33,10 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | T9 | Score jump overlap on week 1 (tune) and test period | M3 | Done |
 | T10 | Shared budget: jumps first, then escalate / ask | M4 | Done |
 | T11 | Queue evaluation at K = 5 / 10 / 20 / 50 | M4 | Done |
+| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, mean 74.7%) |
 | T12 | Stretch: ask only inside a jump; Real / Noise; retrain | D5 | Done |
-| T13 | Final report; name / course / date | D6 | Open |
+| T13 | Final report; name / course / date | D6 | Report in `FINAL_REPORT.md`; fill author fields |
+| T14 | Interval, 8/8 test, silent-fault counts | M4 | Done (`results/stats_gaia.csv`) |
 
 ## 3. Schedule
 
@@ -46,7 +48,14 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | 7 | M4: shared-budget policy | D4 |
 | 8 | Product + write-up | D5, D6 |
 
-Core evaluation is complete. Remaining write-up: author fields, Word/canvas copies if the course requires them.
+Core evaluation is complete. One month remains. Do not change the dataset.
+
+| Remaining | Focus | Output |
+|---|---|---|
+| This week | Frozen claim + stats | T14 done |
+| Next week | Name / course / date; Word/PDF if the course wants it | D6 |
+| Week after | Viva answers + 3-minute local demo | Notes from report §8 |
+| Last week | `run_validate.py`; freeze; submit | Hand-in |
 
 ## 4. Risk register
 
@@ -68,4 +77,4 @@ Core evaluation is complete. Remaining write-up: author fields, Word/canvas copi
 ## 6. Tracking and definition of done
 
 - A task is **done** when its output is computed on the held-out test period, written under `results/`, and reproducible from a script.
-- Final course success still lists the original 95% detection target. That target is **not met at K=20** (72.8%). At K=50 the queue reaches 86.0%, which is the jump-rule ceiling (86.1% of faults have an overlapping jump). Report that gap honestly.
+- Course success is a win over the baseline under budget K, a walk-forward interval, and stated limits. The old 95% detection target is **not the claim** (72.8% at K=20). At K=50 the queue reaches 86.0%, the jump-rule ceiling. 11.3% of test faults are silent.

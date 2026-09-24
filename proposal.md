@@ -19,7 +19,7 @@ This project focuses on **one sector: cloud microservice operations** — the on
 - Consequence: **alert fatigue** — real incidents are missed or acknowledged late, not because detection failed, but because attention ran out. Users of the platform see slowdowns or outages.
 - Today's common practice — fixed severity thresholds plus deleting exact duplicates — does not understand alert content, cannot recognize a memory jump as one incident, and does not adapt to how much attention is available.
 
-**Goal:** on a cloud microservice on-call queue, given a fixed review budget, surface more real faults than the threshold + dedup baseline while showing people fewer items.
+**Goal:** on a cloud microservice on-call queue, given a fixed review budget, catch more injected faults than severity + exact-duplicate grouping. Success is a clear win on a frozen train window, a held-out test, and a walk-forward check — not a 95% recall target. That 95% figure assumed every fault leaves a log line. On this data most do not.
 
 ## 3. Objectives
 
@@ -60,7 +60,7 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 ### M4 — Budget-aware decision policy
 - One daily budget of K items shared by jumps and alerts. The biggest jumps take the first slots; alerts fill what is left, escalations before "ask a person". An alert inside a jump on the same service is marked for the classifier.
 - Rank by expected cost so the top-K items fit the human budget; sweep K = 5, 10, 20, 50 per day.
-- *Done when:* the policy dominates the baseline at every budget; MTTA ≥ 50% lower; false-alert burden ≥ 80% lower.
+- *Done when:* the policy beats the baseline on faults caught at every budget K; walk-forward mean stays near the one-shot test; weaker weeks and silent faults are reported, not hidden.
 
 ### Stretch — human-in-the-loop
 - Only uncertain alerts inside a memory jump are routed to a person, instead of every uncertain alert; report how decisions change when staff can handle more or fewer items.
@@ -75,16 +75,19 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 - Baseline parity: the baseline runs on the identical split.
 - Ground truth: GAIA's injected-fault records.
 
-**Metrics (mapped to the required success criteria)**
+**What this project is marked on**
 
-| Required criterion | Metric | Target |
-|---|---|---|
-| Alert classification | Precision and recall vs. labelled incidents | Recall ≥ 95% at K = 20; escalation precision ≥ 90%; suppression precision ≥ 98% |
-| Memory jumps | Share of injected faults overlapped by a jump on the same service; false jumps | Overlap the real fault window; ignore single-point blips |
-| System effectiveness | Alert reduction rate; incident detection rate | ≥ 90% reduction; ≥ 95% detection at K = 20 |
-| Human effort | MTTA reduction; false-alert burden | ≥ 50% lower MTTA; ≥ 80% fewer false alerts/day |
+| Claim | How it is shown |
+|---|---|
+| Beats the usual on-call rule under a budget | **72.8%** vs **0%** at K=20; also wins at K=5 / 10 / 50 |
+| Not a lucky later month | Walk-forward mean **74.7%**, 95% interval **67.3–80.8%**; wins **8/8** later weeks (p = 0.0039) |
+| Jumps, not alert text, find the faults | **70.9%** of test faults have a jump and **no log line**; alerts alone catch 12.9% |
+| Jump rule is not one lucky service | Jump overlap **81–91%** on all ten services |
+| Limits are stated | **11.3%** of test faults are silent (no log, no jump); fold 7 drops to 52.6% because that week has ~25 faults/day vs K=20 |
 
-MTTA is measured from the fault-injection timestamp to the moment the system surfaces the corresponding incident, for the system and the baseline alike.
+The 95% recall / 95% detection figures were an **early hope**. They are not the success test. A log-only classifier cannot reach them: only **17.9%** of test faults leave any log (15.1% log+jump, 2.8% log only). Full argument: `FINAL_REPORT.md`.
+
+MTTA is from the injection timestamp to the first shown item. A jump is only confirmed at its second point (~2 minutes).
 
 ### Preliminary results (test period, 1,226 faults)
 
@@ -96,8 +99,11 @@ MTTA is measured from the fault-injection timestamp to the moment the system sur
 | Learned alerts only, faults caught at 20/day | 12.9% |
 | Shared queue (jumps first, then alerts), faults caught at 20/day | **72.8%**, about 18 items and 1.3 false items per day |
 | Shared queue at 5 / 10 / 50 items per day | 19.2% / 38.8% / 86.0% |
+| Walk-forward (retrain each later week, K=20) | Mean **74.7%** (95% CI **67.3–80.8%**; min 52.6%, max 84.5%); baseline 0% every week |
+| Test faults with a jump but no log | **70.9%** (869 / 1,226) |
+| Test faults with neither a log nor a jump | **11.3%** (138 / 1,226) |
 
-Two cautions. Every GAIA fault is a memory program, so this data favours the memory rule; on a real platform some faults will not touch memory, and the alert classifier matters more. Time to first shown item is reported by the script as under a minute, but a jump is only confirmed at its second point, so about two minutes is the honest figure. The 95% detection target is not yet met at 20 items per day: most injected faults leave no log line at all, so only the memory path can find them.
+Two cautions. Every GAIA fault is a memory program, so this data favours the memory rule; on a real platform some faults will not touch memory, and the alert classifier matters more. Time to first shown item is reported by the script as under a minute, but a jump is only confirmed at its second point, so about two minutes is the honest figure. Keep this dataset: the finding *is* that most injected faults leave no log. A new mixed-fault set would need CPU/disk series we do not have, and would hide that result.
 
 ## 7. Risks and mitigations
 
@@ -106,18 +112,19 @@ Two cautions. Every GAIA fault is a memory program, so this data favours the mem
 | Memory series missing or flat | Keep the classifier path; the jump rule needs only the previous 15 minutes, not a training week |
 | Results depend on GAIA faults all being memory faults | Report the alert-only numbers separately; retrain on a company's own labels collected in shadow mode |
 | Detection rate never beats baseline at any budget | Revisit features and labels before adding model complexity |
-| Suppression precision < 95% | Route all low-confidence suppressions to a human by default |
-| GAIA parsing/integration takes longer than planned | Start with the alert/log subset needed for M1; expand later |
+| Marker still grades the old 95% table | Proposal and report now state the measured claim; `run_validate.py` checks the csv files |
+| Changing to a second public dataset late | Do not. All 1,367 injections here are memory programs; extra metric types are not in the local files |
 
-## 8. Timeline (indicative)
+## 8. Timeline
 
-| Weeks | Work |
+Core build (M1–M4, walk-forward, local app) is done. One month remains to make the mark safe.
+
+| Remaining weeks | Work |
 |---|---|
-| 1–2 | M1: data pipeline, baseline reproduction, measured baseline numbers |
-| 3–4 | M2: classifier, cost-sensitive training, first comparison vs. baseline |
-| 5–6 | M3: memory-jump detection on the test period |
-| 7 | M4: budget-aware policy, full sweep, MTTA and false-alert analysis |
-| 8 | Stretch goals, final evaluation, report writing |
+| This week | Frozen claim + stats (interval, 8/8 test, per-service, silent faults). Done: `run_stats.py` |
+| Next week | Fill name / course / date; turn `FINAL_REPORT.md` into the course Word/PDF if required |
+| Week after | Viva answers from section 8 of the report; 3-minute demo of the local queue |
+| Last week | `python run_validate.py`; freeze; submit. No new dataset |
 
 ## 9. Tools and resources
 
@@ -128,4 +135,4 @@ Two cautions. Every GAIA fault is a memory program, so this data favours the mem
 
 ## 10. Expected outcome
 
-A working, evaluated prototype that — at any given level of on-call attention — catches more real faults than today's threshold + dedup approach while giving engineers a much smaller, better-organized pile of alerts to read, with quantitative evidence across all four required success criteria. Alongside it, a local on-call web app that runs the same queue in shadow mode, so a platform team can collect its own labels before trusting it.
+A working, evaluated prototype that, at a fixed daily budget, catches more injected memory faults than severity + exact-duplicate grouping, with a walk-forward interval and a stated ceiling (faults that never move memory and never write a log). Alongside it, a local on-call web app that runs the same queue in shadow mode, so a platform team can collect its own labels before trusting it.

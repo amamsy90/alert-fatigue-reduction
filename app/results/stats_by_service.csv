@@ -1,0 +1,11 @@
+service,faults,with_log,with_jump,log_rate,jump_rate
+dbservice1,129,1,118,0.0078,0.9147
+dbservice2,148,3,120,0.0203,0.8108
+logservice1,126,3,110,0.0238,0.873
+logservice2,108,2,94,0.0185,0.8704
+mobservice1,124,105,104,0.8468,0.8387
+mobservice2,116,101,101,0.8707,0.8707
+redisservice1,111,3,91,0.027,0.8198
+redisservice2,114,0,98,0.0,0.8596
+webservice1,123,1,104,0.0081,0.8455
+webservice2,127,0,114,0.0,0.8976

@@ -28,7 +28,7 @@ class Config:
     budget_sweep: tuple[int, ...] = (5, 10, 20, 50)
     # Time-based split: train on week 1, test on week 2 (day index boundary)
     split_day: int = 7
-    # Memory spikes: a point is hot when it exceeds train mean + k * std.
+    # Old spike rule (comparison only): value > week-1 mean + k * std.
     memory_spike_k: float = 3.0
     memory_min_points: int = 2
     memory_gap_minutes: int = 2

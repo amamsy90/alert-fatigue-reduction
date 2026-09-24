@@ -37,18 +37,8 @@ class Fault:
 
 
 @dataclass
-class Incident:
-    incident_id: str
-    alert_ids: list[str]
-    start: pd.Timestamp
-    end: pd.Timestamp
-    fault_id: str | None = None  # matched ground-truth fault, if any
-
-
-@dataclass
 class Decision:
     alert_id: str
     action: Action
     confidence: float
     reason: str
-    incident_id: str | None = None

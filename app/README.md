@@ -24,13 +24,11 @@ K = 5/10/20/50, and writes `results/m1_sample.csv`.
 ## Run on the real GAIA data
 
 1. Download the dataset: https://github.com/CloudWise-OpenSource/GAIA-DataSet
-2. Place/convert the alert and fault files as `data/gaia/alerts.csv` and
-   `data/gaia/faults.csv` (see `src/ingestion.py` docstring for the expected
-   columns; adjust `ALERT_COLUMN_MAP` / `FAULT_COLUMN_MAP` to the real files).
-3. Run:
+2. Put the MicroSS run folder at `data/gaia_raw/run/run` and memory csv files at `data/gaia_metrics`.
+3. Run (this is the path used for all published numbers):
 
 ```powershell
-python run_m1.py --data data/gaia
+python run_m1.py --gaia-run data/gaia_raw/run/run
 ```
 
 ## Tests
@@ -43,11 +41,11 @@ pytest
 
 | Path | Purpose |
 |---|---|
-| `src/entities.py` | Alert / Fault / Incident / Decision data model |
+| `src/entities.py` | Alert / Fault / Decision data model |
 | `src/config.py` | Budget K, cost ratio, thresholds, split day, seed |
 | `src/ingestion.py` | GAIA loading, alert-to-fault alignment, time split |
 | `src/baseline.py` | Fixed thresholds + exact dedup (the benchmark) |
-| `src/memory_spikes.py` | Week-1 memory baseline and spike episodes |
+| `src/memory_spikes.py` | Memory jumps (0.5 GB over the last 15 minutes) |
 | `src/metrics.py` | Precision/recall, reduction, detection, MTTA, false-alert burden |
 | `run_memory.py` | Score spikes against injected faults |
 | `src/sample_data.py` | Synthetic GAIA-like generator for smoke tests |
@@ -69,7 +67,7 @@ python run_memory.py --sample
 python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run
 ```
 
-Week 1 sets each series' normal memory. Week 2 flags jumps of at least two high points. A csv is used only when its name contains the service and "memory". Extracted `docker_memory_usage_total` files live under `data/gaia_metrics`. `--sample` checks the detector without them.
+A jump is memory rising more than 0.5 GB above the median of the previous 15 minutes, for at least two points. The 0.5 GB size is chosen on week 1 only (`--sweep`). Use `--rule jump` for the published 86.1% figure. A csv is used only when its name contains the service and "memory".
 
 ## Run M4 (decision policy)
 
@@ -78,7 +76,7 @@ python run_m4.py --gaia-run data/gaia_raw/run/run
 python run_m4.py --sample
 ```
 
-Chooses an escalate threshold on week 1, then spends each daily budget on week 2. Results land in `results/m4_gaia.csv`. The gate is higher fault detection, MTTA at least 50% lower, and at least 80% fewer false alerts, at every budget.
+Chooses an escalate threshold on week 1, then spends each daily budget on week 2. Results land in `results/m4_gaia.csv`. **Alerts only** — do not quote this as the system result. The system gate is `run_queue_eval.py`: more faults caught than the baseline at every K.
 
 ## Run the stretch (ask a person, budget sensitivity)
 
@@ -86,7 +84,7 @@ Chooses an escalate threshold on week 1, then spends each daily budget on week 2
 python run_stretch.py --gaia-run data/gaia_raw/run/run
 ```
 
-Confident faults keep the daily slots. Scores between the Bayes floor and the week-1 cutoff become a review queue that fills any leftover slots. Writes `results/stretch_gaia.csv` and `results/budget_sensitivity_gaia.md`.
+**Alerts only** — does not count silent memory jumps. The system result is `run_queue_eval.py` (72.8% at K=20) and `run_walkforward.py` (mean 74.7% across later weeks). `run_stats.py` adds the 95% interval, the 8/8 test vs baseline, and why most faults have no log. Check headlines with `python run_validate.py`. See [../VALIDATION.md](../VALIDATION.md).
 
 ## On-call product (local web app)
 
@@ -97,10 +95,10 @@ cd app
 pip install -r requirements.txt
 $env:PYTHONPATH = (Get-Location).Path
 $env:SHADOW_MODE = "1"
-uvicorn product.app:app --reload --port 8080
+uvicorn product.app:app --reload --port 8083
 ```
 
-Open http://127.0.0.1:8080 — **Run sample** or **Run GAIA**, set budget K, filter escalate / ask / hide. When memory data is loaded, a **Memory jumps** table lists the biggest K jumps per day with the alerts inside each; a jump with no alerts inside may be a fault the logs missed.
+Open http://127.0.0.1:8083 — **Run sample** or **Run GAIA**, set budget K, filter escalate / ask / hide. When memory data is loaded, a **Memory jumps** table lists the biggest K jumps per day with the alerts inside each; a jump with no alerts inside may be a fault the logs missed.
 
 Each alert and jump has **Real / Noise** buttons. Click again to clear. Every later run uses the marks as labels automatically: alerts on the same service inside a Real window (a jump's own window, or ±5 minutes around a Real alert) count as faults, and an alert marked Noise counts as noise even inside a window. The page shows the live precision of what people marked (share of marked jumps and alerts that were real). **Download confirmed faults** exports the Real windows as `faults.csv` for use elsewhere.
 

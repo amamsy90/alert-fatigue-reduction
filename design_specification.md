@@ -12,7 +12,7 @@ This document specifies a system that reduces alert fatigue on a **cloud microse
 The system is trained and evaluated on **GAIA MicroSS** and benchmarked against fixed severity thresholds plus exact duplicate suppression.
 
 **In scope:** offline training and evaluation on GAIA; classification; memory-jump detection; budget-aware policy; evaluation harness; a local web app in shadow mode (webhook ingest, Prometheus memory, Real / Noise marks, saved model).
-**Out of scope:** live paging to PagerDuty / Slack (shadow mode only); multi-tenant SaaS; real human response times (MTTA is from timestamps).
+**Out of scope for the measured result:** Slack/Opsgenie; multi-tenant SaaS; real human response times (MTTA is from timestamps). PagerDuty exists in the app but is off in shadow mode and is not used in the scores below.
 
 ## 2. System overview
 
@@ -112,12 +112,12 @@ At K = 20 on the test period: shared queue (jumps first) **72.8%** of faults, ab
 
 - Baseline: fixed severity thresholds + exact duplicate suppression, same split.
 - Metrics: alert precision/recall; jump overlap and false jumps; reduction rate; incident detection; MTTA (injection → first shown item); false items per day; cost-weighted error (miss = 10×).
-- Scripts: `run_m1.py` (baseline), `run_m2.py` (classifier), `run_memory.py` / `run_memory_clf.py` (jumps), `run_m4.py` (alert policy), `run_stretch.py` (ask-a-person, alerts only), `run_queue_eval.py` (whole queue).
+- Scripts: `run_m1.py` (baseline), `run_m2.py` (classifier), `run_memory.py` / `run_memory_clf.py` (jumps), `run_m4.py` (alert policy), `run_stretch.py` (ask-a-person, alerts only), `run_queue_eval.py` (whole queue), `run_walkforward.py`, `run_stats.py`.
 - Honest limits: every GAIA fault is a memory program, so report alert-only numbers separately. A jump is confirmed at its second point (~2 minutes), not the sub-minute figure the script prints.
 
 ### 4.7 Product (local on-call app)
 
-- FastAPI + SQLite + browser UI on port 8080. Shadow mode on by default.
+- FastAPI + SQLite + browser UI (local port, currently 8083). Shadow mode on by default.
 - Modes: sample, GAIA, CSV upload, webhook ingest. Optional Prometheus memory (`PROM_URL`).
 - Shared-budget queue: Memory jumps table + alerts. Real / Noise buttons. Marks label later runs automatically (Real window = jump span, or ±5 minutes around a Real alert; Noise overrides). Model saved to `product/data/model.pkl`; small batches use it. Retrain reminder after 7 days or new Real marks. Optional login (`APP_PASSWORD`).
 
@@ -177,3 +177,17 @@ At K = 20 on the test period: shared queue (jumps first) **72.8%** of faults, ab
 | Alerts only at K=20 | 12.9% |
 | Shared queue, jumps first, K=20 | **72.8%**; ~18 items/day; 1.3 false/day |
 | Shared queue at K=5 / 10 / 50 | 19.2% / 38.8% / 86.0% |
+| Walk-forward mean (8 later weeks, K=20) | 74.7% (95% CI 67.3–80.8%; min 52.6%, max 84.5%); 8/8 wins vs baseline |
+| Test faults with jump and no log | 70.9% |
+| Test faults with neither log nor jump | 11.3% |
+
+## 10. Training, testing, and validation
+
+The review record is [VALIDATION.md](VALIDATION.md). In short:
+
+- **Train** on days 0–7 only for the main numbers: jump size, classifier, cost threshold.
+- **Test** on the following 55 days, never shuffled.
+- **Walk-forward:** retrain the classifier before each later week; jump size stays 0.5 GB. Mean detection 74.7% (95% CI 67.3–80.8%), so the 72.8% one-shot figure is not a lucky fortnight.
+- **`run_stats.py`** writes the interval, the 8/8 sign test, per-service rates, and the silent-fault counts.
+- **`run_m1` / `run_m2` / `run_m4` / `run_stretch`** score alerts only. They are not the system result.
+- **`python run_validate.py`** checks that the csv files still match the published headlines.
