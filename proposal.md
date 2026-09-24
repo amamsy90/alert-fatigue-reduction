@@ -83,7 +83,7 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 | Not a lucky later month | Walk-forward mean **74.7%**, 95% interval **67.3–80.8%**; wins **8/8** later weeks (p = 0.0039) |
 | Jumps, not alert text, find the faults | **70.9%** of test faults have a jump and **no log line**; alerts alone catch 12.9% |
 | Jump rule is not one lucky service | Jump overlap **81–91%** on all ten services |
-| Limits are stated | **11.3%** of test faults are silent (no log, no jump); fold 7 drops to 52.6% because that week has ~25 faults/day vs K=20 |
+| Limits are stated | **11.3%** of test faults are silent (no log, no jump); fold 7 drops to 52.6% and showed 11.8 items/day, so K=20 was not full |
 
 The 95% recall / 95% detection figures were an **early hope**. They are not the success test. A log-only classifier cannot reach them: only **17.9%** of test faults leave any log (15.1% log+jump, 2.8% log only). Full argument: `FINAL_REPORT.md`.
 

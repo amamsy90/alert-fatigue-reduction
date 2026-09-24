@@ -1,6 +1,7 @@
 """Numbers a marker can defend: intervals, a test vs baseline, and why faults are missed."""
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -46,9 +47,9 @@ def bootstrap_mean_ci(
 
 
 def sign_test_greater(left: list[float], right: list[float]) -> SignTest:
-    """Two-sided-style binomial: P(this many wins) if each fold is a coin flip.
+    """One-sided sign test: P(X >= wins) if each non-tie fold is a fair coin.
 
-    Ties are dropped. Used to say the queue beat the baseline in every later week.
+    Ties are dropped. 8/8 wins is 1/256. A 5/8 week must not keep that tiny p.
     """
     if len(left) != len(right):
         raise ValueError("Fold lists must be the same length")
@@ -59,16 +60,20 @@ def sign_test_greater(left: list[float], right: list[float]) -> SignTest:
         elif a == b:
             ties += 1
     n = len(left) - ties
-    p = float(2 ** (-n)) if n else 1.0
+    if n == 0:
+        p = 1.0
+    else:
+        p = sum(math.comb(n, k) for k in range(wins, n + 1)) / float(2**n)
     return SignTest(wins=wins, n=n, p_value=p)
 
 
-def jump_overlaps(jump: Spike, fault: Fault) -> bool:
-    return jump.service == fault.component and jump.start <= fault.end and jump.end >= fault.start
-
-
-def fault_has_log(fault: Fault, alerts: list[Alert]) -> bool:
-    return any(alert.fault_id == fault.fault_id for alert in alerts)
+def exclusive_window_days(start: pd.Timestamp, end: pd.Timestamp) -> int:
+    """Calendar days that can hold events in [start, end)."""
+    if end <= start:
+        return 1
+    first = start.normalize()
+    last = (end - pd.Timedelta(nanoseconds=1)).normalize()
+    return max(1, int((last - first).days) + 1)
 
 
 def faults_with_logs(alerts: list[Alert]) -> set[str]:
@@ -135,11 +140,15 @@ def by_service_rows(
 
 
 def week_pressure(faults: list[Fault], start: pd.Timestamp, end: pd.Timestamp) -> dict:
-    """How hard the budget is in one week: faults per day vs K=20."""
+    """Faults that start in [start, end), using exclusive-end calendar days."""
     part = [f for f in faults if start <= f.start < end]
-    days = max(1, (end.normalize() - start.normalize()).days)
+    days = exclusive_window_days(start, end)
     return {
         "faults": len(part),
         "days": days,
         "faults_per_day": round(len(part) / days, 2),
     }
+
+
+def jumps_starting_in(jumps: list[Spike], start: pd.Timestamp, end: pd.Timestamp) -> int:
+    return sum(1 for jump in jumps if start <= jump.start < end)

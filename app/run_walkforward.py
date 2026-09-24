@@ -23,6 +23,7 @@ from run_queue_eval import (
 from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
 from src.config import Config
+from src.eval_stats import exclusive_window_days
 from src.features import build_feature_frame
 from src.gaia_loader import load_run_folder
 from src.memory_spikes import detect_jumps, load_metric_folder
@@ -67,7 +68,7 @@ def main() -> None:
             bool(v)
             for v in build_feature_frame(test_alerts, config, test_jumps)["during_memory_spike"]
         ]
-        n_days = max(1, (test_end.normalize() - test_start.normalize()).days)
+        n_days = exclusive_window_days(test_start, test_end)
         learned = _alert_items(
             test_alerts,
             spike_review_decisions(

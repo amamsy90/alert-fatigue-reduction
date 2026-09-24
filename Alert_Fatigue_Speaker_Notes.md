@@ -84,6 +84,6 @@ Do not say this in the seven minutes unless they ask.
 
 **Why not 95% at K=20?** The 95 percent target assumed every fault would leave an alert. On this data, 70.9 percent of test faults have a jump and no log. A log-only system is capped near 18 percent. At K=50 every jump fits and detection reaches 86 percent, which is the memory-rule ceiling (86.1 percent of faults have an overlapping jump). 11.3 percent are silent: no log and no jump.
 
-**Was 72.8% a lucky month?** No. Retrain each later week: mean 74.7 percent, 95 percent interval 67.3 to 80.8, and the queue beats the baseline in all eight weeks. The weak week (52.6 percent) had about 25 faults a day and only 20 slots.
+**Was 72.8% a lucky month?** No. Retrain each later week: mean 74.7 percent, 95 percent interval 67.3 to 80.8, and the queue beats the baseline in all eight weeks. The weak week (52.6 percent) showed 11.8 items a day, so the budget of 20 was not full. Fewer qualifying jumps that week, not a full queue.
 
 **Should you change the dataset?** No. Every injection here is a memory program. That is the finding, not a bug. A new mixed-fault set would need CPU and disk series we do not have.

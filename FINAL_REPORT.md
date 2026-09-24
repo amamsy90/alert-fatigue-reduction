@@ -104,7 +104,7 @@ The one-shot 72.8% could have been a lucky later period. So the classifier was *
 
 The queue beats the baseline in **8/8** later weeks (p = 0.0039 if each week is a coin flip). The mean sits next to 72.8%, so the one-shot test was not a lucky fortnight.
 
-Fold 7 is weaker because that week has about **25 faults a day** and the budget is 20 items. The method is not equally strong every week; that week must be reported.
+Fold 7 is weaker (**52.6%**). That week showed **11.8 items a day**, so the budget of 20 was **not** full. Other later weeks average **17.2 items a day**. The miss is fewer qualifying jumps that week, not a queue that ran out of slots. The method is not equally strong every week; that week must be reported.
 
 `python run_validate.py` checks that these headlines still match the csv files.
 

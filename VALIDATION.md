@@ -57,7 +57,7 @@ Train on everything before the fold, score the next 7 days, K=20, jumps first.
 | 7 | 19–26 Aug | 173 | 0% | 52.6% |
 | 8 | 26–31 Aug | 129 | 0% | 84.5% |
 
-**Mean 74.7%** (95% bootstrap CI **67.3–80.8%**; min 52.6%, max 84.5%). Close to the 72.8% one-shot test. Queue > baseline in **8/8** folds (p = 0.0039). Fold 7 is weaker (~25 faults/day vs K=20); the method is not equally strong every week. Baseline stays 0% in every fold.
+**Mean 74.7%** (95% bootstrap CI **67.3–80.8%**; min 52.6%, max 84.5%). Close to the 72.8% one-shot test. Queue > baseline in **8/8** folds (p = 0.0039). Fold 7 is weaker (52.6%, 11.8 items/day vs K=20 — the budget was not full). The method is not equally strong every week. Baseline stays 0% in every fold.
 
 ## Why 95% is the wrong target
 

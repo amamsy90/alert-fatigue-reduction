@@ -17,9 +17,9 @@ from src.config import Config
 from src.eval_stats import (
     bootstrap_mean_ci,
     by_service_rows,
+    jumps_starting_in,
     sign_test_greater,
     signal_counts,
-    week_pressure,
 )
 from src.gaia_loader import load_run_folder
 from src.ingestion import time_split
@@ -30,10 +30,14 @@ def _walk_forward_stats(path: Path) -> dict:
     walk = pd.read_csv(path)
     queue = walk.loc[walk["queue"] == "shared_jumps_1st"].sort_values("fold")
     base = walk.loc[walk["queue"] == "baseline"].sort_values("fold")
+    if list(queue["fold"]) != list(base["fold"]):
+        raise SystemExit("walk-forward folds are not aligned between queue and baseline")
     rates = [float(x) for x in queue["detection_rate"]]
     base_rates = [float(x) for x in base["detection_rate"]]
     interval = bootstrap_mean_ci(rates)
     test = sign_test_greater(rates, base_rates)
+    weak = queue.loc[queue["detection_rate"].idxmin()]
+    others = queue.loc[queue["fold"] != weak["fold"]]
     return {
         "folds": interval.n,
         "mean": round(interval.mean, 4),
@@ -44,8 +48,14 @@ def _walk_forward_stats(path: Path) -> dict:
         "wins_vs_baseline": test.wins,
         "sign_n": test.n,
         "sign_p": test.p_value,
-        "weakest_fold": int(queue.loc[queue["detection_rate"].idxmin(), "fold"]),
-        "weakest_faults": int(queue.loc[queue["detection_rate"].idxmin(), "faults"]),
+        "weakest_fold": int(weak["fold"]),
+        "weakest_faults": int(weak["faults"]),
+        "weakest_rate": round(float(weak["detection_rate"]), 4),
+        "weakest_items_per_day": round(float(weak["items_per_day"]), 2),
+        "weakest_train_until": str(weak["train_until"]),
+        "weakest_test_end": str(weak["test_end"]),
+        "other_mean_items_per_day": round(float(others["items_per_day"].mean()), 2),
+        "budget_k": int(weak["budget_k"]),
     }
 
 
@@ -61,10 +71,6 @@ def main() -> None:
     print(
         f"Queue > baseline in {wf['wins_vs_baseline']}/{wf['sign_n']} folds "
         f"(p = {wf['sign_p']:.4f} if each fold is a coin flip)."
-    )
-    print(
-        f"Weakest week is fold {wf['weakest_fold']} "
-        f"({wf['min']:.1%}, {wf['weakest_faults']} faults)."
     )
 
     alerts, faults = load_run_folder("data/gaia_raw/run/run")
@@ -92,17 +98,22 @@ def main() -> None:
             f"log {row['log_rate']:.1%}  jump {row['jump_rate']:.1%}"
         )
 
-    # Fold 7 is 19–26 Aug in the saved table. Explain the pressure, not a new score.
-    weak_start = pd.Timestamp("2021-08-19", tz="UTC")
-    weak_end = pd.Timestamp("2021-08-26", tz="UTC")
-    pressure = week_pressure(test_faults, weak_start, weak_end)
-    other = [f for f in test_faults if not (weak_start <= f.start < weak_end)]
-    other_days = max(1, (max(f.start for f in other).normalize() - min(f.start for f in other).normalize()).days)
+    weak_start = pd.Timestamp(wf["weakest_train_until"], tz="UTC")
+    weak_end = pd.Timestamp(wf["weakest_test_end"], tz="UTC")
+    weak_jumps = jumps_starting_in(test_jumps, weak_start, weak_end)
     print(
-        f"Fold 7 pressure: {pressure['faults']} faults in {pressure['days']} days "
-        f"({pressure['faults_per_day']}/day vs budget K=20). "
-        f"Other test days: {len(other) / other_days:.1f} faults/day."
+        f"Weakest week is fold {wf['weakest_fold']} "
+        f"({wf['weakest_train_until']} to {wf['weakest_test_end']}): "
+        f"{wf['weakest_rate']:.1%} on {wf['weakest_faults']} faults, "
+        f"{wf['weakest_items_per_day']} items/day vs budget {wf['budget_k']}. "
+        f"Other folds average {wf['other_mean_items_per_day']} items/day. "
+        f"Jumps starting that week: {weak_jumps}."
     )
+    if wf["weakest_items_per_day"] < wf["budget_k"]:
+        print(
+            "The budget was not full that week. Do not say K ran out; "
+            "fewer qualifying jumps were shown."
+        )
 
     out = Path("results")
     out.mkdir(exist_ok=True)
@@ -111,7 +122,7 @@ def main() -> None:
         "test_faults": n,
         **{f"signal_{k}": v for k, v in signals.items()},
         "injection_tags": ";".join(f"{k}:{v}" for k, v in tags.items()),
-        "fold7_faults_per_day": pressure["faults_per_day"],
+        "weakest_jumps": weak_jumps,
     }
     pd.DataFrame([headline]).to_csv(out / "stats_gaia.csv", index=False)
     pd.DataFrame(service_rows).to_csv(out / "stats_by_service.csv", index=False)

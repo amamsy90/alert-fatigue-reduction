@@ -35,13 +35,18 @@ def main() -> None:
 
     stats = pd.read_csv(ROOT / "stats_gaia.csv").iloc[0]
     _near(float(stats["mean"]), 0.747, 0.02, "stats walk-forward mean")
+    _near(float(stats["ci_low"]), 0.6734, 0.02, "stats CI low")
+    _near(float(stats["ci_high"]), 0.8078, 0.02, "stats CI high")
     if int(stats["wins_vs_baseline"]) != 8:
         _fail("queue must beat baseline in all 8 folds")
     if str(stats["injection_tags"]) != "memory_anomalies:1367":
         _fail("every injected fault must still be a memory anomaly")
-    silent = int(stats["signal_silent"])
-    if silent < 1:
-        _fail("expected some test faults with neither a log nor a jump")
+    _near(float(stats["signal_jump_only"]), 869, 1, "jump-only faults")
+    _near(float(stats["signal_log_and_jump"]), 185, 1, "log-and-jump faults")
+    _near(float(stats["signal_log_only"]), 34, 1, "log-only faults")
+    _near(float(stats["signal_silent"]), 138, 1, "silent faults")
+    if float(stats["weakest_items_per_day"]) >= float(stats["budget_k"]):
+        _fail("weakest week filled the budget; do not keep the old K-ran-out claim")
 
     print("VALIDATION OK")
     print(f"  K=20 jumps-first  {float(k20['detection_rate']):.1%}")
