@@ -45,6 +45,8 @@ SYSTEMS = (
     "p3_grouped",         # Phase 3: proposed + items within 2 min on other services share one slot
     "p3_carryover",       # Phase 3: proposed + up to 10 unused slots carried to the next day
     "delta_5m_carryover", # fair partner for p3_carryover: the rate rule with the same carry-over
+    "p3_per_series_jumps",# jumps_tuned, but with a confirm level learned per series on week 1
+    "p3_per_series",      # proposed, but with the per-series confirm levels
 )
 
 
@@ -81,6 +83,8 @@ class WindowRun:
     # Per-series confirm gates learned on the training window. Empty means every
     # series used the single global threshold (the published GAIA tables).
     confirm_by_series: dict | None = None
+    # The per-series map learned on week 1, whether or not "proposed" used it.
+    learned_by_series: dict | None = None
 
 
 def _between(items, start, end, attr):
@@ -107,7 +111,9 @@ def run_window(
     # Week-1 only. Series with enough of their own faults get a frozen gate;
     # the rest keep the single global threshold. Score time does not refit.
     thr, by_series = tune_confirm_thresholds(train_jumps, train_faults, config, train_until=train_end)
-    tuned = replace(config, confirm_min_rise=thr, confirm_min_rise_by_series=by_series)
+    per_series = replace(config, confirm_min_rise=thr, confirm_min_rise_by_series=by_series)
+    # Published tables: one global gate. Set config.confirm_per_series to use the map everywhere.
+    tuned = per_series if config.confirm_per_series else replace(config, confirm_min_rise=thr)
 
     model = AlertClassifier(config).fit(train_alerts, train_jumps)
     alert_thr = tune_threshold(train_alerts, model.predict_proba(train_alerts, train_jumps), config)
@@ -125,9 +131,10 @@ def run_window(
     static = detect_static(data.metrics, config, fit_until=train_end, detect_from=train_end, detect_until=test_end)
     delta = detect_delta(data.metrics, config, detect_from=train_end, detect_until=test_end)
     all_alerts = replace(config, alert_share=1.0)
-    proposed_items = lambda: (  # noqa: E731 — fresh items each time (build_queue marks them)
-        spike_items(test_jumps, tuned) + spike_items(test_leaks, tuned) + spike_items(test_gaps, tuned) + learned()
-    )
+    def proposed_items(cfg=None):  # fresh items each time (build_queue marks them)
+        cfg = cfg or tuned
+        return spike_items(test_jumps, cfg) + spike_items(test_leaks, cfg) + spike_items(test_gaps, cfg) + learned()
+
     ranker = JumpRanker(config).fit(train_jumps + train_leaks, train_alerts, train_faults)
     history = [a for a in data.alerts if a.timestamp < test_end]
     ranked_metric = ranker.keep(test_jumps + test_leaks + test_gaps, history)
@@ -144,6 +151,8 @@ def run_window(
         "p3_grouped": build_queue(proposed_items(), replace(tuned, group_minutes=2)),
         "p3_carryover": build_queue(proposed_items(), replace(tuned, carry_over_max=10)),
         "delta_5m_carryover": build_queue(spike_items(delta, config), replace(config, carry_over_max=10)),
+        "p3_per_series_jumps": build_queue(spike_items(test_jumps, per_series), per_series),
+        "p3_per_series": build_queue(proposed_items(per_series), per_series),
     }
     return WindowRun(
         shown=shown,
@@ -153,7 +162,8 @@ def run_window(
         alert_threshold=alert_thr,
         test_jumps=test_jumps,
         test_gaps=test_gaps,
-        confirm_by_series=by_series,
+        confirm_by_series=by_series if config.confirm_per_series else {},
+        learned_by_series=by_series,
     )
 
 
@@ -211,8 +221,8 @@ def miss_causes(run: WindowRun, data: GaiaData, config: Config, name: str = "pro
         elif item.kind != "gap":
             caught |= {f.fault_id for f in spike_hits(item.payload, by_service)}
     with_data = faults_with_metric_data(run.test_faults, data.metrics)
-    use_gate = name in ("proposed", "jumps_tuned")
-    table = run.confirm_by_series or {}
+    use_gate = name in ("proposed", "jumps_tuned", "p3_per_series", "p3_per_series_jumps")
+    table = (run.learned_by_series if name.startswith("p3_per_series") else run.confirm_by_series) or {}
     overlap: dict[str, list[Spike]] = {}
     for jump in run.test_jumps:
         for fault in spike_hits(jump, by_service):

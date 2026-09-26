@@ -35,6 +35,12 @@ def main() -> None:
     _near(float(_row(q, "p3_carryover")["detection_rate"]), 0.744, 0.005, "carry-over K=20")
     _near(float(_row(q, "delta_5m_carryover")["detection_rate"]), 0.725, 0.005, "delta carry-over K=20")
     _near(float(_row(q, "p3_ranker")["detection_rate"]), 0.702, 0.005, "ranker K=20")
+    # Per-series confirm levels (Phase 3 option): same catches as the global gate at
+    # K=20 with fewer false items, but it rejects real faults when the budget is loose.
+    _near(float(_row(q, "p3_per_series")["detection_rate"]), 0.6999, 0.005, "per-series K=20")
+    _near(float(_row(q, "p3_per_series", 50)["detection_rate"]), 0.8406, 0.005, "per-series K=50")
+    if float(_row(q, "p3_per_series_jumps")["false_items_per_day"]) >= float(_row(q, "jumps_tuned")["false_items_per_day"]):
+        _fail("per-series gates no longer cut false items; rewrite the per-series row")
     _near(float(_row(q, "jumps_hindsight")["detection_rate"]), 0.729, 0.005, "old hindsight K=20")
     _near(float(_row(q, "proposed")["oracle_ceiling"]), 0.849, 0.005, "oracle ceiling K=20")
     if float(_row(q, "proposed")["false_items_per_day"]) >= float(_row(q, "delta_5m")["false_items_per_day"]):
