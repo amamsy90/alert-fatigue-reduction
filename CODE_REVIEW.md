@@ -3,7 +3,7 @@
 > **Status (branch `review-fixes`):** every item in sections 1–3 is done (except removing your runtime `product/data/queue.db` and the editor index `.git/cursor/`, which were left alone on purpose), and the Phase 3 ideas in section 4 were implemented and measured (see `ROADMAP.md`). Only the second dataset remains future work. Test faults are 1,223 (not 1,226) because alerts, faults and metrics now share one split time.
 
 **Scope:** every file in `project_SW` — docs, `app/src`, `app/run_*.py`, `app/product`, tests, results.
-**Method:** read all code, ran the test suite (46/46 pass), reproduced the headline (72.8% at K=20 — matches), then ran new stress tests on the same GAIA data. Scripts: `app/review_experiments.py`, `app/review_online_walkforward.py`.
+**Method:** read all code, ran the test suite (46/46 pass), reproduced the headline (72.8% at K=20 — matches), then ran new stress tests on the same GAIA data. (The first review scripts, `app/review_experiments.py` and `app/review_online_walkforward.py`, were later replaced by `run_queue_eval.py`, `run_walkforward.py` and `run_stats.py`; they remain in git history.)
 
 ---
 
