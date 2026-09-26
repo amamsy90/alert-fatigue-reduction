@@ -1,9 +1,9 @@
-# Budgeted Incident Detection for Cloud Microservice On-Call
+﻿# Budgeted Incident Detection for Cloud Microservice On-Call
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
 **Final report**
-**Author:** [Your name]
+**Author:** AISHA AL
 **Course / Supervisor:** [Course name / supervisor]
 **Date:** [Date]
 
@@ -48,7 +48,7 @@ Full design: `design_specification.md`.
 | `app/src/experiment.py` | One train/test window, every system, one scorer — used by every GAIA results script |
 | `app/src/generic.py` | The same evaluation for **any** data: column detection, per-series split, tuning, report |
 | `app/run_*.py` | One script per experiment; writes `app/results/` |
-| `app/tests/` | 85 automated tests |
+| `app/tests/` | 90 automated tests |
 | `app/product/` | Web app — queue, **Evaluate my data** page, shadow mode, Real/Noise marks, Alertmanager webhook, Prometheus, PagerDuty — and a CLI (`score`, `evaluate`, `tune`) |
 
 Log lines are China time and are converted to UTC so they line up with the metric files (`src/gaia_loader.py`).
