@@ -137,6 +137,11 @@ def test_small_live_batch_is_scored_with_the_saved_model(client):
 
     trained = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20}).json()
     assert trained["meta"]["model_used"] == "trained"
+    report = trained["meta"]["training"]
+    assert report["model_used"] == "trained"
+    assert report["train"]["alerts"] > 0
+    assert report["test"]["alerts"] > 0
+    assert report["train"]["start"] < report["test"]["start"]
     status = client.get("/model").json()
     assert status["saved"] and status["label_source"] == "real" and not status["retrain_due"]
 

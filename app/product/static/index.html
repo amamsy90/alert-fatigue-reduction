@@ -202,6 +202,20 @@
     </div>
     <div id="retrain" class="shadow" hidden></div>
     <div id="learning" class="meta"></div>
+    <section id="train-box" hidden>
+      <h2 class="section">Training and testing</h2>
+      <p id="train-note" class="sub"></p>
+      <div class="cards">
+        <div class="card" id="train-card">
+          <h3>Train</h3>
+          <p id="train-body">Run sample or GAIA to fit on the early window.</p>
+        </div>
+        <div class="card" id="test-card">
+          <h3>Test</h3>
+          <p id="test-body">Later days are scored with the frozen threshold.</p>
+        </div>
+      </div>
+    </section>
     <div id="err" class="err" hidden></div>
     <div id="meta" class="meta"></div>
     <section id="jumps-box" hidden>
@@ -360,6 +374,7 @@
       ].join(" · ");
       renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k);
       renderLearning(data.feedback || {}, data.model || {}, m);
+      renderTraining(m.training);
       const tbody = document.getElementById("rows");
       tbody.innerHTML = "";
       (data.items || []).forEach(item => {
@@ -440,6 +455,37 @@
         box.textContent = "Retrain recommended: " + model.retrain_reasons.join("; ") +
           ". Run the next full batch (upload or GAIA) to train on the latest marks.";
       }
+    }
+
+    function pct(v) {
+      return (Math.round(Number(v) * 1000) / 10).toFixed(1) + "%";
+    }
+
+    function windowText(part, empty) {
+      if (!part) return empty;
+      const start = part.start ? part.start.replace("T", " ").slice(0, 16) : "?";
+      const end = part.end ? part.end.replace("T", " ").slice(0, 16) : "?";
+      return `${part.alerts} alerts (${part.fault_alerts} labelled as faults)<br>` +
+        `${start} → ${end} UTC<br>` +
+        `alert recall ${pct(part.recall)} · precision ${pct(part.precision)}`;
+    }
+
+    function renderTraining(training) {
+      const box = document.getElementById("train-box");
+      box.hidden = !training;
+      if (!training) return;
+      document.getElementById("train-note").textContent =
+        (training.note || "") +
+        (training.threshold != null ? ` Escalate threshold ${training.threshold} (chosen on train only).` : "") +
+        " These are alert scores. The 72.8% system figure also counts memory jumps.";
+      document.getElementById("train-body").innerHTML = windowText(
+        training.train,
+        "No new fit this job — using the saved model."
+      );
+      document.getElementById("test-body").innerHTML = windowText(
+        training.test,
+        "No later window in this batch."
+      );
     }
 
     function renderJumps(jumps, total, k) {

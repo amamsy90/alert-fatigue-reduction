@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="340" viewBox="0 0 680 340" role="img" aria-labelledby="title2 desc2">
+  <title id="title2">Walk-forward detection by later week</title>
+  <desc id="desc2">Queue rates by fold: 84.5, 79.8, 77.8, 68.7, 71.6, 78.4, 52.6, 84.5 percent. Baseline 0% every week. Mean 74.7%.</desc>
+  <rect width="680" height="340" fill="#ffffff"/>
+  <text x="340" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#1c3a5c">Walk-forward faults caught at K=20 (retrain each later week)</text>
+  <g font-family="Arial, sans-serif" font-size="11" fill="#5c656d">
+    <text x="48" y="60" text-anchor="end">100%</text>
+    <text x="48" y="132" text-anchor="end">50%</text>
+    <text x="48" y="204" text-anchor="end">0%</text>
+  </g>
+  <line x1="56" y1="56" x2="650" y2="56" stroke="#d7dde3"/>
+  <line x1="56" y1="128" x2="650" y2="128" stroke="#d7dde3"/>
+  <line x1="56" y1="200" x2="650" y2="200" stroke="#1c3a5c" stroke-width="1.5"/>
+  <!-- mean 74.7% : y = 200 - 0.747*144 = 92.4 -->
+  <line x1="56" y1="92.4" x2="650" y2="92.4" stroke="#b0894b" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="654" y="96" font-family="Arial, sans-serif" font-size="11" fill="#b0894b">mean 74.7%</text>
+  <!-- bars: y=200-rate*144, h=rate*144; x starts 72, width 48, gap 24 -->
+  <rect x="72" y="78.4" width="48" height="121.6" fill="#1c3a5c"/>
+  <text x="96" y="72" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">84.5</text>
+  <rect x="144" y="85.1" width="48" height="114.9" fill="#1c3a5c"/>
+  <text x="168" y="79" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">79.8</text>
+  <rect x="216" y="88.0" width="48" height="112.0" fill="#1c3a5c"/>
+  <text x="240" y="82" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">77.8</text>
+  <rect x="288" y="101.1" width="48" height="98.9" fill="#1c3a5c"/>
+  <text x="312" y="95" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">68.7</text>
+  <rect x="360" y="96.9" width="48" height="103.1" fill="#1c3a5c"/>
+  <text x="384" y="91" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">71.6</text>
+  <rect x="432" y="87.1" width="48" height="112.9" fill="#1c3a5c"/>
+  <text x="456" y="81" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">78.4</text>
+  <rect x="504" y="124.3" width="48" height="75.7" fill="#8b3a3a"/>
+  <text x="528" y="118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#8b3a3a">52.6</text>
+  <rect x="576" y="78.3" width="48" height="121.7" fill="#1c3a5c"/>
+  <text x="600" y="72" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">84.5</text>
+  <g font-family="Arial, sans-serif" font-size="11" fill="#2b3138" text-anchor="middle">
+    <text x="96" y="220">1</text>
+    <text x="168" y="220">2</text>
+    <text x="240" y="220">3</text>
+    <text x="312" y="220">4</text>
+    <text x="384" y="220">5</text>
+    <text x="456" y="220">6</text>
+    <text x="528" y="220">7</text>
+    <text x="600" y="220">8</text>
+  </g>
+  <text x="340" y="248" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#2b3138">Later week (fold). Baseline is 0% every week.</text>
+  <g font-family="Arial, sans-serif" font-size="12">
+    <rect x="150" y="272" width="12" height="12" fill="#1c3a5c"/>
+    <text x="168" y="283" fill="#2b3138">Queue</text>
+    <rect x="240" y="272" width="12" height="12" fill="#8b3a3a"/>
+    <text x="258" y="283" fill="#2b3138">Fold 7 (weaker)</text>
+    <line x1="400" y1="278" x2="424" y2="278" stroke="#b0894b" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="430" y="283" fill="#2b3138">Walk-forward mean</text>
+  </g>
+</svg>

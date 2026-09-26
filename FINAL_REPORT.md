@@ -82,7 +82,9 @@ A fault is **caught** if a shown jump on its service overlaps the injection wind
 | Learned alerts only | 12.9% | 5.8 | 0.6 |
 | Shared queue, jumps first | **72.8%** | 17.8 | 1.3 |
 
-Same queue at K = 5 / 10 / 50: 19.2% / 38.8% / 86.0%.
+Same queue at K = 5 / 10 / 50: 19.2% / 38.8% / 86.0%. Baseline stays 0% at every budget.
+
+![Faults caught versus daily budget K](figures/detection_vs_k.svg)
 
 Memory jumps with no budget cap: **86.1%** of test faults overlap a jump (1,056 / 1,226). The first rule (week-1 mean + 3σ) reached 53.8%.
 
@@ -96,11 +98,19 @@ The one-shot 72.8% could have been a lucky later period. So the classifier was *
 
 `run_walkforward.py` — 8 folds, K = 20. Interval from `run_stats.py`.
 
-| Fold | Test week | Queue | Baseline |
-|---|---|---|---|
-| 1–6, 8 | Jul–Aug | 68.7%–84.5% | 0% |
-| 7 | 19–26 Aug | **52.6%** | 0% |
-| **Mean** | | **74.7%** (95% CI **67.3–80.8%**) | **0%** |
+| Fold | Test week | Faults | Queue | Baseline | Items / day |
+|---|---|---|---|---|---|
+| 1 | 8–15 Jul | 161 | 84.5% | 0% | 18.1 |
+| 2 | 15–22 Jul | 134 | 79.8% | 0% | 17.0 |
+| 3 | 22–29 Jul | 162 | 77.8% | 0% | 17.5 |
+| 4 | 29 Jul–5 Aug | 163 | 68.7% | 0% | 15.3 |
+| 5 | 5–12 Aug | 162 | 71.6% | 0% | 16.1 |
+| 6 | 12–19 Aug | 139 | 78.4% | 0% | 17.4 |
+| 7 | 19–26 Aug | 173 | **52.6%** | 0% | **11.8** |
+| 8 | 26–31 Aug | 129 | 84.5% | 0% | 18.7 |
+| **Mean** | | | **74.7%** (95% CI **67.3–80.8%**) | **0%** | |
+
+![Walk-forward detection by later week](figures/walkforward.svg)
 
 The queue beats the baseline in **8/8** later weeks (p = 0.0039 if each week is a coin flip). The mean sits next to 72.8%, so the one-shot test was not a lucky fortnight.
 
@@ -136,7 +146,22 @@ A log-only classifier is capped near **17.9%**. That is why alerts alone score 1
 
 **Success for this project** is: a designed method, a frozen train window, a held-out test, a walk-forward interval, a win over the baseline on faults caught, and the silent-fault ceiling stated.
 
-Eight of ten services almost never write a log during a fault (0–3%). Only `mobservice1` and `mobservice2` do (~85%). Jumps still overlap 81–91% of faults on every service. The strength is the memory rule plus the shared budget, not the text classifier. At K=20 the leftover alert slots add **no extra** caught faults versus jumps alone (both 72.8%).
+Eight of ten services almost never write a log during a fault (0–3%). Only `mobservice1` and `mobservice2` do (~85%). Jumps still overlap 81–91% of faults on every service (`run_stats.py` → `stats_by_service.csv`):
+
+| Service | Test faults | With a log | With a jump |
+|---|---|---|---|
+| dbservice1 | 129 | 0.8% | 91.5% |
+| dbservice2 | 148 | 2.0% | 81.1% |
+| logservice1 | 126 | 2.4% | 87.3% |
+| logservice2 | 108 | 1.8% | 87.0% |
+| mobservice1 | 124 | 84.7% | 83.9% |
+| mobservice2 | 116 | 87.1% | 87.1% |
+| redisservice1 | 111 | 2.7% | 82.0% |
+| redisservice2 | 114 | 0.0% | 86.0% |
+| webservice1 | 123 | 0.8% | 84.5% |
+| webservice2 | 127 | 0.0% | 89.8% |
+
+The strength is the memory rule plus the shared budget, not the text classifier. At K=20 the leftover alert slots add **no extra** caught faults versus jumps alone (both 72.8%).
 
 ---
 
@@ -173,4 +198,5 @@ Needs local GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics
 | This report | `FINAL_REPORT.md` |
 | Code + tests | `app/` |
 | Result tables | `app/results/` |
+| Figures | `figures/detection_vs_k.svg`, `figures/walkforward.svg` |
 | Demo (optional) | http://127.0.0.1:8083/ |

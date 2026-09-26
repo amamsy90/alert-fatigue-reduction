@@ -184,6 +184,7 @@ class ScoredQueue:
     model_used: str = "trained"
     model: AlertClassifier | None = None
     train_alerts: int = 0
+    training: dict | None = None
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -196,6 +197,26 @@ def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestam
         train_alerts = [a for a in alerts if a.timestamp < split_at]
         test_alerts = [a for a in alerts if a.timestamp >= split_at]
     return train_alerts, test_alerts, split_at
+
+
+def _class_report(alerts: list[Alert], proba, threshold: float) -> dict:
+    """Alert-level scores at the train-chosen escalate threshold."""
+    labels = [alert.fault_id is not None for alert in alerts]
+    pred = [float(p) >= threshold for p in proba]
+    tp = sum(p and y for p, y in zip(pred, labels))
+    fp = sum(p and not y for p, y in zip(pred, labels))
+    fn = sum((not p) and y for p, y in zip(pred, labels))
+    return {
+        "alerts": len(alerts),
+        "fault_alerts": sum(labels),
+        "start": min(a.timestamp for a in alerts).isoformat() if alerts else None,
+        "end": max(a.timestamp for a in alerts).isoformat() if alerts else None,
+        "precision": round(tp / (tp + fp), 4) if tp + fp else 0.0,
+        "recall": round(tp / (tp + fn), 4) if tp + fn else 0.0,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+    }
 
 
 def score_alerts(
@@ -227,6 +248,13 @@ def score_alerts(
         review_threshold = saved.review_threshold
         label_source = saved.label_source
         model_used, train_count = "saved", saved.train_alerts
+        training = {
+            "model_used": "saved",
+            "note": "This batch was too small or weakly labelled, so the last saved model scored it.",
+            "train": None,
+            "test": None,
+            "threshold": escalate_threshold,
+        }
     elif trained is not None:
         score_alerts_list = trained["score_alerts"]
         score_spikes = trained["score_spikes"]
@@ -235,6 +263,7 @@ def score_alerts(
         review_threshold = trained["review_threshold"]
         label_source = trained["label_source"]
         model_used, train_count = "trained", trained["train_alerts"]
+        training = trained["training"]
     else:
         raise ValueError(
             "Cannot train on this batch (need 10+ alerts with both fault-like and "
@@ -251,6 +280,14 @@ def score_alerts(
         jumps_per_day[spike.start.normalize()] += 1
     decisions = share_budget_with_jumps(score_alerts_list, decisions, jumps_per_day, config)
     _ = shadow_mode  # recorded by caller in the store
+    if model_used == "saved":
+        training = {
+            "model_used": "saved",
+            "note": "This batch was too small or weakly labelled, so the last saved model scored it.",
+            "threshold": round(float(escalate_threshold), 4),
+            "train": None,
+            "test": _class_report(score_alerts_list, proba, escalate_threshold),
+        }
     return ScoredQueue(
         alerts=score_alerts_list,
         decisions=decisions,
@@ -262,6 +299,7 @@ def score_alerts(
         model_used=model_used,
         model=model if model_used == "trained" else None,
         train_alerts=train_count,
+        training=training,
     )
 
 
@@ -283,14 +321,27 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) ->
         test_spikes = detect_jumps(metrics, config, detect_from=split_at)
     model = AlertClassifier(config).fit(train_alerts, train_spikes)
     train_proba = model.predict_proba(train_alerts, train_spikes)
+    escalate_threshold = tune_threshold(train_alerts, train_proba, config)
+    score_alerts_list = test_alerts if test_alerts else alerts
+    score_spikes = test_spikes if test_alerts else train_spikes + test_spikes
+    test_proba = (
+        model.predict_proba(score_alerts_list, score_spikes) if score_alerts_list else []
+    )
     return {
         "model": model,
-        "escalate_threshold": tune_threshold(train_alerts, train_proba, config),
+        "escalate_threshold": escalate_threshold,
         "review_threshold": bayes_threshold(config),
         "label_source": _label_source(train_alerts),
         "train_alerts": len(train_alerts),
-        "score_alerts": test_alerts if test_alerts else alerts,
-        "score_spikes": test_spikes if test_alerts else train_spikes + test_spikes,
+        "score_alerts": score_alerts_list,
+        "score_spikes": score_spikes,
+        "training": {
+            "model_used": "trained",
+            "note": "Fit on the early window only. Threshold is frozen before the later days are scored.",
+            "threshold": round(float(escalate_threshold), 4),
+            "train": _class_report(train_alerts, train_proba, escalate_threshold),
+            "test": _class_report(score_alerts_list, test_proba, escalate_threshold),
+        },
     }
 
 
@@ -394,6 +445,7 @@ def run_job(
             "label_source": result.label_source,
             "model_used": result.model_used,
             "model": saved.status(real_marks) if saved else None,
+            "training": result.training,
             "pagerduty": page,
             **feedback_stats,
         },
