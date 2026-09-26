@@ -27,7 +27,6 @@ class AlertClassifier:
         self._pipe: Pipeline | None = None
 
     def fit(self, alerts: list[Alert], spikes: list | None = None) -> "AlertClassifier":
-        self._spikes = spikes
         frame = build_feature_frame(alerts, self.config, spikes)
         labels = frame["label"].to_numpy()
         if len(np.unique(labels)) < 2:
@@ -38,10 +37,10 @@ class AlertClassifier:
         return self
 
     def predict_proba(self, alerts: list[Alert], spikes: list | None = None) -> np.ndarray:
+        """Score alerts. Pass the jumps of the SAME period as `alerts`; with
+        `spikes=None` the jump feature is 0 (training jumps are never reused)."""
         if self._pipe is None:
             raise RuntimeError("Classifier has not been fit")
-        if spikes is None:
-            spikes = getattr(self, "_spikes", None)
         frame = build_feature_frame(alerts, self.config, spikes)
         return self._pipe.predict_proba(frame)[:, 1]
 

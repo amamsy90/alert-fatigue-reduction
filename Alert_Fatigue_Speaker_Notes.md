@@ -38,7 +38,7 @@ I will build this in Python, in four steps. The data matches the sector.
 
 GAIA, the Generic AIOps Atlas, MicroSS scenario, from CloudWise on GitHub: about two months of microservice logs, plus container memory for each service. Every fault was injected and written down — a program that holds extra memory for about ten minutes on one service. So I know the right answer, and I do not trust the alert’s own severity. The logs are China time and the memory files are UTC, so lining the clocks up is part of loading. Learn on the first week. Test on the fifty-five days after it.
 
-Then four steps. Align each alert to the fault on the same service. Classify, with a miss weighing ten times one extra alert. Watch memory: a jump is memory rising more than half a gigabyte above its own level in the last fifteen minutes, for at least two points. The half-gigabyte size was chosen on week one only. A single odd point is ignored. Spend the budget: one list of K items a day. The biggest jumps go first; leftover slots go to alerts — send it now, ask a person, or hide it. I test at five, ten, twenty, and fifty a day.
+Then four steps. Align each alert to the fault on the same service. Classify, with a miss weighing ten times one extra alert. Watch memory: a jump is memory rising more than half a gigabyte above its own level in the last fifteen minutes, for at least two points. The half-gigabyte size was chosen on week one only. A single odd point is ignored. Spend the budget: one list of K items a day. Items are shown the moment they are confirmed, first come first served; alerts may use a quarter of the slots — send it now, ask a person, or hide it. If metrics stop for ten minutes, that gap is an item too. I test at five, ten, twenty, and fifty a day.
 
 A company cannot drop in the GAIA-trained model as is. The app runs in shadow mode first. The on-call person marks items Real or Noise. Those marks become that company’s labels, and the model is retrained on them.
 
@@ -54,7 +54,7 @@ A memory jump overlaps 86 percent of those faults. The first rule, week-one aver
 
 At twenty items a day, the shared queue — jumps first, then alerts — catches 73 percent of the faults. The severity baseline catches none, because the log lines inside a fault are warnings, not errors. Alerts alone catch 13 percent. About 18 items a day, of which about 1.3 are false.
 
-Two cautions, so I do not over-claim. Every GAIA fault is a memory program, so this dataset favours the memory rule. On a real platform some faults will not touch memory, and the alert classifier matters more. Say “on this dataset.” And a jump is only confirmed at its second point, so detection takes about two minutes, not the fraction of a minute the script prints.
+Two cautions, so I do not over-claim. Every GAIA fault is a memory program, so this dataset favours the memory rule. On a real platform some faults will not touch memory, and the alert classifier matters more. Say “on this dataset.” And a jump is only confirmed at its second point, thirty seconds after the first, so the median time to confirm is about 0.7 minutes.
 
 The 95 percent detection target is not met at twenty items a day. Most injected faults leave no log line, so only the memory path can find them.
 
@@ -74,16 +74,18 @@ That is the proposal: alert fatigue reduction for cloud microservice on-call, on
 
 Do not say this in the seven minutes unless they ask.
 
-**Where does the work stand?** The logs are China time and the memory files are UTC. After that alignment, the jump rule overlaps 86.1 percent of the 1,226 test-period faults (1,056), with 256 jumps that have no fault. The old mean-plus-3σ rule was 53.8 percent and 322 false jumps. At 20 items a day the shared queue (jumps first) catches 72.8 percent against 0 percent for the baseline, about 18 items and 1.3 false items a day. At 5 / 10 / 50 the catch rates are 19.2 / 38.8 / 86.0 percent.
+**Where does the work stand?** The logs are China time and the memory files are UTC. After that alignment, the jump rule overlaps 86.1 percent of the 1,223 test faults, and 99.6 percent of the faults that have metric data. At 20 items a day, in real time, the full queue catches 71.0 percent and the jump rule with a learned threshold 72.6 percent. A normal Prometheus rate rule catches 68.9 percent with twice the false items. The best possible at 20 a day is 84.9 percent, because GAIA injects 22 faults a day.
 
 **How do you explain a memory jump?** Memory on one service sits at its own recent level. A jump is that series rising more than 0.5 GB above the median of the previous 15 minutes, for at least two points no more than two minutes apart. That is one incident. The logs from that service during the jump belong to it. The 0.5 GB size was chosen on week 1 only.
 
 **Can a company use a model trained on open data?** Not as is. Their services and alert text differ, and they have no injected-fault labels. Keep the queue and the jump rule. Run in shadow mode. Mark items Real or Noise. Retrain on those labels. The app already does this.
 
-**Why does the baseline catch 0%?** The log lines inside a GAIA memory fault are warnings, not errors, so a fixed severity rule never escalates them. Most injected faults have no log line at all.
+**Why does the log baseline catch 0%?** The log lines inside a GAIA memory fault are warnings, not errors, so a fixed severity rule never escalates them. Most injected faults have no log line at all. That is why I also compare against metric rules a team would already have — the rate rule is the fair baseline, and I beat it by 2 to 4 points with fewer false items.
 
-**Why not 95% at K=20?** The 95 percent target assumed every fault would leave an alert. On this data, 70.9 percent of test faults have a jump and no log. A log-only system is capped near 18 percent. At K=50 every jump fits and detection reaches 86 percent, which is the memory-rule ceiling (86.1 percent of faults have an overlapping jump). 11.3 percent are silent: no log and no jump.
+**Why not 95% at K=20?** The 95 percent target assumed every fault would leave an alert and that there are fewer faults than slots. On this data 71 percent of test faults have a jump and no log, and there are 22 faults a day for 20 slots, so the ceiling is 84.9 percent. 10.8 percent of faults fall in monitoring gaps, where no metric method can see them; the queue shows those gaps as items.
 
-**Was 72.8% a lucky month?** No. Retrain each later week: mean 74.7 percent, 95 percent interval 67.3 to 80.8, and the queue beats the baseline in all eight weeks. The weak week (52.6 percent) showed 11.8 items a day, so the budget of 20 was not full. Fewer qualifying jumps that week, not a full queue.
+**Was it a lucky month?** No. Everything learned is re-learned before each later week: the full queue averages 73.4 percent, interval 66.2 to 79.7, and the jump rule with threshold beats the rate rule in all eight weeks. The weak week, 52 percent, is a 2.5-day metric outage on every service: only 61 percent of that week's faults have any metric data.
+
+**Did the old version cheat?** The first queue ranked each day's jumps by their final peak, which needs the whole day in advance. I replaced it with a threshold on the rise at confirmation, learned on week one. Same score, fewer false items, and it works live.
 
 **Should you change the dataset?** No. Every injection here is a memory program. That is the finding, not a bug. A new mixed-fault set would need CPU and disk series we do not have.

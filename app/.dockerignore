@@ -1,0 +1,10 @@
+# Keep GAIA data, runtime state and caches out of the image (compose mounts data read-only).
+data/
+product/data/
+results/.review_cache.pkl
+**/__pycache__/
+**/.pytest_cache/
+.venv/
+tests/_tmp_queue.db
+*.db
+*.pkl

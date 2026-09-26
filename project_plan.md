@@ -7,14 +7,14 @@
 
 ## 1. Goal and deliverables
 
-Build and evaluate a system for **cloud microservice on-call queues** that, under a fixed daily budget K, catches more real faults than the fixed-threshold + dedup baseline while showing fewer items — verified on GAIA MicroSS. One list per day: biggest memory jumps first, then escalate / ask / hide.
+Build and evaluate a system for **cloud microservice on-call queues** that, under a fixed daily budget K, catches more real faults than the fixed-threshold + dedup baseline while showing fewer items — verified on GAIA MicroSS. One list per day, first come first served: confirmed memory jumps, monitoring gaps, then escalate / ask / hide (alerts capped at 25% of K). Next steps: `ROADMAP.md`.
 
 | ID | Deliverable | Status |
 |---|---|---|
 | D1 | Data pipeline + baseline numbers on the shared split | Done (`results/m1_gaia.csv`) |
 | D2 | Alert classifier vs baseline at equal budget | Done (`results/m2_gaia.csv`) |
 | D3 | Memory-jump detector vs injected faults | Done (`results/memory_gaia_jump.csv`) — 86.1% overlap |
-| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — 72.8% at K=20 |
+| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 71.0% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
 | D5 | Local on-call app (shadow mode, marks, saved model) | Done (`app/product/`) |
 | D6 | Final report + name / course / date on documents | Report includes interval + silent-fault table; name / course / date still open |
 
@@ -33,10 +33,10 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | T9 | Score jump overlap on week 1 (tune) and test period | M3 | Done |
 | T10 | Shared budget: jumps first, then escalate / ask | M4 | Done |
 | T11 | Queue evaluation at K = 5 / 10 / 20 / 50 | M4 | Done |
-| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, mean 74.7%) |
+| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, full queue 73.4%, rate rule 70.7%) |
 | T12 | Stretch: ask only inside a jump; Real / Noise; retrain | D5 | Done |
 | T13 | Final report; name / course / date | D6 | Report in `FINAL_REPORT.md`; fill author fields |
-| T14 | Interval, 8/8 test, silent-fault counts | M4 | Done (`results/stats_gaia.csv`) |
+| T14 | Interval, sign test vs rate rule, signal counts incl. no-metric-data | M4 | Done (`results/stats_gaia.csv`) |
 
 ## 3. Schedule
 
@@ -64,7 +64,7 @@ Core evaluation is complete. One month remains. Do not change the dataset.
 | GAIA clocks disagree (logs CST, metrics UTC) | High | High | Convert logs to UTC on load | Fixed |
 | Memory series missing or not in bytes | Medium | Medium | Classifier-only path; document units | Open for company data |
 | Results depend on GAIA faults all being memory faults | High | High | Report alert-only numbers; retrain on company marks | Documented |
-| Detection never beats baseline | Low | High | Jumps-first queue: 72.8% vs 0% at K=20 | Closed on this data |
+| Detection never beats baseline | Low | High | Causal queue beats a Prometheus rate rule (72.6% vs 68.9%, 8/8 weeks) | Closed on this data |
 | Company cannot use GAIA weights | High | High | Shadow mode + Real / Noise + saved model | Built |
 | App reachable without a login | Medium | High | `APP_PASSWORD`; `/health` stays open | Built, off by default |
 
@@ -77,4 +77,4 @@ Core evaluation is complete. One month remains. Do not change the dataset.
 ## 6. Tracking and definition of done
 
 - A task is **done** when its output is computed on the held-out test period, written under `results/`, and reproducible from a script.
-- Course success is a win over the baseline under budget K, a walk-forward interval, and stated limits. The old 95% detection target is **not the claim** (72.8% at K=20). At K=50 the queue reaches 86.0%, the jump-rule ceiling. 11.3% of test faults are silent.
+- Course success is a win over the baseline under budget K, a walk-forward interval, and stated limits. The old 95% detection target is **not the claim**: at K=20 the best possible is 84.9%. At K=50 the queue reaches 85.9%. 10.8% of test faults fall in monitoring gaps (no metric data).

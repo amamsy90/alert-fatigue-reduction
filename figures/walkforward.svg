@@ -1,53 +1,78 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="680" height="340" viewBox="0 0 680 340" role="img" aria-labelledby="title2 desc2">
-  <title id="title2">Walk-forward detection by later week</title>
-  <desc id="desc2">Queue rates by fold: 84.5, 79.8, 77.8, 68.7, 71.6, 78.4, 52.6, 84.5 percent. Baseline 0% every week. Mean 74.7%.</desc>
-  <rect width="680" height="340" fill="#ffffff"/>
-  <text x="340" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#1c3a5c">Walk-forward faults caught at K=20 (retrain each later week)</text>
-  <g font-family="Arial, sans-serif" font-size="11" fill="#5c656d">
-    <text x="48" y="60" text-anchor="end">100%</text>
-    <text x="48" y="132" text-anchor="end">50%</text>
-    <text x="48" y="204" text-anchor="end">0%</text>
-  </g>
-  <line x1="56" y1="56" x2="650" y2="56" stroke="#d7dde3"/>
-  <line x1="56" y1="128" x2="650" y2="128" stroke="#d7dde3"/>
-  <line x1="56" y1="200" x2="650" y2="200" stroke="#1c3a5c" stroke-width="1.5"/>
-  <!-- mean 74.7% : y = 200 - 0.747*144 = 92.4 -->
-  <line x1="56" y1="92.4" x2="650" y2="92.4" stroke="#b0894b" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="654" y="96" font-family="Arial, sans-serif" font-size="11" fill="#b0894b">mean 74.7%</text>
-  <!-- bars: y=200-rate*144, h=rate*144; x starts 72, width 48, gap 24 -->
-  <rect x="72" y="78.4" width="48" height="121.6" fill="#1c3a5c"/>
-  <text x="96" y="72" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">84.5</text>
-  <rect x="144" y="85.1" width="48" height="114.9" fill="#1c3a5c"/>
-  <text x="168" y="79" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">79.8</text>
-  <rect x="216" y="88.0" width="48" height="112.0" fill="#1c3a5c"/>
-  <text x="240" y="82" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">77.8</text>
-  <rect x="288" y="101.1" width="48" height="98.9" fill="#1c3a5c"/>
-  <text x="312" y="95" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">68.7</text>
-  <rect x="360" y="96.9" width="48" height="103.1" fill="#1c3a5c"/>
-  <text x="384" y="91" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">71.6</text>
-  <rect x="432" y="87.1" width="48" height="112.9" fill="#1c3a5c"/>
-  <text x="456" y="81" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">78.4</text>
-  <rect x="504" y="124.3" width="48" height="75.7" fill="#8b3a3a"/>
-  <text x="528" y="118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#8b3a3a">52.6</text>
-  <rect x="576" y="78.3" width="48" height="121.7" fill="#1c3a5c"/>
-  <text x="600" y="72" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#1c3a5c">84.5</text>
-  <g font-family="Arial, sans-serif" font-size="11" fill="#2b3138" text-anchor="middle">
-    <text x="96" y="220">1</text>
-    <text x="168" y="220">2</text>
-    <text x="240" y="220">3</text>
-    <text x="312" y="220">4</text>
-    <text x="384" y="220">5</text>
-    <text x="456" y="220">6</text>
-    <text x="528" y="220">7</text>
-    <text x="600" y="220">8</text>
-  </g>
-  <text x="340" y="248" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#2b3138">Later week (fold). Baseline is 0% every week.</text>
-  <g font-family="Arial, sans-serif" font-size="12">
-    <rect x="150" y="272" width="12" height="12" fill="#1c3a5c"/>
-    <text x="168" y="283" fill="#2b3138">Queue</text>
-    <rect x="240" y="272" width="12" height="12" fill="#8b3a3a"/>
-    <text x="258" y="283" fill="#2b3138">Fold 7 (weaker)</text>
-    <line x1="400" y1="278" x2="424" y2="278" stroke="#b0894b" stroke-width="1.5" stroke-dasharray="5 4"/>
-    <text x="430" y="283" fill="#2b3138">Walk-forward mean</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="360" viewBox="0 0 680 360" role="img" aria-labelledby="t d" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpkZDQ0ZDU4Zi0yZTdlLTRlZDItYTg5Ni1jM2U0YTc4YTM2ODkAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaOwqXwh5urbvB2v0isbfRVsAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDpjYTRkY2RmYS0yZTk5LTQ1Y2MtOTdkNS05NjFiODAxMmJmZmZscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoabKP+y6erLyTlLJMmcKZLwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggVUFPSasAy3ScXHGWOp0i1reVSK0udzNmIgVQ39hUj1mkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaHNUjnMpnPExU900vO9xfUgAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCBvcdDtTsRBbVWlkW/wZjHsDDdh+plxsmKk3I94XATgJ2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmRkNDRkNThmLTJlN2UtNGVkMi1hODk2LWMzZTRhNzhhMzY4OS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjVlNDk3ZjIzLWZiYmQtNDM0ZS05NGUwLWE5NDYzMmM1N2RmNHJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCBVQU9JqwDLdJxccZY6nSLWt5VIrS53M2YiBVDf2FSPWaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggoNPyNM08AEcmo4Aes+jRreNdcwq6lkSnt1LlvsBXtkuiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggcDQ9x2x46XEI11h76CMoAPOw6GUoRFdm+eyjUXFXoyN0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQF7zzyFkFvChAE7hiCAdi9NWk3xAx2YR6NybgEAlnGctA+aDk8DMRr1UiiQqm53hq7HRZDndy7z8pzftoVDBJlI=</c2pa:manifest></metadata>
+  <title id="t">Walk-forward detection by later week</title>
+  <desc id="d">week of 08 Jul: rate rule 77.6%, full queue 83.2%, metric data 100%; week of 15 Jul: rate rule 73.9%, full queue 81.3%, metric data 91%; week of 22 Jul: rate rule 72.2%, full queue 72.2%, metric data 94%; week of 29 Jul: rate rule 67.5%, full queue 67.5%, metric data 82%; week of 05 Aug: rate rule 69.1%, full queue 71.0%, metric data 84%; week of 12 Aug: rate rule 75.5%, full queue 77.0%, metric data 92%; week of 19 Aug: rate rule 51.4%, full queue 52.0%, metric data 61%; week of 26 Aug: rate rule 78.3%, full queue 83.0%, metric data 91%</desc>
+  <rect width="680" height="360" fill="#fcfcfb"/>
+  <text x="60" y="30" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#1f1f1e">Walk-forward: faults caught each later week (K=20)</text>
+  <rect x="60" y="42" width="12" height="12" rx="2" fill="#eb6834"/>
+  <text x="78" y="52" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f1f1e">Rate rule</text>
+  <rect x="170" y="42" width="12" height="12" rx="2" fill="#2a78d6"/>
+  <text x="188" y="52" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f1f1e">Full queue</text>
+  <text x="290" y="52" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#6b6a64">% under each week = faults with metric data</text>
+  <line x1="60" y1="290.0" x2="660" y2="290.0" stroke="#e4e3dd"/>
+  <text x="52" y="294.0" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">0%</text>
+  <line x1="60" y1="235.0" x2="660" y2="235.0" stroke="#e4e3dd"/>
+  <text x="52" y="239.0" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">25%</text>
+  <line x1="60" y1="180.0" x2="660" y2="180.0" stroke="#e4e3dd"/>
+  <text x="52" y="184.0" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">50%</text>
+  <line x1="60" y1="125.0" x2="660" y2="125.0" stroke="#e4e3dd"/>
+  <text x="52" y="129.0" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">75%</text>
+  <line x1="60" y1="70.0" x2="660" y2="70.0" stroke="#e4e3dd"/>
+  <text x="52" y="74.0" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">100%</text>
+  <rect x="69.0" y="119.2" width="28.5" height="170.8" rx="4" fill="#eb6834"/>
+  <rect x="69.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="99.5" y="106.9" width="28.5" height="183.1" rx="4" fill="#2a78d6"/>
+  <rect x="99.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="113.8" y="100.9" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">83%</text>
+  <text x="97.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">08 Jul</text>
+  <text x="97.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">100%</text>
+  <rect x="144.0" y="127.5" width="28.5" height="162.5" rx="4" fill="#eb6834"/>
+  <rect x="144.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="174.5" y="111.1" width="28.5" height="178.9" rx="4" fill="#2a78d6"/>
+  <rect x="174.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="188.8" y="105.1" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">81%</text>
+  <text x="172.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">15 Jul</text>
+  <text x="172.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">91%</text>
+  <rect x="219.0" y="131.1" width="28.5" height="158.9" rx="4" fill="#eb6834"/>
+  <rect x="219.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="249.5" y="131.1" width="28.5" height="158.9" rx="4" fill="#2a78d6"/>
+  <rect x="249.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="263.8" y="125.1" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">72%</text>
+  <text x="247.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">22 Jul</text>
+  <text x="247.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">94%</text>
+  <rect x="294.0" y="141.5" width="28.5" height="148.5" rx="4" fill="#eb6834"/>
+  <rect x="294.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="324.5" y="141.5" width="28.5" height="148.5" rx="4" fill="#2a78d6"/>
+  <rect x="324.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="338.8" y="135.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">67%</text>
+  <text x="322.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">29 Jul</text>
+  <text x="322.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">82%</text>
+  <rect x="369.0" y="137.9" width="28.5" height="152.1" rx="4" fill="#eb6834"/>
+  <rect x="369.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="399.5" y="133.8" width="28.5" height="156.2" rx="4" fill="#2a78d6"/>
+  <rect x="399.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="413.8" y="127.8" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">71%</text>
+  <text x="397.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">05 Aug</text>
+  <text x="397.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">84%</text>
+  <rect x="444.0" y="123.8" width="28.5" height="166.2" rx="4" fill="#eb6834"/>
+  <rect x="444.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="474.5" y="120.6" width="28.5" height="169.4" rx="4" fill="#2a78d6"/>
+  <rect x="474.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="488.8" y="114.6" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">77%</text>
+  <text x="472.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">12 Aug</text>
+  <text x="472.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">92%</text>
+  <rect x="519.0" y="176.8" width="28.5" height="113.2" rx="4" fill="#eb6834"/>
+  <rect x="519.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="549.5" y="175.6" width="28.5" height="114.4" rx="4" fill="#2a78d6"/>
+  <rect x="549.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="563.8" y="169.6" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">52%</text>
+  <text x="547.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">19 Aug</text>
+  <text x="547.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e" font-weight="bold">61%</text>
+  <rect x="594.0" y="117.8" width="28.5" height="172.2" rx="4" fill="#eb6834"/>
+  <rect x="594.0" y="286.0" width="28.5" height="4.0" fill="#eb6834"/>
+  <rect x="624.5" y="107.5" width="28.5" height="182.5" rx="4" fill="#2a78d6"/>
+  <rect x="624.5" y="286.0" width="28.5" height="4.0" fill="#2a78d6"/>
+  <text x="638.8" y="101.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">83%</text>
+  <text x="622.5" y="308" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">26 Aug</text>
+  <text x="622.5" y="324" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f1f1e">91%</text>
+  <text x="60" y="352" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#6b6a64">Week of 19 Aug: metrics stopped on every service for 2.5 days.</text>
 </svg>

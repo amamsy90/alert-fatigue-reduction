@@ -1,0 +1,6 @@
+alert_id,timestamp,source,severity,message,alert_type
+a1,2026-03-02 03:00:00+00:00,search,info,cache warm,log
+a2,2026-03-02 09:03:00+00:00,checkout,warning,GC pause 900ms,log
+a3,2026-03-02 11:00:00+00:00,payments,error,card gateway timeout,log
+a4,2026-03-02 11:01:00+00:00,payments,error,card gateway timeout,log
+a5,2026-03-02 18:00:00+00:00,search,warning,slow query 2.1s,log

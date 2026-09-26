@@ -196,9 +196,9 @@
       <a href="/feedback/faults.csv" class="secondary-link">Download confirmed faults</a>
     </form>
     <div id="weak" class="shadow" hidden>
-      No fault labels in this data — the model was trained using severity as a stand-in.
-      Treat these decisions as a demo, not a measured result. Mark items Real / Noise;
-      the next run trains on your marks instead.
+      Rules-only mode: there are no fault labels yet, so log alerts are ranked by severity.
+      Metric jumps and monitoring gaps do not need labels. Mark items Real / Noise;
+      the next run trains a model on your marks.
     </div>
     <div id="retrain" class="shadow" hidden></div>
     <div id="learning" class="meta"></div>
@@ -219,15 +219,15 @@
     <div id="err" class="err" hidden></div>
     <div id="meta" class="meta"></div>
     <section id="jumps-box" hidden>
-      <h2 class="section">Memory jumps</h2>
+      <h2 class="section">Metric jumps and gaps</h2>
       <div id="jumps-note" class="meta"></div>
       <table>
         <thead>
           <tr>
             <th>Service</th>
-            <th>Start</th>
+            <th>Shown at</th>
             <th>Minutes</th>
-            <th>Rise</th>
+            <th>Rise at confirm</th>
             <th>Alerts inside</th>
             <th>Already escalated</th>
             <th>Verdict</th>
@@ -360,7 +360,7 @@
       fillDays(data.days || []);
       document.getElementById("shadow").hidden = !data.job.shadow_mode;
       const m = data.job.meta || {};
-      document.getElementById("weak").hidden = m.label_source !== "weak_severity";
+      document.getElementById("weak").hidden = !(m.model_used === "rules_only" || m.label_source === "weak_severity");
       document.getElementById("meta").innerHTML = [
         `Job <strong>${data.job.job_id}</strong>`,
         `source ${data.job.source}`,
@@ -444,7 +444,9 @@
       if (meta.model_used) {
         parts.push(meta.model_used === "saved"
           ? "this job was scored with the saved model"
-          : "this job trained a new model");
+          : meta.model_used === "rules_only"
+            ? "rules only (no model yet)"
+            : "this job trained a new model");
       }
       if (meta.labelled_by_real_marks) parts.push(`${meta.labelled_by_real_marks} alerts labelled by Real marks`);
       if (meta.cleared_by_noise_marks) parts.push(`${meta.cleared_by_noise_marks} labels cleared by Noise marks`);
@@ -477,7 +479,7 @@
       document.getElementById("train-note").textContent =
         (training.note || "") +
         (training.threshold != null ? ` Escalate threshold ${training.threshold} (chosen on train only).` : "") +
-        " These are alert scores. The 72.8% system figure also counts memory jumps.";
+        " These are alert scores only; most faults are caught by metric jumps, not alerts.";
       document.getElementById("train-body").innerHTML = windowText(
         training.train,
         "No new fit this job — using the saved model."
@@ -491,18 +493,20 @@
     function renderJumps(jumps, total, k) {
       document.getElementById("jumps-box").hidden = total === 0;
       document.getElementById("jumps-note").textContent =
-        `Biggest ${jumps.length} of ${total} jumps. Jumps take the first of the K=${k} daily slots; ` +
-        "escalations and asks fill what is left. A jump with no alerts inside may be a fault the logs missed.";
+        `${jumps.length} of ${total} metric items shown, in the order they were confirmed (at most K=${k} items a day). ` +
+        "Log alerts may use a quarter of the slots; an alert inside a shown jump rides on it. " +
+        "A jump with no alerts inside may be a fault the logs missed. A gap means the metrics stopped.";
       const tbody = document.getElementById("jump-rows");
       tbody.innerHTML = "";
       jumps.forEach(j => {
         const minutes = Math.max(1, Math.round((new Date(j.end) - new Date(j.start)) / 60000));
         const tr = document.createElement("tr");
+        const isGap = j.kind === "gap";
         tr.innerHTML = `
           <td>${escapeHtml(j.service)}</td>
-          <td>${escapeHtml(j.start.replace("T", " ").slice(0, 16))} UTC</td>
+          <td>${escapeHtml((j.confirm || j.start).replace("T", " ").slice(0, 16))} UTC</td>
           <td>${minutes}</td>
-          <td class="spike">+${Number(j.rise_gb).toFixed(2)} GB</td>
+          <td class="spike">${isGap ? "no data" : "+" + Number(j.rise_gb).toFixed(2) + " GB"}</td>
           <td class="${j.alerts_inside ? "" : "silent"}">${j.alerts_inside || "none"}</td>
           <td>${j.escalated_inside}</td>
           <td class="verdict">${verdictButtons("jump", j.id, j.verdict)}</td>`;

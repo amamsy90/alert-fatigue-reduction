@@ -1,10 +1,16 @@
-"""Detect memory-spike episodes (replaces alert-text grouping).
+"""Metric episodes: jumps (the main detector), monitoring gaps, and the old rule.
 
-Each injected GAIA fault is a short high-memory program on one service. Week 1
-sets the normal level of each memory series. A later run of points above
-mean + k * std, on that same service, is one episode. Log lines are not
-clustered by their text. A line belongs to an episode only when its service
-and time fall inside the spike.
+A jump is a run of points that sit well above the median of the previous
+window on the same series. It is *confirmed* at its `memory_min_points`-th hot
+point; `confirm` and `rise_at_confirm` are all a live queue may use.
+`end` and `peak_rise` are only known afterwards and are kept for reporting.
+
+A gap is a series with no points for `gap_minutes` or more: the queue cannot
+see a fault there, so the gap itself is shown to on-call.
+
+`detect_spikes` (training mean + k * std) is the first rule, kept for comparison.
+Log lines are not clustered by their text. A line belongs to an episode only when
+its service and time fall inside it.
 """
 from __future__ import annotations
 
@@ -37,7 +43,17 @@ class Spike:
     start: pd.Timestamp
     end: pd.Timestamp
     # Largest height above normal inside the episode, in the metric's unit.
+    # Known only after the episode ends: do not use it to decide what to show.
     peak_rise: float = 0.0
+    # Time of the point that confirms the episode, and the rise known by then.
+    confirm: pd.Timestamp | None = None
+    rise_at_confirm: float = 0.0
+    kind: str = "jump"  # "jump" | "gap" | "rule"
+
+    @property
+    def shown_at(self) -> pd.Timestamp:
+        """When a live queue can show this item."""
+        return self.confirm if self.confirm is not None else self.start
 
 
 def service_in_name(name: str) -> str | None:
@@ -129,7 +145,8 @@ def detect_jumps(
     detect_until: pd.Timestamp | None = None,
 ) -> list[Spike]:
     """A point is hot when it sits `memory_jump_bytes` above the median of the
-    previous `memory_jump_window_minutes` on the same series.
+    previous `memory_jump_window_minutes` on the same series (absolute mode), or
+    `memory_jump_ratio` times that median above it (relative mode).
 
     Unlike mean + k * std this needs no training week, so a service whose normal
     level drifts (a restart, a slow leak) is not flagged for days.
@@ -141,7 +158,12 @@ def detect_jumps(
         series = part.sort_values("timestamp").set_index("timestamp")["value"]
         baseline = series.rolling(window, closed="left").median()
         rise = series - baseline
-        hot = rise[rise > config.memory_jump_bytes]
+        if config.memory_jump_mode == "relative":
+            hot = rise[rise > config.memory_jump_ratio * baseline.abs()]
+        elif config.memory_jump_mode == "absolute":
+            hot = rise[rise > config.memory_jump_bytes]
+        else:
+            raise ValueError(f"memory_jump_mode must be absolute or relative, not {config.memory_jump_mode!r}")
         if detect_from is not None:
             hot = hot[hot.index >= detect_from]
         if detect_until is not None:
@@ -156,28 +178,101 @@ def _episodes(
 ) -> list[Spike]:
     """Group hot points no more than the gap apart; keep runs of min_points or more.
 
-    `heights` is indexed by timestamp; its values give each episode's peak_rise.
+    `heights` is indexed by timestamp; its values give each episode's rise.
     """
     gap = pd.Timedelta(minutes=config.memory_gap_minutes)
+    need = max(1, config.memory_min_points)
     episodes: list[Spike] = []
-    cluster_start = cluster_end = previous = None
-    cluster_count = 0
-    peak = 0.0
+    run: list[tuple[pd.Timestamp, float]] = []
+
+    def _close() -> None:
+        if len(run) >= need:
+            episodes.append(
+                Spike(
+                    series_id,
+                    service,
+                    run[0][0],
+                    run[-1][0],
+                    max(h for _, h in run),
+                    confirm=run[need - 1][0],
+                    rise_at_confirm=max(h for _, h in run[:need]),
+                )
+            )
+
+    previous = None
     for timestamp, height in heights.items():
-        if previous is None or timestamp - previous > gap:
-            if cluster_count >= config.memory_min_points:
-                episodes.append(Spike(series_id, service, cluster_start, cluster_end, peak))
-            cluster_start = cluster_end = timestamp
-            cluster_count = 1
-            peak = float(height)
-        else:
-            cluster_end = timestamp
-            cluster_count += 1
-            peak = max(peak, float(height))
+        if previous is not None and timestamp - previous > gap:
+            _close()
+            run = []
+        run.append((timestamp, float(height)))
         previous = timestamp
-    if cluster_count >= config.memory_min_points:
-        episodes.append(Spike(series_id, service, cluster_start, cluster_end, peak))
+    _close()
     return episodes
+
+
+def detect_gaps(
+    metrics: pd.DataFrame,
+    config: Config | None = None,
+    detect_from: pd.Timestamp | None = None,
+    detect_until: pd.Timestamp | None = None,
+) -> list[Spike]:
+    """One item per silence of `gap_minutes` or more; silences that start close
+    together on several services are merged into one item (service "a,b,c").
+
+    The item is shown `gap_minutes` after the last point (that is when a live
+    system knows data stopped). `end` is when data came back.
+    """
+    config = config or Config()
+    limit = pd.Timedelta(minutes=config.gap_minutes)
+    raw: list[tuple[pd.Timestamp, pd.Timestamp, str]] = []
+    for _, part in metrics.groupby("series_id"):
+        times = part["timestamp"].sort_values().reset_index(drop=True)
+        if len(times) < 2:
+            continue
+        step = times.diff()
+        service = str(part["service"].iloc[0])
+        for i in step.index[step > limit]:
+            last_seen, back = times[i - 1], times[i]
+            shown = last_seen + limit
+            if detect_from is not None and shown < detect_from:
+                continue
+            if detect_until is not None and shown >= detect_until:
+                continue
+            raw.append((last_seen, back, service))
+    raw.sort()
+    merged: list[Spike] = []
+    window = pd.Timedelta(minutes=config.gap_group_minutes)
+    for last_seen, back, service in raw:
+        if merged and last_seen - merged[-1].start <= window:
+            item = merged[-1]
+            if service not in item.service.split(","):
+                item.service = f"{item.service},{service}"
+            item.end = max(item.end, back)
+            continue
+        merged.append(
+            Spike(
+                series_id="gap",
+                service=service,
+                start=last_seen,
+                end=back,
+                peak_rise=0.0,
+                confirm=last_seen + limit,
+                rise_at_confirm=0.0,
+                kind="gap",
+            )
+        )
+    return merged
+
+
+def faults_in_gaps(gaps: list[Spike], faults: list[Fault]) -> set[str]:
+    """Faults that start while their service's metrics were silent."""
+    covered: set[str] = set()
+    for gap in gaps:
+        services = set(gap.service.split(","))
+        for fault in faults:
+            if fault.component in services and gap.start <= fault.start <= gap.end:
+                covered.add(fault.fault_id)
+    return covered
 
 
 def score_spikes(spikes: list[Spike], faults: list[Fault]) -> dict[str, float]:

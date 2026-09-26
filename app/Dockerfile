@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src ./src
 COPY product ./product
-COPY data ./data
+COPY examples ./examples
 
 ENV PYTHONPATH=/app
 ENV SHADOW_MODE=1

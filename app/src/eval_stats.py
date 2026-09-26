@@ -93,7 +93,14 @@ def faults_with_jumps(faults: list[Fault], jumps: list[Spike]) -> set[str]:
     return caught
 
 
-def signal_row(fault: Fault, logged: set[str], jumped: set[str]) -> str:
+SIGNALS = ("log_and_jump", "jump_only", "log_only", "no_metric_data", "silent")
+
+
+def signal_row(
+    fault: Fault, logged: set[str], jumped: set[str], with_data: set[str] | None = None
+) -> str:
+    """`no_metric_data`: no log, no jump, and no metric point in the fault window
+    (a monitoring gap). `silent`: metric data exists but nothing moved."""
     has_log = fault.fault_id in logged
     has_jump = fault.fault_id in jumped
     if has_log and has_jump:
@@ -102,16 +109,47 @@ def signal_row(fault: Fault, logged: set[str], jumped: set[str]) -> str:
         return "jump_only"
     if has_log:
         return "log_only"
+    if with_data is not None and fault.fault_id not in with_data:
+        return "no_metric_data"
     return "silent"
 
 
-def signal_counts(faults: list[Fault], alerts: list[Alert], jumps: list[Spike]) -> dict[str, int]:
+def signal_counts(
+    faults: list[Fault],
+    alerts: list[Alert],
+    jumps: list[Spike],
+    with_data: set[str] | None = None,
+) -> dict[str, int]:
     logged = faults_with_logs(alerts)
     jumped = faults_with_jumps(faults, jumps)
-    counts = {"log_and_jump": 0, "jump_only": 0, "log_only": 0, "silent": 0}
+    counts = {key: 0 for key in SIGNALS}
     for fault in faults:
-        counts[signal_row(fault, logged, jumped)] += 1
+        counts[signal_row(fault, logged, jumped, with_data)] += 1
     return counts
+
+
+def chance_overlap(
+    faults: list[Fault], jumps: list[Spike], n_draws: int = 20, seed: int = 0
+) -> tuple[float, float, float]:
+    """Detection if each service's jumps were shifted by a random 1-6 hours.
+
+    Tells a reader how much of the overlap rate a random detector would get.
+    Returns (mean, min, max) over the draws.
+    """
+    rng = np.random.default_rng(seed)
+    services = sorted({j.service for j in jumps})
+    rates = []
+    for _ in range(n_draws):
+        shifted = []
+        for service in services:
+            offset = pd.Timedelta(minutes=int(rng.integers(60, 360)))
+            shifted += [
+                Spike(j.series_id, j.service, j.start + offset, j.end + offset, j.peak_rise)
+                for j in jumps
+                if j.service == service
+            ]
+        rates.append(len(faults_with_jumps(faults, shifted)) / len(faults) if faults else 0.0)
+    return float(np.mean(rates)), float(min(rates)), float(max(rates))
 
 
 def by_service_rows(

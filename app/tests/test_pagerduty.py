@@ -43,3 +43,20 @@ def test_only_escalations_are_sent():
         out = notify_escalations(list(alerts), list(decisions), key="RKEY")
     assert out["sent"] == 2 and out["failed"] == 0
     assert mocked.call_count == 2
+
+
+def test_shown_jumps_and_gaps_are_paged_with_stable_keys():
+    from product.pagerduty import spike_event
+    from src.memory_spikes import Spike
+
+    jump = Spike("web", "webservice1", T0, T0 + pd.Timedelta(minutes=5), 1.4e9,
+                 confirm=T0 + pd.Timedelta(seconds=30), rise_at_confirm=1.1e9)
+    gap = Spike("gap", "dbservice1,webservice1", T0, T0 + pd.Timedelta(hours=2),
+                confirm=T0 + pd.Timedelta(minutes=10), kind="gap")
+    sent = []
+    with patch("product.pagerduty.urlopen", side_effect=lambda req, timeout: (sent.append(req), _Resp())[1]):
+        out = notify_escalations([], [], key="k", spikes=[jump, gap])
+    assert out["sent"] == 2
+    assert spike_event(jump, "k")["dedup_key"] == spike_event(jump, "k")["dedup_key"]
+    assert "1.10 GB" in spike_event(jump, "k")["payload"]["summary"]
+    assert "No metrics" in spike_event(gap, "k")["payload"]["summary"]

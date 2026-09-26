@@ -84,6 +84,15 @@ class QueueStore:
                 );
                 """
             )
+            # Columns added after the first release: add them to old databases.
+            have = {r["name"] for r in conn.execute("PRAGMA table_info(jumps)")}
+            for name, ddl in (
+                ("kind", "TEXT NOT NULL DEFAULT 'jump'"),
+                ("confirm", "TEXT"),
+                ("shown", "INTEGER NOT NULL DEFAULT 1"),
+            ):
+                if name not in have:
+                    conn.execute(f"ALTER TABLE jumps ADD COLUMN {name} {ddl}")
 
     def latest_job_id(self) -> str | None:
         with self._connect() as conn:
@@ -162,8 +171,8 @@ class QueueStore:
                 """
                 INSERT INTO jumps (
                     job_id, day, service, start, end, rise_gb,
-                    alerts_inside, escalated_inside
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    alerts_inside, escalated_inside, kind, confirm, shown
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -175,6 +184,9 @@ class QueueStore:
                         j["rise_gb"],
                         j["alerts_inside"],
                         j["escalated_inside"],
+                        j.get("kind", "jump"),
+                        j.get("confirm") or j["start"],
+                        1 if j.get("shown", True) else 0,
                     )
                     for j in jumps or []
                 ],
@@ -184,7 +196,11 @@ class QueueStore:
     def get_jumps(
         self, job_id: str, *, day: str | None = None, per_day: int | None = None
     ) -> tuple[list[dict], int]:
-        """Biggest jumps first. Returns (shown, total); `per_day` caps each day."""
+        """Jump and gap items in the order on-call saw them (first confirmed first).
+
+        Returns (shown, total). Only items the causal queue showed are returned
+        when `per_day` is given (it still caps each day, for old jobs).
+        """
         clauses = ["job_id = ?"]
         params: list = [job_id]
         if day:
@@ -192,11 +208,11 @@ class QueueStore:
             params.append(day)
         sql = f"""
             SELECT j.id, j.day, j.service, j.start, j.end, j.rise_gb,
-                   j.alerts_inside, j.escalated_inside, f.verdict
+                   j.alerts_inside, j.escalated_inside, j.kind, j.confirm, j.shown, f.verdict
             FROM jumps j
             LEFT JOIN feedback f ON f.kind = 'jump' AND f.item_id = j.id
             WHERE {" AND ".join("j." + c for c in clauses)}
-            ORDER BY j.day, j.rise_gb DESC
+            ORDER BY j.day, COALESCE(j.confirm, j.start)
         """
         with self._connect() as conn:
             rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -205,10 +221,11 @@ class QueueStore:
         shown: list[dict] = []
         taken: dict[str, int] = {}
         for row in rows:
+            if not row["shown"]:
+                continue
             if taken.get(row["day"], 0) < per_day:
                 shown.append(row)
                 taken[row["day"]] = taken.get(row["day"], 0) + 1
-        shown.sort(key=lambda r: -r["rise_gb"])
         return shown, len(rows)
 
     def list_days(self, job_id: str) -> list[str]:
@@ -397,13 +414,33 @@ class QueueStore:
             "last_job": last_job,
         }
 
-    def drain_buffer(self) -> list[dict]:
+    def peek_buffer(self) -> tuple[list[dict], int | None]:
+        """Buffered alert rows and the last batch id, without deleting anything.
+
+        Call `ack_buffer(last_id)` only after the rows were scored and saved, so a
+        failed run leaves them in the buffer for the next try.
+        """
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, payload_json FROM ingest_buffer ORDER BY id"
             ).fetchall()
-            if rows:
-                conn.execute("DELETE FROM ingest_buffer WHERE id <= ?", (rows[-1]["id"],))
+        last_id = int(rows[-1]["id"]) if rows else None
+        return self._unpack(rows), last_id
+
+    def ack_buffer(self, last_id: int | None) -> None:
+        if last_id is None:
+            return
+        with self._connect() as conn:
+            conn.execute("DELETE FROM ingest_buffer WHERE id <= ?", (last_id,))
+
+    def drain_buffer(self) -> list[dict]:
+        """Peek and delete at once (kept for callers that cannot fail)."""
+        rows, last_id = self.peek_buffer()
+        self.ack_buffer(last_id)
+        return rows
+
+    @staticmethod
+    def _unpack(rows) -> list[dict]:
         alerts: list[dict] = []
         for row in rows:
             chunk = json.loads(row["payload_json"])

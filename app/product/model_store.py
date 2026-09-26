@@ -52,7 +52,6 @@ def model_path() -> Path:
 def save_model(saved: SavedModel, path: Path | None = None) -> None:
     path = path or model_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    saved.model._spikes = None  # training spikes are not needed to score new alerts
     tmp = path.with_suffix(".tmp")
     with tmp.open("wb") as fh:
         pickle.dump(saved, fh)
