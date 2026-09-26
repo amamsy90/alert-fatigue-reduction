@@ -48,8 +48,10 @@ class Config:
     jump_direction: str = "up"
     # Causal queue: a confirmed jump is shown only if its rise at confirmation is at
     # least this big. None = use every jump; tuned on the training window by
-    # src.queue.tune_confirm_threshold.
+    # src.queue.tune_confirm_threshold. Series in `confirm_min_rise_by_series`
+    # use their own frozen value instead; everyone else uses this global one.
     confirm_min_rise: float | None = None
+    confirm_min_rise_by_series: dict[str, float] = field(default_factory=dict)
     # Share of the daily budget log alerts may use (jumps and gaps are never blocked
     # by alerts). 0.25 of K=20 is 5 alert slots.
     alert_share: float = 0.25

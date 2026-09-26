@@ -118,6 +118,7 @@
 
     <h2>Settings the app learned</h2>
     <table><thead><tr><th>Detector</th><th>Setting</th><th>On the tuning part</th></tr></thead><tbody id="settings"></tbody></table>
+    <div id="levels" class="note" hidden></div>
 
     <h2>Use it</h2>
     <div class="actions">
@@ -222,6 +223,19 @@
       return `<tr class="${k === chosen ? "mine" : ""}"><td>${k === chosen ? "✓ " : ""}${esc(NAMES[{ jump: "jump_rule", delta: "rate_rule", static: "static_rule" }[k]])}</td>
         <td>${esc(st.label)}</td><td>${fit}</td></tr>`;
     }).join("");
+    const gates = (rep.settings.jump && rep.settings.jump.confirm_by_series) || {};
+    const gateKeys = Object.keys(gates);
+    const levels = $("levels");
+    if (gateKeys.length) {
+      const bits = gateKeys.slice(0, 12).map(k => `${k} ${Number(gates[k]).toPrecision(4)}`);
+      levels.hidden = false;
+      levels.innerHTML = `<b>Learned jump level per series</b> (training window only, then frozen): ${esc(bits.join("; "))}` +
+        (gateKeys.length > 12 ? ` … and ${gateKeys.length - 12} more.` : ".") +
+        " Other series keep the global threshold. This is the metric-side learner; log alerts still use severity or the alert classifier.";
+    } else {
+      levels.hidden = true;
+      levels.textContent = "";
+    }
     const blob = new Blob([JSON.stringify(rep, null, 2)], { type: "application/json" });
     $("download").href = URL.createObjectURL(blob);
     $("done").innerHTML = "";
