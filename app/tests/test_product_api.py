@@ -130,6 +130,23 @@ def test_feedback_becomes_real_labels_for_the_next_upload(client):
     assert second.json()["meta"]["label_source"] == "real"
 
 
+def _labelled_batch_csv() -> tuple[str, str]:
+    """Ten days with both fault and noise alerts, so a model can be fit and tested."""
+    rows = []
+    for day in range(10):
+        for i in range(12):
+            source = "webservice1" if i < 3 else "dbservice1"
+            rows.append(
+                f"a{day:02d}{i:02d},2026-01-{day + 1:02d}T12:{i:02d}:00Z,{source},log,warning,event {day}-{i}"
+            )
+    alerts = "alert_id,timestamp,source,alert_type,severity,message\n" + "\n".join(rows) + "\n"
+    faults = "fault_id,start,end,component,description\n" + "".join(
+        f"f{day},2026-01-{day + 1:02d}T11:58:00Z,2026-01-{day + 1:02d}T12:03:00Z,webservice1,x\n"
+        for day in range(10)
+    )
+    return alerts, faults
+
+
 def test_small_live_batch_is_scored_with_the_saved_model(client):
     assert client.get("/model").json() == {"saved": False}
     few = [
@@ -141,7 +158,19 @@ def test_small_live_batch_is_scored_with_the_saved_model(client):
     assert early.status_code == 200, early.text
     assert early.json()["job"]["meta"]["model_used"] == "rules_only"
 
-    trained = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20}).json()
+    # Run sample is a one-day metric demo and does not fit a classifier.
+    # A labelled multi-day upload is what saves the model.
+    alerts_csv, faults_csv = _labelled_batch_csv()
+    trained = client.post(
+        "/jobs/upload",
+        files={
+            "alerts_file": ("alerts.csv", alerts_csv, "text/csv"),
+            "faults_file": ("faults.csv", faults_csv, "text/csv"),
+        },
+        data={"budget_k": "20"},
+    )
+    assert trained.status_code == 200, trained.text
+    trained = trained.json()
     assert trained["meta"]["model_used"] == "trained"
     report = trained["meta"]["training"]
     assert report["model_used"] == "trained"
@@ -164,8 +193,20 @@ def test_marks_label_the_next_run_and_trigger_a_retrain_reminder(client):
     from product.model_store import load_model
     from product.pipeline import apply_feedback, load_alerts_from_dicts
 
-    sample = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20}).json()
-    items = client.get("/queue", params={"job_id": sample["job_id"], "limit": 2000}).json()["items"]
+    # Sample mode is a one-day rules-only demo and does not save a model.
+    # Marks are taken from a labelled upload, which does.
+    alerts_csv, faults_csv = _labelled_batch_csv()
+    trained = client.post(
+        "/jobs/upload",
+        files={
+            "alerts_file": ("alerts.csv", alerts_csv, "text/csv"),
+            "faults_file": ("faults.csv", faults_csv, "text/csv"),
+        },
+        data={"budget_k": "20"},
+    )
+    assert trained.status_code == 200, trained.text
+    assert trained.json()["meta"]["model_used"] == "trained"
+    items = client.get("/queue", params={"job_id": trained.json()["job_id"], "limit": 2000}).json()["items"]
     noise_item = next(i for i in items if i["action"] == "suppress")
     real_item = next(i for i in items if i["id"] != noise_item["id"])
     client.post("/feedback", json={"kind": "alert", "id": real_item["id"], "verdict": "real"})
@@ -252,6 +293,46 @@ def test_sample_job_queue_has_surfaced_actions(client):
     assert "escalate" in actions or "review" in actions
     surfaced = [i for i in items if i["action"] in ("escalate", "review")]
     assert len(surfaced) > 0
+
+
+def test_sample_job_includes_jump_gap_and_leak(client, monkeypatch, tmp_path):
+    """Run sample is one synthetic day with metrics, not alerts alone."""
+    monkeypatch.setenv("SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.delenv("LEAK_WINDOW_MINUTES", raising=False)
+    res = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20})
+    assert res.status_code == 200, res.text
+    meta = res.json()["meta"]
+    assert meta["has_metrics"] is True
+    assert meta["jumps_shown"] >= 1
+    assert meta["gap_items"] >= 1
+    assert meta["leak_items"] >= 1
+    assert meta["detector"] == "built-in memory-jump rule"
+    assert meta["model_used"] == "rules_only"
+
+    # The escalate filter must not drop metric items: they are a separate list.
+    q = client.get("/queue", params={"job_id": res.json()["job_id"], "action": "escalate"}).json()
+    kinds = {j["kind"] for j in q["jumps"]}
+    assert {"jump", "gap", "leak"} <= kinds
+    assert q["items"] and all(i["action"] == "escalate" for i in q["items"])
+    jump = next(j for j in q["jumps"] if j["kind"] == "jump")
+    assert jump["alerts_inside"] >= 1
+    assert jump["shown"] == 1
+
+    page = client.get("/")
+    assert page.status_code == 200
+    for label in ("Memory jump", "Monitoring gap", "Slow leak", "metric-kind"):
+        assert label in page.text
+
+
+def test_sample_job_skips_leaks_when_the_rule_is_off(client, monkeypatch):
+    monkeypatch.setenv("LEAK_WINDOW_MINUTES", "0")
+    res = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20})
+    assert res.status_code == 200, res.text
+    meta = res.json()["meta"]
+    assert meta["has_metrics"] is True
+    assert meta["jumps_shown"] >= 1
+    assert meta["gap_items"] >= 1
+    assert meta["leak_items"] == 0
 
 
 def test_alertmanager_webhook_is_buffered(client):

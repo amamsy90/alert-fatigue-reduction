@@ -78,6 +78,9 @@
     .badge.escalate { background: var(--esc); }
     .badge.review { background: var(--ask); }
     .badge.suppress { background: var(--hide); }
+    .badge.jump { background: var(--navy); }
+    .badge.gap { background: var(--esc); }
+    .badge.leak { background: var(--ask); }
     .shadow {
       border: 1px solid var(--gold);
       color: var(--navy);
@@ -130,6 +133,15 @@
     }
     .card h3 { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--navy); }
     .card p { margin: 0.2rem 0; font-size: 0.85rem; color: var(--muted); }
+    button.card {
+      text-align: left;
+      color: var(--ink);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      cursor: pointer;
+    }
+    button.card.on { border-color: var(--navy); box-shadow: 0 0 0 2px var(--navy); }
+    .card .count { font-size: 1.45rem; font-weight: 700; color: var(--navy); margin: 0.15rem 0; }
     .dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.35rem; }
     .dot.on { background: #2d6a4f; }
     .dot.off { background: #adb5bd; }
@@ -219,11 +231,46 @@
     <div id="err" class="err" hidden></div>
     <div id="meta" class="meta"></div>
     <section id="jumps-box" hidden>
-      <h2 class="section">Metric jumps and gaps</h2>
+      <h2 class="section">Metric items</h2>
+      <p class="sub">Jumps, monitoring gaps and slow leaks sit here, above the log list. The action filter below does not hide them.</p>
+      <div class="cards" id="metric-cards">
+        <button type="button" class="card metric" data-kind-filter="all">
+          <h3>All metric items</h3>
+          <p class="count" id="count-all">0</p>
+          <p>Shown in confirmation order</p>
+        </button>
+        <button type="button" class="card metric" data-kind-filter="jump">
+          <h3>Memory jump</h3>
+          <p class="count" id="count-jump">0</p>
+          <p>Sudden rise over the last 15 minutes</p>
+        </button>
+        <button type="button" class="card metric" data-kind-filter="gap">
+          <h3>Monitoring gap</h3>
+          <p class="count" id="count-gap">0</p>
+          <p>Metrics stopped arriving</p>
+        </button>
+        <button type="button" class="card metric" data-kind-filter="leak">
+          <h3>Slow leak</h3>
+          <p class="count" id="count-leak">0</p>
+          <p>Climbing over hours, not a 15-minute jump</p>
+        </button>
+      </div>
+      <div class="controls" style="margin-bottom:0.6rem">
+        <div>
+          <label for="metric-kind">Metric filter</label><br />
+          <select id="metric-kind">
+            <option value="all">all metric items</option>
+            <option value="jump">jumps only</option>
+            <option value="gap">gaps only</option>
+            <option value="leak">slow leaks only</option>
+          </select>
+        </div>
+      </div>
       <div id="jumps-note" class="meta"></div>
       <table>
         <thead>
           <tr>
+            <th>Kind</th>
             <th>Service</th>
             <th>Shown at</th>
             <th>Minutes</th>
@@ -235,7 +282,8 @@
         </thead>
         <tbody id="jump-rows"></tbody>
       </table>
-      <h2 class="section">Alerts</h2>
+      <h2 class="section">Log alerts</h2>
+      <p class="sub">These are the log lines. Metric jumps, gaps and leaks stay in the cards above when you filter escalate / ask / hide.</p>
     </section>
     <table>
       <thead>
@@ -255,6 +303,11 @@
   </main>
   <script>
     let currentJob = null;
+    let lastJumps = [];
+    let lastJumpTotal = 0;
+    let lastBudget = 20;
+    let lastUnit = "GB";
+    let scrollToMetrics = false;
 
     function showErr(msg) {
       const el = document.getElementById("err");
@@ -281,6 +334,7 @@
         if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
         currentJob = data.job_id;
         fillDays(data.days || []);
+        scrollToMetrics = true;
         await loadQueue();
         await loadConnectors();
       } catch (e) {
@@ -368,11 +422,14 @@
         `escalate ${m.escalate ?? "—"}`,
         `ask ${m.review ?? "—"}`,
         `hide ${m.suppress ?? "—"}`,
+        m.has_metrics
+          ? `jumps ${m.jumps_shown ?? 0} · gaps ${m.gap_items ?? 0} · leaks ${m.leak_items ?? 0}`
+          : "no metrics on this job",
         `labels ${m.label_source ?? "—"}`,
         `<span id="fb-count">${feedbackText(data.feedback)}</span>`,
         `showing ${data.count}`,
       ].join(" · ");
-      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k, (data.job.meta || {}).rise_unit);
+      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k, (data.job.meta || {}).rise_unit, data.job.meta || {});
       renderLearning(data.feedback || {}, data.model || {}, m);
       renderTraining(m.training);
       const tbody = document.getElementById("rows");
@@ -490,29 +547,82 @@
       );
     }
 
-    function renderJumps(jumps, total, k, unit) {
+    const KIND_LABEL = { jump: "Jump", gap: "Gap", leak: "Slow leak" };
+
+    let lastMeta = {};
+
+    function learnedLevelsText(meta, unit) {
+      const map = (meta && meta.confirm_by_series) || {};
+      const keys = Object.keys(map);
+      if (!keys.length) return "";
+      const fmt = (v) => {
+        const n = Number(v);
+        if (unit === "GB" && Math.abs(n) >= 1e8) return (n / 1e9).toFixed(2) + " GB";
+        return n.toPrecision(4);
+      };
+      return " Learned jump level per series, frozen from the training window: " +
+        keys.map(k => `${k} ${fmt(map[k])}`).join(", ") +
+        ". Other series use the global level. Log alerts are a separate classifier.";
+    }
+
+    function setMetricFilter(kind) {
+      const sel = document.getElementById("metric-kind");
+      if (sel) sel.value = kind;
+      document.querySelectorAll("[data-kind-filter]").forEach(card => {
+        card.classList.toggle("on", card.dataset.kindFilter === kind);
+      });
+      renderJumps(lastJumps, lastJumpTotal, lastBudget, lastUnit, lastMeta);
+    }
+
+    function renderJumps(jumps, total, k, unit, meta) {
       unit = unit === undefined ? "GB" : unit;
-      document.getElementById("jumps-box").hidden = total === 0;
+      lastJumps = jumps;
+      lastJumpTotal = total;
+      lastBudget = k;
+      lastUnit = unit;
+      if (meta) lastMeta = meta;
+      const box = document.getElementById("jumps-box");
+      box.hidden = total === 0;
+      const counts = { jump: 0, gap: 0, leak: 0 };
+      jumps.forEach(j => { if (counts[j.kind] !== undefined) counts[j.kind] += 1; });
+      document.getElementById("count-all").textContent = String(jumps.length);
+      document.getElementById("count-jump").textContent = String(counts.jump);
+      document.getElementById("count-gap").textContent = String(counts.gap);
+      document.getElementById("count-leak").textContent = String(counts.leak);
+      const filter = document.getElementById("metric-kind").value || "all";
+      document.querySelectorAll("[data-kind-filter]").forEach(card => {
+        card.classList.toggle("on", card.dataset.kindFilter === filter);
+      });
+      const visible = filter === "all" ? jumps : jumps.filter(j => j.kind === filter);
+      const learned = learnedLevelsText(lastMeta, unit);
       document.getElementById("jumps-note").textContent =
-        `${jumps.length} of ${total} metric items shown, in the order they were confirmed (at most K=${k} items a day). ` +
+        `${visible.length} shown in this view (${jumps.length} of ${total} metric items the queue kept, ` +
+        `at most K=${k} a day, first confirmed first). ` +
         "Log alerts may use a quarter of the slots; an alert inside a shown jump rides on it. " +
-        "A jump with no alerts inside may be a fault the logs missed. \"slow\" is a leak over hours; a gap means the metrics stopped.";
+        "A jump with no alerts inside may be a fault the logs missed." +
+        learned;
       const tbody = document.getElementById("jump-rows");
       tbody.innerHTML = "";
-      jumps.forEach(j => {
+      visible.forEach(j => {
         const minutes = Math.max(1, Math.round((new Date(j.end) - new Date(j.start)) / 60000));
         const tr = document.createElement("tr");
         const isGap = j.kind === "gap";
+        const kind = j.kind || "jump";
         tr.innerHTML = `
+          <td><span class="badge ${escapeHtml(kind)}">${KIND_LABEL[kind] || escapeHtml(kind)}</span></td>
           <td>${escapeHtml(j.service)}</td>
           <td>${escapeHtml((j.confirm || j.start).replace("T", " ").slice(0, 16))} UTC</td>
           <td>${minutes}</td>
-          <td class="spike">${isGap ? "no data" : (j.kind === "leak" ? "slow +" : (unit === "GB" ? "+" : "")) + Number(j.rise_gb).toFixed(2) + (unit ? " " + escapeHtml(unit) : "")}</td>
+          <td class="spike">${isGap ? "no data" : (kind === "leak" ? "slow +" : (unit === "GB" ? "+" : "")) + Number(j.rise_gb).toFixed(2) + (unit ? " " + escapeHtml(unit) : "")}</td>
           <td class="${j.alerts_inside ? "" : "silent"}">${j.alerts_inside || "none"}</td>
           <td>${j.escalated_inside}</td>
           <td class="verdict">${verdictButtons("jump", j.id, j.verdict)}</td>`;
         tbody.appendChild(tr);
       });
+      if (scrollToMetrics && total > 0) {
+        scrollToMetrics = false;
+        box.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
 
     function escapeHtml(s) {
@@ -530,6 +640,10 @@
       loadConnectors().catch(() => {});
     };
     document.getElementById("btn-ingest").onclick = () => runJob("ingest");
+    document.getElementById("metric-kind").onchange = () => setMetricFilter(document.getElementById("metric-kind").value);
+    document.querySelectorAll("[data-kind-filter]").forEach(card => {
+      card.onclick = () => setMetricFilter(card.dataset.kindFilter);
+    });
     document.getElementById("action").onchange = () => loadQueue().catch(e => showErr(e.message));
     document.getElementById("day").onchange = () => loadQueue().catch(e => showErr(e.message));
     document.getElementById("k").onchange = () => {
@@ -554,6 +668,7 @@
         if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
         currentJob = data.job_id;
         fillDays(data.days || []);
+        scrollToMetrics = true;
         await loadQueue();
       } catch (e) {
         showErr(e.message || String(e));

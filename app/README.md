@@ -53,7 +53,7 @@ python ../tools/fetch_nab.py                                                    
 uvicorn product.app:app --port 8080
 ```
 
-Open http://127.0.0.1:8080 → **Run sample**, or upload your CSVs. Mark items **Real / Noise**; the next run trains on the marks. **Download confirmed faults** exports them as `faults.csv`.
+Open http://127.0.0.1:8080 → **Run sample**, or upload your CSVs. **Run sample** builds one synthetic day (a memory jump, a monitoring gap, a slow leak, and a few log lines) and scores it with the built-in rules, so the queue is not alerts-only. Mark items **Real / Noise**; the next run that has enough labels trains on the marks. **Download confirmed faults** exports them as `faults.csv`. A short script for an instructor demo is [../VIVA_ANSWERS.md](../VIVA_ANSWERS.md).
 
 Docker (bound to localhost; set `APP_PASSWORD` before sharing):
 
@@ -140,4 +140,4 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 82 tests (`python -m pytest -q`) |
+| `tests/` | 85 tests (`python -m pytest -q`) |

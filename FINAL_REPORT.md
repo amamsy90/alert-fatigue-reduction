@@ -48,7 +48,7 @@ Full design: `design_specification.md`.
 | `app/src/experiment.py` | One train/test window, every system, one scorer — used by every GAIA results script |
 | `app/src/generic.py` | The same evaluation for **any** data: column detection, per-series split, tuning, report |
 | `app/run_*.py` | One script per experiment; writes `app/results/` |
-| `app/tests/` | 82 automated tests |
+| `app/tests/` | 85 automated tests |
 | `app/product/` | Web app — queue, **Evaluate my data** page, shadow mode, Real/Noise marks, Alertmanager webhook, Prometheus, PagerDuty — and a CLI (`score`, `evaluate`, `tune`) |
 
 Log lines are China time and are converted to UTC so they line up with the metric files (`src/gaia_loader.py`).
@@ -249,10 +249,10 @@ Per service (test period):
 1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (Section 7) tests other sizes and shapes; Section 9 tests other domains (NAB, a shop), with small test sets and a chance line. CPU, disk or code faults inside microservices are still not measured.
 2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector; +1.3 for the full queue, not significant weekly). The larger gains are fewer false items, a real-time queue, leak and gap coverage, and carry-over.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
-4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. The tool ships without it; rules-only mode works without labels, and Real/Noise marks collect a team's own labels.
+4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels. When a batch has a training window and faults, the queue now also learns a **confirm level per series** on that window only (same cost: 10 × miss + false) and freezes it. Series with too little training signal keep the single global level. This is the metric-side learner. The sklearn classifier is still only for log alerts. The headline table above is the earlier **single** threshold (0.62 GB on week 1); it has not been re-measured with per-series gates.
 5. `run_m1`, `run_m2`, `run_m4`, `run_stretch` are alerts-only experiments. Do not quote them as the system result.
 
-**Future work.** Benchmarks with other fault types (for example RCAEval or TrainTicket-based sets); a per-service jump size learned from each team's own incidents.
+**Future work.** Benchmarks with other fault types (for example RCAEval or TrainTicket-based sets). A per-series confirm gate is in the product; a hot-point size below the global 0.5 GB rule, learned per series, is not — a 0.25 GB fault is still invisible.
 
 ---
 
