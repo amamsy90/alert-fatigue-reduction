@@ -45,10 +45,11 @@ Full design: `design_specification.md`.
 | Layer | What it is |
 |---|---|
 | `app/src/` | Library: GAIA loader, jump / leak / gap detectors, metric baselines, causal queue, jump ranker, alert classifier, policy, statistics |
-| `app/src/experiment.py` | One train/test window, every system, one scorer — used by every results script |
+| `app/src/experiment.py` | One train/test window, every system, one scorer — used by every GAIA results script |
+| `app/src/generic.py` | The same evaluation for **any** data: column detection, per-series split, tuning, report |
 | `app/run_*.py` | One script per experiment; writes `app/results/` |
-| `app/tests/` | 74 automated tests |
-| `app/product/` | Web app (shadow mode, Real/Noise marks, Alertmanager webhook, Prometheus, PagerDuty) and a CLI (`python -m product.cli score …`) |
+| `app/tests/` | 82 automated tests |
+| `app/product/` | Web app — queue, **Evaluate my data** page, shadow mode, Real/Noise marks, Alertmanager webhook, Prometheus, PagerDuty — and a CLI (`score`, `evaluate`, `tune`) |
 
 Log lines are China time and are converted to UTC so they line up with the metric files (`src/gaia_loader.py`).
 
@@ -172,13 +173,34 @@ What this shows:
 | Full queue (reference) | 70.2% | 17.6 | 72.5% | — |
 | **Learned jump ranker** instead of the rise threshold | 70.2% | 17.6 | 73.2% | No gain: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs |
 | **Group** metric items within 2 min on other services into one slot | 71.5% | 17.5 | 74.0% | Small gain; one item may then name two services |
-| **Carry over** up to 10 unused slots to the next day | **74.3%** | 18.6 | **76.8%** | Largest gain; the average stays under K. The same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%); the full queue still wins **7/7** non-tied weeks (p = 0.0078) |
+| **Carry over** up to 10 unused slots to the next day | **74.4%** | 18.6 | **76.9%** | Largest gain; the average stays under K. The same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%); the full queue still wins **8/8** weeks (p = 0.0039) |
 
 Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice.
 
 ---
 
-## 9. What "success" means on this data
+## 9. Beyond microservices: any metric, any team
+
+The engine is not tied to GAIA. `src/generic.py` takes any **metrics** table (time, value, optional series; long or wide; column names detected), optional **events** (alerts, tickets, notifications) and optional **past problems** (start, end, series). For each series it tunes on the first part and scores the rest once, and every system — static threshold, rate rule, a unit-free robust jump rule, the user's own alerts — is tuned with the same cost and scored through the same causal queue. The detector with the lowest training cost becomes the user's queue. A **chance line** (the same items at random times) is reported so wide labels cannot flatter the result.
+
+This runs from the web app (**Evaluate my data**: upload or pick a dataset → read the report → *Use these settings for my live queue* → *Show this data in the queue*) and from the CLI (`evaluate`, `tune`). The guide for end users is `USE_YOUR_DATA.md`.
+
+Results on data that is not microservices (tuned on the first half of each series, K = 2 items a day; `run_nab.py`, `results/nab_eval.csv`):
+
+| Dataset | Domain | Test problems | Queue caught | Chance | Items / day |
+|---|---|---|---|---|---|
+| Online shop (synthetic; K = 5, 30% tuning) | e-commerce orders + notifications | 11 | 91% | 1% | 1.3 |
+| NAB realAWSCloudwatch | cloud servers | 17 | 71% | 58% | 0.3 |
+| NAB realAdExchange | online advertising | 6 | 83% | 58% | 1.4 |
+| NAB realKnownCause | machine temperature, taxi demand, CPU | 13 | 38% (static rule 54%) | 15% | 0.04 |
+| NAB realTraffic | road traffic sensors | 11 | 45% | 13% | 0.4 |
+| NAB realTweets | Twitter mention volume | 11 | 36% | 36% | 1.7 |
+
+On the shop data the monitoring view catches 10 of 11 problems where the notification stream by severity catches 3. On NAB the queue is clearly above chance on traffic and machine data, modestly on cloud servers and ads (NAB's anomaly windows are wide, so chance is high), and **no better than chance on Twitter volume**. The test sets are small (6–17 problems), and on one dataset the detector chosen on the tuning part was not the best on the test part. These are exactly the facts a new user needs before relying on it, which is why the app shows them.
+
+---
+
+## 10. What "success" means on this data
 
 `run_stats.py` splits the 1,223 test faults by the signal they left:
 
@@ -222,9 +244,9 @@ Per service (test period):
 
 ---
 
-## 10. Limits (say these if asked)
+## 11. Limits (say these if asked)
 
-1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (Section 7) tests other sizes and shapes on real series, but they are still synthetic memory faults. CPU, disk or code faults are not measured.
+1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (Section 7) tests other sizes and shapes; Section 9 tests other domains (NAB, a shop), with small test sets and a chance line. CPU, disk or code faults inside microservices are still not measured.
 2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector; +1.3 for the full queue, not significant weekly). The larger gains are fewer false items, a real-time queue, leak and gap coverage, and carry-over.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
 4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. The tool ships without it; rules-only mode works without labels, and Real/Noise marks collect a team's own labels.
@@ -234,7 +256,7 @@ Per service (test period):
 
 ---
 
-## 11. How to reproduce
+## 12. How to reproduce
 
 ```powershell
 cd app
@@ -245,6 +267,8 @@ python run_queue_eval.py
 python run_walkforward.py
 python run_stats.py
 python run_robustness.py
+python ../tools/fetch_nab.py      # needs internet, ~15 MB
+python run_nab.py
 python make_figures.py
 python run_validate.py
 ```
@@ -253,7 +277,7 @@ Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` 
 
 ---
 
-## 12. Deliverables
+## 13. Deliverables
 
 | Item | Where |
 |---|---|
@@ -265,4 +289,5 @@ Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` 
 | Code + tests | `app/` |
 | Result tables | `app/results/` |
 | Figures | `figures/detection_vs_k.svg`, `figures/walkforward.svg` |
-| Tool | Web app `docker compose up` (http://127.0.0.1:8080/), CLI `python -m product.cli` |
+| Tool | Web app `docker compose up` (http://127.0.0.1:8080/, **/evaluate** for your own data), CLI `python -m product.cli` |
+| End-user guide | `USE_YOUR_DATA.md` |

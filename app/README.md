@@ -11,6 +11,8 @@ It runs in **shadow mode** by default: nothing is paged until you turn it on.
 
 On the public GAIA benchmark it catches **70–73%** of injected faults at 20 items a day (the best possible is 85%; 98% of the rest are metric outages or a full budget), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with fewer false items. On synthetic faults added to real series it catches 0.5–2 GB steps and spikes 98–100% of the time and slow leaks 73–99%. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
 
+**Not microservices?** It works on any number over time — orders, sign-ups, sensor readings, ad clicks, notification or ticket counts. Open **/evaluate** in the web app, upload your metrics (plus past problems and alerts if you have them), and the app tunes itself on the early part of your data and tells you — against a random-chance line — whether it would have caught your past problems. Step-by-step guide: [../USE_YOUR_DATA.md](../USE_YOUR_DATA.md).
+
 ---
 
 ## Try it in two minutes (no server, no labels)
@@ -32,6 +34,18 @@ On your own data:
 | faults csv (optional) | `fault_id, start, end, component` — past incidents; enables training and a score |
 
 Metric not memory in bytes? Add `--jump-mode relative --jump-ratio 0.3`.
+
+## Evaluate and tune on your data (no code)
+
+In the web app: **Evaluate my data** → upload or pick a ready-made dataset (online shop, NAB cloud / Twitter / ads / traffic / machines) → read the report → **Use these settings for my live queue** → **Show this data in the queue**.
+
+Same engine from the command line:
+
+```bash
+python -m product.cli evaluate --metrics orders.csv --incidents incidents.csv --events notifications.csv --budgets 5,10,20
+python -m product.cli tune     --metrics orders.csv --incidents incidents.csv   # also saves the settings for the app
+python ../tools/fetch_nab.py                                                     # optional: public NAB data (MIT)
+```
 
 ## Run the web app
 
@@ -76,6 +90,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `GROUP_MINUTES` | `0` | Metric items this close on other services share one slot |
 | `CARRY_OVER_MAX` | `0` | Unused slots carried to the next day (e.g. `10`) |
 | `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
+| `SETTINGS_PATH` | `product/data/settings.json` | Settings saved from **Evaluate my data** / `cli tune` (replace the built-in rule) |
 | `QUEUE_DB`, `MODEL_PATH` | `product/data/…` | Where state is kept (the model gets a `.sha256` file; a changed file is refused) |
 
 ## How it decides
@@ -99,6 +114,7 @@ python run_queue_eval.py      # headline table, K = 5/10/20/50
 python run_walkforward.py     # 8 later weeks, everything re-learned each week
 python run_stats.py           # intervals, sign tests, signals, chance overlap, confirm time
 python run_robustness.py      # synthetic 0.25-2 GB steps, spikes, ramps, leaks on the real series
+python ../tools/fetch_nab.py && python run_nab.py   # other domains (NAB)
 python make_figures.py        # redraw ../figures/*.svg from the csv files
 python run_validate.py        # fails if the docs and the csv files disagree
 ```
@@ -115,11 +131,13 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `src/jump_ranker.py` | Phase 3 learned jump ranker (evaluated; not used by default) |
 | `src/baselines_metric.py` | Static and rate (`delta`) rules — the fair baselines |
 | `src/queue.py` | Causal queue, scorer, oracle ceiling, confirm-threshold tuning |
-| `src/experiment.py` | One window, every system — used by all results scripts |
+| `src/experiment.py` | One window, every system — used by all GAIA results scripts |
+| `src/generic.py` | The same for any data: column detection, tuning, report (web app, CLI, `run_nab.py`) |
+| `product/datasets.py` | Ready-made datasets for the Evaluate page (shop example, NAB download) |
 | `src/classifier.py`, `src/policy.py`, `src/features.py` | Alert classifier and cost policy |
 | `src/eval_stats.py` | Bootstrap CI, sign test, signal counts, chance overlap |
 | `src/gaia_loader.py` | GAIA run tables → alerts + faults (UTC) |
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 74 tests (`python -m pytest -q`) |
+| `tests/` | 82 tests (`python -m pytest -q`) |

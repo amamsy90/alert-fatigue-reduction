@@ -237,8 +237,9 @@ class QueueStore:
     def list_days(self, job_id: str) -> list[str]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT day FROM decisions WHERE job_id = ? ORDER BY day",
-                (job_id,),
+                "SELECT day FROM decisions WHERE job_id = ? UNION "
+                "SELECT day FROM jumps WHERE job_id = ? AND shown = 1 ORDER BY day",
+                (job_id, job_id),
             ).fetchall()
         return [str(r["day"]) for r in rows]
 

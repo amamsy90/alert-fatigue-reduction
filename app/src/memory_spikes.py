@@ -140,6 +140,47 @@ def detect_spikes(
     return spikes
 
 
+def median_step(index: pd.DatetimeIndex) -> pd.Timedelta:
+    """Typical sampling interval of a series (30 s for GAIA, 5 min for NAB, ...)."""
+    if len(index) < 2:
+        return pd.Timedelta(minutes=1)
+    return pd.Series(index).diff().median()
+
+
+def jump_scores(series: pd.Series, config: Config) -> tuple[pd.Series, pd.Series]:
+    """(score, baseline) per point. A point is hot when score > 0.
+
+    absolute  score = rise - memory_jump_bytes            (rise in metric units)
+    relative  score = rise - memory_jump_ratio * |median|
+    robust    score = |rise| / scale - robust_z, scale = rolling IQR / 1.349
+              (unit-free: works for counts, temperatures, latency, money ...)
+
+    `rise` is the value minus the median of the previous window. With
+    `jump_direction` = "down" or "both", drops count too (robust mode only).
+    """
+    window = f"{config.memory_jump_window_minutes}min"
+    roll = series.rolling(window, closed="left")
+    baseline = roll.median()
+    rise = series - baseline
+    mode = config.memory_jump_mode
+    if mode == "absolute":
+        return rise - config.memory_jump_bytes, baseline
+    if mode == "relative":
+        return rise - config.memory_jump_ratio * baseline.abs(), baseline
+    if mode != "robust":
+        raise ValueError(f"memory_jump_mode must be absolute, relative or robust, not {mode!r}")
+    iqr = (roll.quantile(0.75) - roll.quantile(0.25)) / 1.349
+    floor = max(float(series.std(ddof=0)) * 0.05, 1e-9)
+    scale = iqr.clip(lower=floor).fillna(floor)
+    if config.jump_direction == "up":
+        signed = rise
+    elif config.jump_direction == "down":
+        signed = -rise
+    else:
+        signed = rise.abs()
+    return signed / scale - config.robust_z, baseline
+
+
 def detect_jumps(
     metrics: pd.DataFrame,
     config: Config | None = None,
@@ -147,35 +188,42 @@ def detect_jumps(
     detect_until: pd.Timestamp | None = None,
 ) -> list[Spike]:
     """A point is hot when it sits `memory_jump_bytes` above the median of the
-    previous `memory_jump_window_minutes` on the same series (absolute mode), or
-    `memory_jump_ratio` times that median above it (relative mode).
+    previous `memory_jump_window_minutes` on the same series (absolute mode),
+    `memory_jump_ratio` times that median above it (relative mode), or
+    `robust_z` robust standard deviations away from it (robust mode, any metric).
 
     Unlike mean + k * std this needs no training week, so a service whose normal
     level drifts (a restart, a slow leak) is not flagged for days.
     """
     config = config or Config()
-    window = f"{config.memory_jump_window_minutes}min"
     spikes: list[Spike] = []
     for series_id, part in metrics.groupby("series_id"):
         series = part.sort_values("timestamp").set_index("timestamp")["value"]
-        baseline = series.rolling(window, closed="left").median()
-        rise = series - baseline
-        if config.memory_jump_mode == "relative":
-            hot = rise[rise > config.memory_jump_ratio * baseline.abs()]
-        elif config.memory_jump_mode == "absolute":
-            hot = rise[rise > config.memory_jump_bytes]
+        score, baseline = jump_scores(series, config)
+        hot = score[score > 0]
+        if config.memory_jump_mode in ("absolute", "relative"):
+            heights = (series - baseline)[hot.index]  # rise in metric units, as before
         else:
-            raise ValueError(f"memory_jump_mode must be absolute or relative, not {config.memory_jump_mode!r}")
+            heights = hot + config.robust_z  # robust deviations
         if detect_from is not None:
-            hot = hot[hot.index >= detect_from]
+            heights = heights[heights.index >= detect_from]
         if detect_until is not None:
-            hot = hot[hot.index < detect_until]
+            heights = heights[heights.index < detect_until]
         service = str(part["service"].iloc[0])
-        for ep in _episodes(hot, str(series_id), service, config):
+        gap = _gap_for(series.index, config)
+        for ep in _episodes(heights, str(series_id), service, config, gap=gap):
             level = baseline.get(ep.confirm)
             ep.level_at_confirm = float(level) if level is not None and pd.notna(level) else 0.0
             spikes.append(ep)
     return spikes
+
+
+def _gap_for(index: pd.DatetimeIndex, config: Config) -> pd.Timedelta:
+    """Largest spacing between hot points of one episode: the configured minutes,
+    or 2.5 samples when `memory_gap_minutes` is 0 (auto, for any sampling rate)."""
+    if config.memory_gap_minutes and config.memory_gap_minutes > 0:
+        return pd.Timedelta(minutes=config.memory_gap_minutes)
+    return median_step(index) * 2.5
 
 
 def detect_leaks(
@@ -212,13 +260,17 @@ def detect_leaks(
 
 
 def _episodes(
-    heights: pd.Series, series_id: str, service: str, config: Config
+    heights: pd.Series,
+    series_id: str,
+    service: str,
+    config: Config,
+    gap: pd.Timedelta | None = None,
 ) -> list[Spike]:
     """Group hot points no more than the gap apart; keep runs of min_points or more.
 
     `heights` is indexed by timestamp; its values give each episode's rise.
     """
-    gap = pd.Timedelta(minutes=config.memory_gap_minutes)
+    gap = gap if gap is not None else pd.Timedelta(minutes=config.memory_gap_minutes)
     need = max(1, config.memory_min_points)
     episodes: list[Spike] = []
     run: list[tuple[pd.Timestamp, float]] = []

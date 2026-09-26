@@ -46,3 +46,52 @@ def config_from_env(budget_k: int = 20) -> Config:
         group_minutes=_float("GROUP_MINUTES", base.group_minutes),
         carry_over_max=int(_float("CARRY_OVER_MAX", base.carry_over_max)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Settings saved from the "Evaluate my data" page (or `cli tune`). They replace
+# the built-in memory-jump rule for the live queue until they are reset.
+
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parent / "data" / "settings.json"
+
+
+def settings_path() -> Path:
+    return Path(os.environ.get("SETTINGS_PATH") or DEFAULT_SETTINGS_PATH)
+
+
+def load_saved() -> dict | None:
+    path = settings_path()
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def save_saved(data: dict) -> dict:
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    tmp.replace(path)
+    return data
+
+
+def clear_saved() -> None:
+    path = settings_path()
+    if path.exists():
+        path.unlink()
+
+
+def live_detector():
+    """The saved detector (src.generic.DetectorSetting), or None for the built-in rule."""
+    saved = load_saved()
+    if not saved or "detector" not in saved:
+        return None
+    from src.generic import setting_from_dict
+
+    return setting_from_dict(saved)

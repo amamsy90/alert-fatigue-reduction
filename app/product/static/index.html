@@ -140,7 +140,7 @@
   <header>
     <div>
       <h1>On-call alert queue</h1>
-      <div class="sub">Cloud microservice operations — escalate / ask / hide under budget K · <a href="/dashboard">Connectors dashboard</a></div>
+      <div class="sub">Any metric, any event stream — escalate / ask / hide under budget K · <a href="/evaluate"><b>Evaluate my data</b></a> · <a href="/dashboard">Connectors dashboard</a></div>
     </div>
     <div class="controls">
       <div>
@@ -372,7 +372,7 @@
         `<span id="fb-count">${feedbackText(data.feedback)}</span>`,
         `showing ${data.count}`,
       ].join(" · ");
-      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k);
+      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k, (data.job.meta || {}).rise_unit);
       renderLearning(data.feedback || {}, data.model || {}, m);
       renderTraining(m.training);
       const tbody = document.getElementById("rows");
@@ -490,7 +490,8 @@
       );
     }
 
-    function renderJumps(jumps, total, k) {
+    function renderJumps(jumps, total, k, unit) {
+      unit = unit === undefined ? "GB" : unit;
       document.getElementById("jumps-box").hidden = total === 0;
       document.getElementById("jumps-note").textContent =
         `${jumps.length} of ${total} metric items shown, in the order they were confirmed (at most K=${k} items a day). ` +
@@ -506,7 +507,7 @@
           <td>${escapeHtml(j.service)}</td>
           <td>${escapeHtml((j.confirm || j.start).replace("T", " ").slice(0, 16))} UTC</td>
           <td>${minutes}</td>
-          <td class="spike">${isGap ? "no data" : (j.kind === "leak" ? "slow +" : "+") + Number(j.rise_gb).toFixed(2) + " GB"}</td>
+          <td class="spike">${isGap ? "no data" : (j.kind === "leak" ? "slow +" : (unit === "GB" ? "+" : "")) + Number(j.rise_gb).toFixed(2) + (unit ? " " + escapeHtml(unit) : "")}</td>
           <td class="${j.alerts_inside ? "" : "silent"}">${j.alerts_inside || "none"}</td>
           <td>${j.escalated_inside}</td>
           <td class="verdict">${verdictButtons("jump", j.id, j.verdict)}</td>`;

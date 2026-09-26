@@ -137,3 +137,6 @@ Core build (M1–M4, walk-forward, local app) is done. One month remains to make
 ## 10. Expected outcome
 
 A working, evaluated prototype that, at a fixed daily budget, catches more injected memory faults than severity + exact-duplicate grouping, with a walk-forward interval and a stated ceiling (faults that never move memory and never write a log). Alongside it, a local on-call web app that runs the same queue in shadow mode, so a platform team can collect its own labels before trusting it.
+
+
+**Beyond microservices.** The same queue can be evaluated and tuned on any timestamped metric — orders, sensors, ad clicks, notification volume — from an **Evaluate my data** page, with no code. It is tested on a synthetic online shop and on five domains of the public NAB benchmark, and always reported against a random-chance line.

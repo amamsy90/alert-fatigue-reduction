@@ -125,6 +125,7 @@ At K = 20 on the test period: full queue **70.2%**, jumps with learned threshold
 
 - FastAPI + SQLite + browser UI (local port, currently 8083). Shadow mode on by default.
 - Modes: sample, GAIA, CSV upload, webhook ingest, and a CLI (`python -m product.cli score`). Optional Prometheus metrics (`PROM_URL`). Every alert of a batch is queued.
+- **Evaluate my data** (`/evaluate`, `cli evaluate` / `tune`, `src/generic.py`): any metric table (column names detected, long or wide), optional events and past problems; per-series split; static, rate and robust jump rules tuned on the early part with the same cost; report with a chance line and miss causes; the best detector can be saved as the live setting.
 - **Rules-only mode** when there are no labels: jumps + gaps + severity for alerts. A model is trained once labels or Real/Noise marks exist.
 - PagerDuty (shadow mode off) receives escalated alerts **and** shown jumps and gaps, with stable dedup keys. `INGEST_TOKEN` protects the webhook.
 - Causal queue: metric jumps and gaps table + alerts. Real / Noise buttons. Marks label later runs automatically (Real window = jump span, or ±5 minutes around a Real alert; Noise overrides). Model saved to `product/data/model.pkl`; small batches use it. Retrain reminder after 7 days or new Real marks. Optional login (`APP_PASSWORD`).
@@ -198,11 +199,11 @@ At K = 20 on the test period: full queue **70.2%**, jumps with learned threshold
 | Rate rule `delta(mem[5m]) > 0.5 GB` | 68.9%; 2.1 false/day |
 | Jumps + learned threshold | **72.6%**; 1.0 false/day |
 | Full queue (jumps + leaks + gaps + alerts) | **70.2%**; 1.6 false/day; precision 91% |
-| Carry-over ≤ 10 slots (Phase 3) | 74.3% (rate rule with the same: 72.5%) |
+| Carry-over ≤ 10 slots (Phase 3) | 74.4% (rate rule with the same: 72.5%) |
 | Best possible (oracle) | 84.9% |
 | Full queue at K=5 / 10 / 50 | 19.5% / 38.6% / 85.8% |
 | Misses at K=20 | 166 no data, 191 budget full, 7 detector |
-| Walk-forward mean (8 weeks) | full queue 72.5% (CI 65.7–78.3%); jumps + threshold 74.8% (8/8 wins vs rate rule); rate rule 70.7%; carry-over 76.8% |
+| Walk-forward mean (8 weeks) | full queue 72.5% (CI 65.7–78.3%); jumps + threshold 74.8% (8/8 wins vs rate rule); rate rule 70.7%; carry-over 76.9% |
 | Jump overlap where metric data exists | 99.6% |
 | Test faults with no log and no metric data | 10.8% |
 | Fault start → jump confirmed | median 0.72 min |

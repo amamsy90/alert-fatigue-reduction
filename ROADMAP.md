@@ -40,8 +40,19 @@ Why this reframe: on GAIA, log triage alone misses about 82% of faults, and a me
 | 3.2 | **Slow-leak rule** (3-hour median), on by default for byte metrics | Ramps 99%, 3-h leaks 73%; 0.3 extra items a day on real data |
 | 3.3 | **Learned jump ranker** (`src/jump_ranker.py`) | No gain (70.2%): the rise threshold already gives 94% precision. Kept as an experiment |
 | 3.4 | **Cross-service grouping** (`GROUP_MINUTES`) | +1.3 points (71.5%) |
-| 3.5 | **Carry-over budget** (`CARRY_OVER_MAX`) — the adaptive-K idea done causally | +4.1 points (74.3%); rate rule with the same carry-over 72.5%; 7/7 weeks |
+| 3.5 | **Carry-over budget** (`CARRY_OVER_MAX`) — the adaptive-K idea done causally | +4.2 points (74.4%); rate rule with the same carry-over 72.5%; 8/8 weeks |
 | 3.6 | **Miss analysis** (`results/miss_causes_gaia.csv`) | 46% of misses are metric outages, 52% a full budget, 2% the detector |
+
+## Phase 4 — Any data, no code (done on this branch)
+
+| # | Change | Where |
+|---|---|---|
+| 4.1 | Generic engine: column detection (long/wide, any names), per-series split, every system tuned with the same cost, chance line, miss causes | `src/generic.py` |
+| 4.2 | Unit-free robust jump rule (drops and rises), sampling-aware episode gaps | `src/memory_spikes.py` |
+| 4.3 | **Evaluate my data** page: upload or pick a dataset → report → use the settings → score in the queue | `product/static/evaluate.html`, `product/app.py` |
+| 4.4 | Ready-made datasets: online shop (synthetic, with notifications) and NAB (5 real domains) | `product/datasets.py`, `examples/` |
+| 4.5 | CLI `evaluate` and `tune`; saved settings used by the live queue, webhook and `score` | `product/cli.py`, `product/settings.py` |
+| 4.6 | End-user guide | `USE_YOUR_DATA.md` |
 
 ## Still possible after submission
 

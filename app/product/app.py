@@ -14,7 +14,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import json
+import shutil
+import uuid
+
+from product import datasets as example_data
 from product.alertmanager import looks_like_alertmanager, normalize_ingest
+from product.settings import clear_saved, load_saved, save_saved
 from product.model_store import load_model
 from product.pipeline import run_job
 from product.prometheus_adapter import probe_prometheus
@@ -294,7 +300,7 @@ async def _save_upload(upload: UploadFile | None, path: Path) -> Path | None:
 
 @app.post("/jobs/upload")
 async def jobs_upload(
-    alerts_file: UploadFile = File(...),
+    alerts_file: UploadFile | None = File(None),
     metrics_file: UploadFile | None = File(None),
     faults_file: UploadFile | None = File(None),
     budget_k: int = Form(20),
@@ -364,6 +370,144 @@ async def ingest_alerts(request: Request):
 def index():
     html_path = static_dir / "index.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# Evaluate my data: upload -> tune + evaluate -> use the settings -> score
+
+EVAL_DIR = APP_DIR / "data" / "evals"
+
+
+def _eval_folder(eval_id: str) -> Path:
+    if not eval_id.isalnum():
+        raise HTTPException(400, "Bad evaluation id")
+    folder = EVAL_DIR / eval_id
+    if not folder.exists():
+        raise HTTPException(404, f"Unknown evaluation {eval_id}")
+    return folder
+
+
+@app.get("/evaluate", response_class=HTMLResponse)
+def evaluate_page():
+    return HTMLResponse((static_dir / "evaluate.html").read_text(encoding="utf-8"))
+
+
+@app.get("/datasets")
+def list_example_datasets():
+    return {"datasets": example_data.list_datasets()}
+
+
+@app.post("/datasets/fetch")
+def fetch_example_datasets(body: dict | None = None):
+    """Download NAB categories (needs internet)."""
+    wanted = (body or {}).get("categories") or None
+    try:
+        return {"downloaded": example_data.fetch_nab(wanted), "datasets": example_data.list_datasets()}
+    except KeyError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — offline, proxy, ...
+        raise HTTPException(502, f"Could not download NAB: {type(exc).__name__}: {exc}") from exc
+
+
+@app.post("/evaluate")
+async def evaluate_data(
+    metrics_file: UploadFile | None = File(None),
+    incidents_file: UploadFile | None = File(None),
+    events_file: UploadFile | None = File(None),
+    dataset: str | None = Form(None),
+    budgets: str = Form("5,10,20"),
+    train_fraction: float = Form(0.3),
+    incident_minutes: float = Form(10.0),
+    day_offset_hours: float = Form(0.0),
+):
+    """Tune on the first `train_fraction` of each series and score the rest.
+
+    Upload your own files, or pick a ready-made `dataset` (see GET /datasets).
+    """
+    from src.generic import evaluate, live_setting
+
+    eval_id = uuid.uuid4().hex[:12]
+    folder = EVAL_DIR / eval_id
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        if dataset:
+            try:
+                files = example_data.dataset_files(dataset)
+            except KeyError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            for role, src in files.items():
+                shutil.copyfile(src, folder / f"{role}.csv")
+        else:
+            if metrics_file is None or not metrics_file.filename:
+                raise HTTPException(400, "Upload a metrics file (or choose an example dataset)")
+            for role, upload in (("metrics", metrics_file), ("incidents", incidents_file), ("events", events_file)):
+                await _save_upload(upload, folder / f"{role}.csv")
+        paths = {role: folder / f"{role}.csv" for role in ("metrics", "incidents", "events")}
+        paths = {role: p if p.exists() else None for role, p in paths.items()}
+        try:
+            k_list = tuple(int(x) for x in budgets.replace(" ", "").split(",") if x)
+            report = evaluate(paths["metrics"], paths["incidents"], paths["events"], budgets=k_list or (5, 10, 20),
+                              train_fraction=min(max(train_fraction, 0.05), 0.9),
+                              default_incident_minutes=incident_minutes, day_offset_hours=day_offset_hours)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        data = report.to_dict()
+        suggested = live_setting(paths["metrics"], report)
+        (folder / "report.json").write_text(json.dumps({"report": data, "suggested": suggested,
+                                                        "dataset": dataset}, default=str), encoding="utf-8")
+        return {"eval_id": eval_id, "dataset": dataset, "report": data, "suggested": suggested}
+    except HTTPException:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+
+
+@app.get("/settings")
+def get_settings():
+    saved = load_saved()
+    if not saved:
+        return {"saved": False, "live": "built-in memory-jump rule (JUMP_* environment variables)"}
+    return {"saved": True, **saved}
+
+
+@app.post("/settings")
+def apply_settings(body: dict):
+    """Use the settings an evaluation suggested for the live queue."""
+    eval_id = str(body.get("eval_id") or "")
+    stored = json.loads((_eval_folder(eval_id) / "report.json").read_text(encoding="utf-8"))
+    saved = save_saved({**stored["suggested"], "eval_id": eval_id, "applied_at": pd_now()})
+    return {"saved": True, **saved}
+
+
+@app.delete("/settings")
+def reset_settings():
+    clear_saved()
+    return {"saved": False, "live": "built-in memory-jump rule"}
+
+
+@app.post("/evaluate/{eval_id}/score")
+def score_evaluated(eval_id: str, body: dict | None = None):
+    """Run the live queue on the evaluated files (every day, all items), for the Queue page."""
+    folder = _eval_folder(eval_id)
+    budget_k = int((body or {}).get("budget_k") or 20)
+    events = folder / "events.csv"
+    incidents = folder / "incidents.csv"
+    try:
+        return run_job(
+            STORE,
+            mode="upload",
+            budget_k=budget_k,
+            alerts_csv=events if events.exists() else None,
+            metrics_path=folder / "metrics.csv",
+            faults_path=incidents if incidents.exists() else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+def pd_now() -> str:
+    import pandas as pd
+
+    return pd.Timestamp.now("UTC").isoformat()
 
 
 @app.get("/dashboard", response_class=HTMLResponse)

@@ -326,8 +326,8 @@ def build():
     items = (
         ("Honest evaluation", "Every system through one real-time queue; walk-forward; run_validate.py fails if docs and numbers disagree."),
         ("Detectors", "Memory jumps (99.6% of faults with data), slow leaks, monitoring gaps. Robustness replay."),
-        ("Queue policy", "Budget K, alerts ≤ 25%, alerts ride on jumps. Carry-over option: 74.3% at K=20."),
-        ("A tool others can use", "CLI for any export; web app in shadow mode; Alertmanager, Prometheus, PagerDuty; no labels needed."),
+        ("Queue policy", "Budget K, alerts ≤ 25%, alerts ride on jumps. Carry-over option: 74.4% at K=20."),
+        ("A tool anyone can use", "Evaluate-my-data page: any metric, tunes itself, shows result vs chance. Shop, cloud, ads, traffic, Twitter."),
     )
     for i, (title, body) in enumerate(items):
         x = Inches(0.5 + (i % 2) * 6.4)
