@@ -56,9 +56,13 @@ Why this reframe: on GAIA, log triage alone misses about 82% of faults, and a me
 
 ## Still possible after submission
 
-- A per-service jump size learned from a team's own Real marks (the 0.25 GB result shows one size does not fit all).
+- A hot-point size below the global 0.5 GB rule, learned per series (the confirm gate above is per series now; a 0.25 GB fault is still invisible until the hot-point rule itself is lowered).
 - Other fault types (CPU, disk, code) on another benchmark (RCAEval, TrainTicket-based sets).
 - Slack / Opsgenie paging.
+
+## Per-series confirm gate (done)
+
+On the training window only — week 1 in `run_window`, `train_fraction` in Evaluate my data, the early split in the product queue — each series with enough of its own faults gets a confirm rise (`tune_confirm_thresholds` in `src/queue.py`, same cost as the single threshold: 10 × miss + false). It is frozen before the test window. Other series keep the global level. The causal queue is unchanged: first come, no ranking by a later peak. The log classifier is still only for alerts. The published GAIA table in `FINAL_REPORT.md` is the earlier single-threshold run; do not replace those percentages without re-running the GAIA scripts.
 
 ## Demo notes
 

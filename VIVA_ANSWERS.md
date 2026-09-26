@@ -30,13 +30,17 @@ The old `generate()` function still writes two weeks of alerts with no metrics. 
 
 There isn't one.
 
-Detection is rules on the metric stream:
+Detection starts as rules on the metric stream:
 
 - a **jump** when a point is more than 0.5 GB above the median of the previous 15 minutes on the same series (two hot points confirm it);
 - a **slow leak** when the same idea is run on a 3-hour median (on for byte metrics, off if `LEAK_WINDOW_MINUTES` is 0);
 - a **monitoring gap** when a series has no point for 10 minutes.
 
-Log alerts are separate. With no labels they are ranked by severity. If there are Real/Noise marks, or a faults file, an optional **scikit-learn logistic regression** can take the alert share of the budget. It is trained only on the early window, with a miss costing 10 times a false alarm. It is not a language model. Run sample does not train it: that day has fewer than 10 alerts, on purpose, so the demo stays on the rules.
+The machine learning on the **metrics** is not a neural net. When the batch has a training window and past faults, each series with enough of its own training jumps gets a **confirm level** (how big the rise must be before the queue shows it). That level is chosen on the early window only, with the same cost as the old single threshold: a miss weighs 10 times a false item. It is then frozen. A series with too little training signal keeps the global level. The queue is still first-come. Nothing is re-fit on the test window, and a later point cannot move the number. Evaluate my data shows the map as "learned jump level per series". Run sample does not learn one: that day has no later window, on purpose.
+
+The published GAIA table is still the **single** threshold for every service (0.62 GB on week 1 in the saved results). Do not say those percentages were re-measured with a per-series gate.
+
+Log alerts are separate. With no labels they are ranked by severity. If there are Real/Noise marks, or a faults file, an optional **scikit-learn logistic regression** can take the alert share of the budget. It is trained only on the early window, with a miss costing 10 times a false alarm. It is not a language model, and it does not decide the metric jumps. Run sample does not train it: that day has fewer than 10 alerts.
 
 A model may have helped write this code offline. Nothing in the running app calls one. No prompt, no API key, no chat completion. The queue does not ask a model what to page.
 

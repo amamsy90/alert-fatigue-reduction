@@ -29,7 +29,7 @@ from .queue import (
     oracle_ceiling,
     score_queue,
     spike_items,
-    tune_confirm_threshold,
+    tune_confirm_thresholds,
 )
 
 # Order is the order of rows in the result tables.
@@ -78,6 +78,9 @@ class WindowRun:
     alert_threshold: float
     test_jumps: list[Spike]
     test_gaps: list[Spike]
+    # Per-series confirm gates learned on the training window. Empty means every
+    # series used the single global threshold (the published GAIA tables).
+    confirm_by_series: dict | None = None
 
 
 def _between(items, start, end, attr):
@@ -101,8 +104,10 @@ def run_window(
     test_gaps = detect_gaps(data.metrics, config, detect_from=train_end, detect_until=test_end)
     train_leaks = detect_leaks(data.metrics, config, detect_until=train_end)
     test_leaks = detect_leaks(data.metrics, config, detect_from=train_end, detect_until=test_end)
-    thr = tune_confirm_threshold(train_jumps, train_faults, config)
-    tuned = replace(config, confirm_min_rise=thr)
+    # Week-1 only. Series with enough of their own faults get a frozen gate;
+    # the rest keep the single global threshold. Score time does not refit.
+    thr, by_series = tune_confirm_thresholds(train_jumps, train_faults, config, train_until=train_end)
+    tuned = replace(config, confirm_min_rise=thr, confirm_min_rise_by_series=by_series)
 
     model = AlertClassifier(config).fit(train_alerts, train_jumps)
     alert_thr = tune_threshold(train_alerts, model.predict_proba(train_alerts, train_jumps), config)
@@ -148,6 +153,7 @@ def run_window(
         alert_threshold=alert_thr,
         test_jumps=test_jumps,
         test_gaps=test_gaps,
+        confirm_by_series=by_series,
     )
 
 
@@ -205,7 +211,8 @@ def miss_causes(run: WindowRun, data: GaiaData, config: Config, name: str = "pro
         elif item.kind != "gap":
             caught |= {f.fault_id for f in spike_hits(item.payload, by_service)}
     with_data = faults_with_metric_data(run.test_faults, data.metrics)
-    thr = run.confirm_threshold if name in ("proposed", "jumps_tuned") else None
+    use_gate = name in ("proposed", "jumps_tuned")
+    table = run.confirm_by_series or {}
     overlap: dict[str, list[Spike]] = {}
     for jump in run.test_jumps:
         for fault in spike_hits(jump, by_service):
@@ -219,7 +226,11 @@ def miss_causes(run: WindowRun, data: GaiaData, config: Config, name: str = "pro
             counts["no_metric_data"] += 1
         elif not jumps:
             counts["no_jump"] += 1
-        elif thr is not None and all(j.rise_at_confirm < thr for j in jumps):
+        elif use_gate and jumps and all(
+            (gate := table.get(j.service, table.get(j.series_id, run.confirm_threshold))) is not None
+            and j.rise_at_confirm < gate
+            for j in jumps
+        ):
             counts["below_threshold"] += 1
         else:
             counts["budget_full"] += 1

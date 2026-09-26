@@ -37,6 +37,7 @@ from .queue import (
     score_queue,
     spike_hits,
     spike_items,
+    tune_confirm_thresholds,
 )
 
 TIME_NAMES = ("timestamp", "time", "datetime", "date", "ts", "@timestamp", "event_time", "created_at", "start_time",
@@ -252,8 +253,10 @@ class DetectorSetting:
     z: float = 5.0            # jump / delta: robust units; static: quantile
     min_points: int = 2
     direction: str = "both"
-    # static only: per-series (low, high) levels learned on the training part, so a
-    # saved setting can score new data without re-reading the training data.
+    # Per series, learned on the training part only:
+    #   static: (low, high) quantile levels
+    #   delta:  (0, scale)
+    #   jump:   (confirm rise,) — episodes below it are not shown; missing series use `z`
     levels: dict | None = None
 
     def label(self) -> str:
@@ -371,7 +374,17 @@ def tune(metrics: pd.DataFrame, train_faults: list[Fault], cuts: dict, kind: str
 
 def detect(metrics: pd.DataFrame, setting: DetectorSetting, cuts: dict) -> list[Spike]:
     threshold = 0.0 if setting.kind == "static" else setting.z
-    return _episodes_from(_scores(metrics, setting, cuts), threshold, setting.min_points, setting.kind)
+    spikes = _episodes_from(_scores(metrics, setting, cuts), threshold, setting.min_points, setting.kind)
+    # Jump only: `levels` holds a confirm rise learned on the training window
+    # (one number per series). Static and delta use `levels` as a scale, not a gate.
+    if setting.kind == "jump" and setting.levels:
+        kept = []
+        for spike in spikes:
+            gate = setting.levels.get(str(spike.series_id))
+            if gate is None or spike.rise_at_confirm >= float(gate[0]):
+                kept.append(spike)
+        return kept
+    return spikes
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +450,18 @@ def evaluate(
     settings, fits = {}, {}
     for kind in ("jump", "delta", "static"):
         settings[kind], fits[kind] = tune(frame, train_faults, cuts, kind, config)
+    # Per-series confirm gate for the jump rule, fit on training spikes only, then frozen.
+    if fits["jump"].get("tuned"):
+        train_jumps = _spikes_part(detect(frame, settings["jump"], cuts), cuts, "train")
+        global_thr, by_series = tune_confirm_thresholds(train_jumps, train_faults, config)
+        if by_series:
+            settings["jump"].levels = {sid: (float(thr),) for sid, thr in by_series.items()}
+            fits["jump"]["confirm_by_series"] = {sid: float(thr) for sid, thr in by_series.items()}
+            fits["jump"]["confirm_global"] = None if global_thr is None else float(global_thr)
+            notes.append(
+                f"Jump confirm level learned per series on the training part for {len(by_series)} "
+                "series; the others keep the global jump threshold. The log classifier is separate."
+            )
     detected = {kind: _spikes_part(detect(frame, s, cuts), cuts, "test") for kind, s in settings.items()}
     # The live queue uses the detector family with the lowest training cost.
     tuned_kinds = [k for k in settings if fits[k].get("tuned")]

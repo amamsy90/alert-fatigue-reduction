@@ -429,7 +429,7 @@
         `<span id="fb-count">${feedbackText(data.feedback)}</span>`,
         `showing ${data.count}`,
       ].join(" · ");
-      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k, (data.job.meta || {}).rise_unit);
+      renderJumps(data.jumps || [], data.jumps_total || 0, data.job.budget_k, (data.job.meta || {}).rise_unit, data.job.meta || {});
       renderLearning(data.feedback || {}, data.model || {}, m);
       renderTraining(m.training);
       const tbody = document.getElementById("rows");
@@ -549,21 +549,38 @@
 
     const KIND_LABEL = { jump: "Jump", gap: "Gap", leak: "Slow leak" };
 
+    let lastMeta = {};
+
+    function learnedLevelsText(meta, unit) {
+      const map = (meta && meta.confirm_by_series) || {};
+      const keys = Object.keys(map);
+      if (!keys.length) return "";
+      const fmt = (v) => {
+        const n = Number(v);
+        if (unit === "GB" && Math.abs(n) >= 1e8) return (n / 1e9).toFixed(2) + " GB";
+        return n.toPrecision(4);
+      };
+      return " Learned jump level per series, frozen from the training window: " +
+        keys.map(k => `${k} ${fmt(map[k])}`).join(", ") +
+        ". Other series use the global level. Log alerts are a separate classifier.";
+    }
+
     function setMetricFilter(kind) {
       const sel = document.getElementById("metric-kind");
       if (sel) sel.value = kind;
       document.querySelectorAll("[data-kind-filter]").forEach(card => {
         card.classList.toggle("on", card.dataset.kindFilter === kind);
       });
-      renderJumps(lastJumps, lastJumpTotal, lastBudget, lastUnit);
+      renderJumps(lastJumps, lastJumpTotal, lastBudget, lastUnit, lastMeta);
     }
 
-    function renderJumps(jumps, total, k, unit) {
+    function renderJumps(jumps, total, k, unit, meta) {
       unit = unit === undefined ? "GB" : unit;
       lastJumps = jumps;
       lastJumpTotal = total;
       lastBudget = k;
       lastUnit = unit;
+      if (meta) lastMeta = meta;
       const box = document.getElementById("jumps-box");
       box.hidden = total === 0;
       const counts = { jump: 0, gap: 0, leak: 0 };
@@ -577,11 +594,13 @@
         card.classList.toggle("on", card.dataset.kindFilter === filter);
       });
       const visible = filter === "all" ? jumps : jumps.filter(j => j.kind === filter);
+      const learned = learnedLevelsText(lastMeta, unit);
       document.getElementById("jumps-note").textContent =
         `${visible.length} shown in this view (${jumps.length} of ${total} metric items the queue kept, ` +
         `at most K=${k} a day, first confirmed first). ` +
         "Log alerts may use a quarter of the slots; an alert inside a shown jump rides on it. " +
-        "A jump with no alerts inside may be a fault the logs missed.";
+        "A jump with no alerts inside may be a fault the logs missed." +
+        learned;
       const tbody = document.getElementById("jump-rows");
       tbody.innerHTML = "";
       visible.forEach(j => {
