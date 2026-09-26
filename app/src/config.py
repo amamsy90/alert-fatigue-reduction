@@ -41,6 +41,11 @@ class Config:
     # (use relative for metrics that are not container memory in bytes).
     memory_jump_mode: str = "absolute"
     memory_jump_ratio: float = 0.3
+    # "robust" mode: hot when the deviation from the recent median is more than
+    # robust_z robust standard deviations (IQR / 1.349). Unit-free, any metric.
+    robust_z: float = 5.0
+    # robust mode only: "up" (rises), "down" (drops) or "both"
+    jump_direction: str = "up"
     # Causal queue: a confirmed jump is shown only if its rise at confirmation is at
     # least this big. None = use every jump; tuned on the training window by
     # src.queue.tune_confirm_threshold.
@@ -48,6 +53,9 @@ class Config:
     # Share of the daily budget log alerts may use (jumps and gaps are never blocked
     # by alerts). 0.25 of K=20 is 5 alert slots.
     alert_share: float = 0.25
+    # Share of the daily budget monitoring-gap items may use (a flapping feed must
+    # not push out detections). 0.25 of K=20 is 5 gap slots.
+    gap_share: float = 0.25
     # A series with no point for this long is a monitoring gap (one queue item).
     gap_minutes: int = 10
     # Gaps starting within this many minutes on different services are one item.

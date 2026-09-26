@@ -91,4 +91,7 @@ Do not say this in the seven minutes unless they ask.
 
 **Why are faults still missed?** At twenty a day I miss 364 faults. 166 are during metric outages, 191 are days with more faults than slots, and only 7 are the detector's fault.
 
-**What did you try that did not work?** A learned model to rank jumps. The rise threshold already gives 94 percent precision, so it added nothing. Carrying unused slots to the next day did help: 74.3 percent at K=20, and it still beats the rate rule given the same carry-over.
+**What did you try that did not work?** A learned model to rank jumps. The rise threshold already gives 94 percent precision, so it added nothing. Carrying unused slots to the next day did help: 74.4 percent at K=20, and it still beats the rate rule given the same carry-over.
+
+
+**Can someone use it on their own data — not microservices?** Yes, without code. The Evaluate page takes any number over time, finds the columns itself, tunes on the early part and shows how every approach would have done on the rest, next to a random-chance line. On a shop's orders it caught 10 of 11 outages where the notification stream caught 3. On public NAB data it beats chance on traffic, machines, servers and ads, and is no better than chance on Twitter volume — and it says so. One click then uses those settings for the live queue.

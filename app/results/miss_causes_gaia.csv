@@ -1,7 +1,7 @@
 queue,budget_k,no_metric_data,no_jump,below_threshold,budget_full
-proposed,5,166,4,4,811
+proposed,5,166,4,4,810
 jumps_tuned,5,166,4,4,805
-proposed,10,166,4,4,577
+proposed,10,166,4,4,574
 jumps_tuned,10,166,4,4,565
 proposed,20,166,4,3,191
 jumps_tuned,20,166,4,4,161

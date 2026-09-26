@@ -32,7 +32,7 @@ def main() -> None:
     _near(float(_row(q, "jumps_tuned")["detection_rate"]), 0.726, 0.005, "jumps_tuned K=20")
     _near(float(_row(q, "proposed")["detection_rate"]), 0.702, 0.005, "proposed K=20")
     _near(float(_row(q, "p3_grouped")["detection_rate"]), 0.715, 0.005, "grouped K=20")
-    _near(float(_row(q, "p3_carryover")["detection_rate"]), 0.743, 0.005, "carry-over K=20")
+    _near(float(_row(q, "p3_carryover")["detection_rate"]), 0.744, 0.005, "carry-over K=20")
     _near(float(_row(q, "delta_5m_carryover")["detection_rate"]), 0.725, 0.005, "delta carry-over K=20")
     _near(float(_row(q, "p3_ranker")["detection_rate"]), 0.702, 0.005, "ranker K=20")
     _near(float(_row(q, "jumps_hindsight")["detection_rate"]), 0.729, 0.005, "old hindsight K=20")
@@ -55,7 +55,7 @@ def main() -> None:
 
     s = pd.read_csv(ROOT / "stats_gaia.csv").iloc[0]
     _near(float(s["mean"]), 0.725, 0.01, "walk-forward proposed mean")
-    _near(float(s["carry_mean"]), 0.768, 0.01, "walk-forward carry-over mean")
+    _near(float(s["carry_mean"]), 0.769, 0.01, "walk-forward carry-over mean")
     _near(float(s["delta_carry_mean"]), 0.743, 0.01, "walk-forward delta carry-over mean")
     _near(float(s["false_jumps_near_fault"]), 0.246, 0.02, "false jumps near a fault")
     _near(float(s["tuned_mean"]), 0.748, 0.01, "walk-forward jumps_tuned mean")
@@ -69,6 +69,15 @@ def main() -> None:
         _fail("weakest fold is no longer the metric outage week; rewrite the fold-7 paragraph")
     if str(s["injection_tags"]) != "memory_anomalies:1367":
         _fail("every injected fault must still be a memory anomaly")
+
+    nab = ROOT / "nab_eval.csv"
+    if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
+        n = pd.read_csv(nab)
+        mine = n[(n["queue"] == "your_queue") & (n["budget_k"] == 2)].set_index("dataset")
+        _near(float(mine.loc["realTraffic", "detection_rate"]), 0.4545, 0.01, "NAB traffic")
+        _near(float(mine.loc["realTweets", "detection_rate"]), 0.3636, 0.01, "NAB tweets")
+        if float(mine.loc["realTweets", "detection_rate"]) > float(mine.loc["realTweets", "chance"]) + 0.05:
+            _fail("NAB tweets now beats chance; update the 'no better than chance' sentence")
 
     print("VALIDATION OK")
     for name in ("logs_severity", "static_p99", "delta_5m", "jumps_tuned", "proposed", "p3_carryover"):

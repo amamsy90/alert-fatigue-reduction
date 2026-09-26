@@ -29,7 +29,7 @@ Script: `python run_queue_eval.py` → `app/results/queue_eval_gaia.csv`
 | jumps_hindsight (old headline, not causal) | 72.9% | 17.5 | 1.3 | 93% |
 | p3_ranker | 70.2% | 17.6 | 1.6 | 91% |
 | p3_grouped (2 min) | 71.5% | 17.5 | 1.6 | 91% |
-| p3_carryover (≤ 10 slots) | 74.3% | 18.6 | 1.6 | 91% |
+| p3_carryover (≤ 10 slots) | 74.4% | 18.6 | 1.6 | 91% |
 | delta_5m_carryover | 72.5% | 18.5 | 2.4 | 87% |
 
 Oracle ceiling at K=20: **84.9%** (22 faults a day > 20 slots). Proposed at K=5 / 10 / 50: 19.5% / 38.6% / 85.8%.
@@ -49,11 +49,11 @@ Everything learned is re-learned before each later week; the week is scored once
 | 3 | 22–29 Jul | 162 | 94% | 72.2% | 77.2% | 71.0% | 74.7% |
 | 4 | 29 Jul–5 Aug | 163 | 82% | 67.5% | 69.3% | 67.5% | 71.8% |
 | 5 | 5–12 Aug | 162 | 84% | 69.1% | 71.6% | 71.0% | 77.2% |
-| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 77.0% | 81.3% |
+| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 77.0% | 82.0% |
 | 7 | 19–26 Aug | 173 | 61% | 51.4% | 52.0% | 52.0% | 57.8% |
 | 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 82.2% | 83.0% |
 
-Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **72.5%** (95% CI 65.7–78.3%; 6 wins, 1 loss, 1 tie, p = 0.0625); p3_carryover **76.8%** vs delta_5m_carryover 74.3% (7/7 non-tied, p = 0.0078). Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
+Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **72.5%** (95% CI 65.7–78.3%; 6 wins, 1 loss, 1 tie, p = 0.0625); p3_carryover **76.9%** vs delta_5m_carryover 74.3% (8/8, p = 0.0039). Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
 
 ## Signals and checks
 
@@ -80,6 +80,18 @@ Script: `python run_robustness.py` → `app/results/robustness_gaia.csv`. 120 sy
 | Ramp 1 GB / 30 min | 1% | 1% | 6% | 0% | 99% |
 | Leak 1 GB / 3 h | 12% | 3% | 6% | 8% | 73% |
 | Control (none) | 6% | 3% | 6% | 6% | 6% |
+
+## Other domains (NAB)
+
+Script: `python ../tools/fetch_nab.py && python run_nab.py` → `app/results/nab_eval.csv`, `nab_settings.csv`. Tuned on the first half of each series, K = 2.
+
+| Dataset | Test problems | Your queue | Chance |
+|---|---|---|---|
+| realAWSCloudwatch | 17 | 70.6% | 57.6% |
+| realAdExchange | 6 | 83.3% | 58.0% |
+| realKnownCause | 13 | 38.5% | 15.4% |
+| realTraffic | 11 | 45.5% | 12.7% |
+| realTweets | 11 | 36.4% | 36.0% |
 
 ## Older scripts (alerts only)
 

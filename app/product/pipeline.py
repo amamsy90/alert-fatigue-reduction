@@ -27,7 +27,7 @@ from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_con
 from src.sample_data import generate
 
 from .model_store import SavedModel, load_model, save_model
-from .settings import config_from_env
+from .settings import config_from_env, live_detector
 from .store import QueueStore
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -65,23 +65,12 @@ def load_metrics_csv(path: str | Path) -> pd.DataFrame:
     path = Path(path)
     if path.is_dir():
         return load_metric_folder(path)
-    frame = pd.read_csv(path)
-    if "service" not in frame.columns:
-        raise ValueError("Memory CSV needs a service column (or use a GAIA metrics folder)")
-    raw = frame["timestamp"]
-    if pd.api.types.is_numeric_dtype(raw) and float(raw.max()) > 1e12:
-        timestamps = pd.to_datetime(raw, unit="ms", utc=True)
-    else:
-        timestamps = pd.to_datetime(raw, utc=True)
-    out = pd.DataFrame(
-        {
-            "timestamp": timestamps,
-            "value": frame["value"].astype(float),
-            "service": frame["service"].astype(str),
-            "series_id": frame["service"].astype(str),
-        }
-    )
-    return out.drop_duplicates(["series_id", "timestamp"]).sort_values("timestamp")
+    # Any column names: timestamp/time/date, value/count/..., series/service/host/...;
+    # long or wide (one column per series). See src/generic.py.
+    from src.generic import load_metrics
+
+    frame, _ = load_metrics(path, default_series=path.stem)
+    return frame
 
 
 def _spike_flags(alerts: list[Alert], spikes: list, config: Config) -> list[bool]:
@@ -97,6 +86,7 @@ def _jump_items(
     decisions: list[Decision],
     shown: set[int] | None = None,
     config: Config | None = None,
+    unit: str = "GB",
 ) -> list[dict]:
     """One row per jump or gap, with the alerts that fell inside it.
 
@@ -124,7 +114,8 @@ def _jump_items(
                 "end": spike.end.isoformat(),
                 "confirm": spike.shown_at.isoformat(),
                 "kind": spike.kind,
-                "rise_gb": round(spike.rise_at_confirm / 1e9, 3),
+                # GB for the built-in memory rule; the detector's own unit otherwise
+                "rise_gb": round(spike.rise_at_confirm / 1e9, 3) if unit == "GB" else round(spike.rise_at_confirm, 3),
                 "rise": spike.rise_at_confirm,  # metric units (relative mode is not bytes)
                 "alerts_inside": len(inside),
                 "escalated_inside": sum(d.action == Action.ESCALATE for d in inside),
@@ -204,6 +195,8 @@ class ScoredQueue:
     # Jumps and gaps the queue showed (what PagerDuty would page).
     shown_spikes: list | None = None
     config: Config | None = None
+    rise_unit: str = "GB"
+    detector_label: str = "built-in memory-jump rule"
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -262,10 +255,28 @@ def score_alerts(
     """
     config = config or config_from_env(budget_k)
     has_metrics = metrics is not None and not metrics.empty
-    jumps = detect_jumps(metrics, config) if has_metrics else []
+    detector = live_detector()
+    rise_unit = (
+        ("x normal spread" if detector.kind in ("jump", "delta") else "beyond usual range")
+        if detector is not None
+        else ("GB" if config.memory_jump_mode == "absolute" else "")
+    )
+    if has_metrics and detector is not None:
+        # Settings the team tuned on its own data ("Evaluate my data" -> Use these settings).
+        from src.generic import detect as detect_generic
+
+        jumps = detect_generic(metrics, detector, {})
+        for jump in jumps:
+            jump.kind = "jump"
+    else:
+        jumps = detect_jumps(metrics, config) if has_metrics else []
     gaps = detect_gaps(metrics, config) if has_metrics else []
-    # Leaks only make sense for byte metrics (the rise is absolute).
-    leaks = detect_leaks(metrics, config) if has_metrics and config.memory_jump_mode == "absolute" else []
+    # Leaks only make sense for byte metrics (the rise is absolute) and the built-in rule.
+    leaks = (
+        detect_leaks(metrics, config)
+        if has_metrics and config.memory_jump_mode == "absolute" and detector is None
+        else []
+    )
 
     trained = _train(alerts, metrics if has_metrics else None, config)
     prefer_saved = saved is not None and saved.label_source != "weak_severity" and trained is None
@@ -305,7 +316,7 @@ def score_alerts(
     else:
         decisions = baseline_decisions(alerts, config)
 
-    if config.confirm_min_rise is None and faults and jumps and split_at is not None:
+    if detector is None and config.confirm_min_rise is None and faults and jumps and split_at is not None:
         early = [f for f in faults if f.start < split_at]
         thr = tune_confirm_threshold([j for j in jumps if j.shown_at < split_at], early, config)
         config = replace(config, confirm_min_rise=thr)
@@ -334,7 +345,7 @@ def score_alerts(
         escalate_threshold=escalate_threshold,
         review_threshold=review_threshold,
         spike_flags=flags,
-        jumps=_jump_items(jumps + leaks + gaps, alerts, final, shown_spikes, config),
+        jumps=_jump_items(jumps + leaks + gaps, alerts, final, shown_spikes, config, rise_unit),
         label_source=label_source,
         model_used=model_used,
         model=model if model_used == "trained" else None,
@@ -342,6 +353,8 @@ def score_alerts(
         training=training,
         shown_spikes=[item.payload for item in shown if item.kind != "alert"],
         config=config,
+        rise_unit=rise_unit,
+        detector_label=(detector.label() if detector is not None else "built-in memory-jump rule"),
     )
 
 
@@ -415,16 +428,22 @@ def run_job(
         if metrics_dir.exists():
             metrics = load_metric_folder(metrics_dir)
     elif mode == "upload":
-        if alerts_csv is None and alert_rows is None:
-            raise ValueError("upload mode needs alerts_csv or alert_rows")
-        if alert_rows is not None:
-            alerts = load_alerts_from_dicts(alert_rows)
-        else:
-            alerts = load_alerts(alerts_csv)
+        from src.generic import load_events, load_incidents
+
+        if alerts_csv is None and alert_rows is None and not metrics_path:
+            raise ValueError("upload needs an alerts/events file, a metrics file, or both")
         if metrics_path:
             metrics = load_metrics_csv(metrics_path)
+        known = set(metrics["series_id"].astype(str)) if metrics is not None else None
+        if alert_rows is not None:
+            alerts = load_alerts_from_dicts(alert_rows)
+        elif alerts_csv is not None:
+            alerts, _ = load_events(alerts_csv, known)
+        else:
+            alerts = []
         if faults_path:
-            alerts, faults = align_alerts_to_faults(alerts, load_faults(faults_path))
+            faults, _ = load_incidents(faults_path, known_series=known)
+            alerts, faults = align_alerts_to_faults(alerts, faults)
         source = "upload"
     elif mode == "ingest":
         if not alert_rows:
@@ -483,6 +502,8 @@ def run_job(
             "jumps_shown": sum(1 for j in result.jumps if j["kind"] == "jump" and j["shown"]),
             "gap_items": sum(1 for j in result.jumps if j["kind"] == "gap" and j["shown"]),
             "leak_items": sum(1 for j in result.jumps if j["kind"] == "leak" and j["shown"]),
+            "rise_unit": result.rise_unit,
+            "detector": result.detector_label,
             "has_metrics": metrics is not None and not metrics.empty,
             "label_source": result.label_source,
             "model_used": result.model_used,

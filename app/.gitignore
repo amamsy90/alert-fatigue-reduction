@@ -1,6 +1,8 @@
-data/sample_product/
-product/data/
-__pycache__/
-.pytest_cache/
 *.db
+.pytest_cache/
 .venv/
+__pycache__/
+data/nab/
+data/sample_product/
+examples/shop/
+product/data/

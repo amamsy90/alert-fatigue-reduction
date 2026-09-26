@@ -81,6 +81,61 @@ def score(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_report(report) -> None:
+    d = report.to_dict()
+    s = d["summary"]
+    print(f"Data: {s['series']} series, {s['points']:,} points ({s['sampling']} sampling), "
+          f"{s['events']:,} events, {s['incidents']} incidents "
+          f"({s['train_incidents']} to tune on, {s['test_incidents']} to score over {s['test_days']} days).")
+    print("Columns used: " + "; ".join(f"{k}: {v}" for k, v in d["mapping"].items() if v))
+    for kind in ("jump", "delta", "static"):
+        st = d["settings"][kind]
+        flag = "  <- your queue" if d["settings"]["chosen"] == kind else ""
+        print(f"  {kind:6s} {st['label']}{' (tuned)' if st.get('tuned') else ' (default)'}{flag}")
+    rows = pd.DataFrame(d["table"])
+    if not rows.empty and rows["detection_rate"].notna().any():
+        rows["caught"] = rows["faults_caught"].astype(str) + "/" + rows["faults"].astype(str)
+        cols = ["budget_k", "queue", "caught", "detection_rate", "items_per_day", "false_items_per_day", "oracle_ceiling"]
+        print(rows[cols].to_string(index=False))
+    if d["checks"]:
+        print(f"Random detector (chance line): {d['checks']['chance_detection']:.0%}.  "
+              f"Misses: {d['misses']}")
+    for note in d["notes"]:
+        print("Note: " + note)
+
+
+def _eval_args(args):
+    from src.generic import evaluate
+
+    budgets = tuple(int(x) for x in str(args.budgets).split(","))
+    return evaluate(args.metrics, args.incidents, args.events, budgets=budgets,
+                    train_fraction=args.train_fraction, day_offset_hours=args.day_offset_hours or 0.0)
+
+
+def evaluate_cmd(args: argparse.Namespace) -> int:
+    import json
+
+    report = _eval_args(args)
+    _print_report(report)
+    if args.out:
+        Path(args.out).write_text(json.dumps(report.to_dict(), indent=2, default=str), encoding="utf-8")
+        print(f"Report written to {args.out}")
+    return 0
+
+
+def tune_cmd(args: argparse.Namespace) -> int:
+    from src.generic import live_setting
+
+    from .settings import save_saved, settings_path
+
+    report = _eval_args(args)
+    _print_report(report)
+    saved = save_saved(live_setting(args.metrics, report))
+    print(f"Saved live settings ({saved['label']}) to {settings_path()}. "
+          "The web app and `cli score` now use them; delete the file to go back to the built-in rule.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m product.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -94,7 +149,22 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--jump-bytes", type=float, help="absolute mode rise, e.g. 5e8")
     s.add_argument("--jump-ratio", type=float, help="relative mode rise, e.g. 0.3 for +30%%")
     s.add_argument("--day-offset-hours", type=float)
+    for name, helptext in (("evaluate", "tune on the early part of YOUR data and report how every system does on the rest"),
+                           ("tune", "evaluate, then save the best settings for the web app and `score`")):
+        e = sub.add_parser(name, help=helptext)
+        e.add_argument("--metrics", required=True, help="timestamp,value[,series] csv (any column names; long or wide)")
+        e.add_argument("--incidents", help="past problems: start[,end][,series] csv")
+        e.add_argument("--events", help="alerts / notifications / log lines csv")
+        e.add_argument("--budgets", default="5,10,20", help="items a day to test, e.g. 5,10,20")
+        e.add_argument("--train-fraction", type=float, default=0.3, help="share of each series used to tune")
+        e.add_argument("--day-offset-hours", type=float)
+        if name == "evaluate":
+            e.add_argument("--out", help="write the full report as JSON")
     args = parser.parse_args(argv)
+    if args.command == "evaluate":
+        return evaluate_cmd(args)
+    if args.command == "tune":
+        return tune_cmd(args)
     return score(args)
 
 

@@ -61,7 +61,7 @@ METRIC_KINDS = ("jump", "rule", "leak")
 def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
     """First come, first served, at most K slots a day.
 
-    * Log alerts may use at most `alert_share * K` slots a day.
+    * Log alerts may use at most `alert_share * K` slots a day, gap items `gap_share * K`.
     * An alert that arrives while a shown jump on its service is still running is
       attached to that jump instead of taking a slot (one incident, one item).
     * `group_minutes` > 0: a metric item confirmed within that many minutes after
@@ -72,6 +72,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
     """
     k = config.budget_k
     alert_cap = int(math.floor(k * config.alert_share))
+    gap_cap = int(math.floor(k * config.gap_share))
     group = pd.Timedelta(minutes=config.group_minutes)
     by_day: dict[pd.Timestamp, list[QueueItem]] = defaultdict(list)
     for item in items:
@@ -84,7 +85,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
     all_days = pd.date_range(days[0], days[-1], freq="D") if days else []
     for day in all_days:
         today = k + carry
-        used = alerts_used = 0
+        used = alerts_used = gaps_used = 0
         for item in sorted(by_day.get(day, []), key=lambda it: (it.shown_at, it.kind)):
             if item.kind == "alert":
                 jumps = running.get(item.service, [])
@@ -108,6 +109,10 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
                     continue
                 if used >= today:
                     continue
+            elif item.kind == "gap":
+                if used >= today or gaps_used >= gap_cap:
+                    continue
+                gaps_used += 1
             elif used >= today:
                 continue
             used += 1
