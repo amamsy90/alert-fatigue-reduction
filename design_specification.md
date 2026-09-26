@@ -1,6 +1,6 @@
 # Alert Fatigue Reduction — Design Specification
 
-**Author:** [Your name]  **Course:** [Course name]  **Date:** [Date]  **Version:** 1.1
+**Author:** [Your name]  **Course:** [Course name]  **Date:** [Date]  **Version:** 2.0
 **Sector:** Cloud microservice operations (online platforms)
 
 ---
@@ -29,8 +29,8 @@ alerts + memory ──> [1. Ingestion & alignment] ──> [2. Features]
 2. **Feature extraction** — one row per alert (source, severity, text, recent counts, inside-a-jump flag).
 3. **Classifier** — P(alert is a real fault). Miss cost is 10× a false alarm.
 4. **Memory jumps** — a rise of more than 0.5 GB above the median of the previous 15 minutes, for at least two points.
-5. **Decision policy** — one list of at most K items a day. Jumps first; then escalate; then ask (only inside a jump).
-6. **Evaluation / product** — scripts score week-2 / the 55-day test period; the web app shows the same queue.
+5. **Decision policy** — one list of at most K items a day, first come first served: jumps, slow leaks and gaps when confirmed; log alerts (escalate, then ask) in at most 25% of the slots.
+6. **Evaluation / product** — scripts score the 55-day test period with every system through the same queue; the web app and CLI run that queue.
 
 ## 3. Data design
 
@@ -42,14 +42,15 @@ alerts + memory ──> [1. Ingestion & alignment] ──> [2. Features]
 | Container memory csv (`timestamp`, `value`) | Jump detection; file name must contain the service and "memory" |
 | Injected-fault records | Ground truth: fault id, start/end (UTC after conversion), service |
 
-About two months (July–August 2021): **34,863** alerts and **1,367** injected faults. Learn on the first week (**3,630** alerts, **141** faults). Test on the next **55** days (**31,233** alerts, **1,226** faults).
+About two months (July–August 2021): **34,863** alerts and **1,367** injected faults. Learn on the first week (**3,630** alerts, **144** faults). Test on the next **55** days (**31,233** alerts, **1,223** faults). One split time (first log line + 7 days) is used for alerts, faults and metrics.
 
 ### 3.2 Core entities
 
 | Entity | Fields |
 |---|---|
 | Alert | id, timestamp (UTC), source, type, severity, message, fault_id (label, or none) |
-| Spike / jump | series_id, service, start, end, peak_rise |
+| Spike (jump, leak, gap, rule) | series_id, service, start, end, peak_rise (reporting only), confirm, rise_at_confirm, level_at_confirm, kind |
+| Queue item | shown_at, kind, service, payload, attached (rides on a shown jump, no slot) |
 | Decision | alert id, action (escalate / review / suppress), confidence, reason |
 | Fault (ground truth) | fault id, start, end, component, description |
 
@@ -89,11 +90,13 @@ Time-based: **first week = train, remaining 55 days = test**. No random shuffle.
 - A jump is a run of at least two hot points, gaps of at most 2 minutes. It is **confirmed** at the second hot point; `confirm` and `rise_at_confirm` are all the live queue uses.
 - **Relative mode** (`JUMP_MODE=relative`): a point is hot when it is `JUMP_RATIO` (default 30%) above its recent median — for metrics that are not memory in bytes.
 - **Monitoring gap**: no point for 10 minutes on a series. Gaps that start within 10 minutes on several services are one item.
-- The 0.5 GB size is chosen on **week 1 only**. Week 2 is never used for that choice.
+- The 0.5 GB size is chosen on **week 1 only**. The test period is never used for that choice.
 - A first version (week-1 mean + 3 standard deviations) is kept only as a comparison. It flags a service for days if the normal level drifts.
 - A fault is caught when a jump on the same service overlaps the injection window. A single high point is not a jump.
 
-On the test period this rule overlaps **86.1%** of faults and **99.6%** of the faults that have metric data (1,053 / 1,057). Shifting jumps by a random 1–6 h leaves 2.6% overlap. Mean + 3σ: **53.8%**.
+On the test period this rule overlaps **86.1%** of faults and **99.6%** of the faults that have metric data (1,053 / 1,057). Shifting jumps by a random 1–6 h leaves 2.6% overlap. Mean + 3σ: **54.2%**.
+
+A **slow-leak** rule runs beside it: the same test against a **3-hour** median, 20 hot points (10 minutes). It catches 99% of 30-minute ramps and 73% of 3-hour leaks that the 15-minute rule misses (`run_robustness.py`), for 0.3 extra items a day on GAIA. Leaks overlapping a fast jump are dropped.
 
 ### 4.5 Decision policy
 
@@ -109,7 +112,7 @@ Sweep K = 5, 10, 20, 50.
 
 A fault is caught if a surfaced alert carries its label **or** a shown jump on its service overlaps its window.
 
-At K = 20 on the test period: full queue **71.0%**, jumps with learned threshold **72.6%**, Prometheus-style rate rule **68.9%**, log severity **0%**. Best possible 84.9%.
+At K = 20 on the test period: full queue **70.2%**, jumps with learned threshold **72.6%**, Prometheus-style rate rule **68.9%**, log severity **0%**. Best possible 84.9%.
 
 ### 4.6 Evaluation harness
 
@@ -140,7 +143,10 @@ At K = 20 on the test period: full queue **71.0%**, jumps with learned threshold
 | Confirmation threshold | tuned on train | Min rise at confirmation to show a jump |
 | Alert share | 25% of K | Max slots for log alerts |
 | Gap minutes | 10 | Silence that becomes a gap item |
-| Day offset | 0 h | Hours added to UTC before cutting days |
+| Day offset | 0 h | Hours added to UTC before cutting days (queue, alert policy, baseline and stored day all use it) |
+| Leak window / rise | 180 min / 0.5 GB | Slow-leak rule; 0 = off |
+| Group minutes | 0 (off) | Metric items this close on other services share a slot |
+| Carry-over max | 0 (off) | Unused slots carried to the next day |
 | Retrain after | 7 days | Or when new Real marks arrive |
 
 ## 6. Non-functional requirements
@@ -172,8 +178,10 @@ At K = 20 on the test period: full queue **71.0%**, jumps with learned threshold
 |---|---|
 | Cost-sensitive learning (10:1) | A missed fault is worse than an extra alert |
 | Time-based split | No leakage; imitate deployment |
-| Jump over recent median, not mean + 3σ | Survives a drift in the normal level; 86.1% vs 53.8% on this data |
-| Jump size chosen on week 1 only | Week 2 stays a true test |
+| Jump over recent median, not mean + 3σ | Survives a drift in the normal level; 86.1% vs 54.2% on this data |
+| A second, slow-leak rule | Ramps and leaks defeat both the jump rule and a Prometheus rate rule |
+| No learned confirmation threshold in the tool by default | Learned on GAIA's 1 GB faults it rejects every 0.5 GB fault |
+| Jump size chosen on week 1 only | The test period stays a true test |
 | First come, no hindsight | A live pager cannot rank by a peak it has not seen; learned threshold keeps 72.6% vs 72.9% hindsight |
 | Alerts capped at 25% of K | Log noise cannot push out a later jump |
 | Gaps are items | 11% of test faults fell in monitoring gaps |
@@ -189,10 +197,12 @@ At K = 20 on the test period: full queue **71.0%**, jumps with learned threshold
 | Static `memory > p99` | 57.2%; 3.0 false/day |
 | Rate rule `delta(mem[5m]) > 0.5 GB` | 68.9%; 2.1 false/day |
 | Jumps + learned threshold | **72.6%**; 1.0 false/day |
-| Full queue (jumps + gaps + alerts) | **71.0%**; 1.4 false/day |
+| Full queue (jumps + leaks + gaps + alerts) | **70.2%**; 1.6 false/day; precision 91% |
+| Carry-over ≤ 10 slots (Phase 3) | 74.3% (rate rule with the same: 72.5%) |
 | Best possible (oracle) | 84.9% |
-| Full queue at K=5 / 10 / 50 | 19.5% / 38.6% / 85.9% |
-| Walk-forward mean (8 weeks) | full queue 73.4% (CI 66.2–79.7%); jumps + threshold 74.8% (8/8 wins vs rate rule); rate rule 70.7% |
+| Full queue at K=5 / 10 / 50 | 19.5% / 38.6% / 85.8% |
+| Misses at K=20 | 166 no data, 191 budget full, 7 detector |
+| Walk-forward mean (8 weeks) | full queue 72.5% (CI 65.7–78.3%); jumps + threshold 74.8% (8/8 wins vs rate rule); rate rule 70.7%; carry-over 76.8% |
 | Jump overlap where metric data exists | 99.6% |
 | Test faults with no log and no metric data | 10.8% |
 | Fault start → jump confirmed | median 0.72 min |
@@ -203,7 +213,7 @@ The review record is [VALIDATION.md](VALIDATION.md). In short:
 
 - **Train** on days 0–7 only for the main numbers: jump size, classifier, cost threshold.
 - **Test** on the following 55 days, never shuffled.
-- **Walk-forward:** re-learn the classifier, its threshold and the jump confirmation threshold before each later week; jump size stays 0.5 GB. Full queue mean 73.4% (95% CI 66.2–79.7%).
+- **Walk-forward:** re-learn the classifier, its threshold and the jump confirmation threshold before each later week; jump size stays 0.5 GB. Full queue mean 72.5% (95% CI 65.7–78.3%).
 - **`run_stats.py`** writes the interval, sign tests vs the rate rule, per-service rates, signal counts (incl. no-metric-data), chance overlap and confirmation times.
 - **`run_m1` / `run_m2` / `run_m4` / `run_stretch`** score alerts only. They are not the system result.
 - **`python run_validate.py`** checks that the csv files still match the published headlines.

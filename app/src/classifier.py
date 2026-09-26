@@ -16,7 +16,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
-from .config import Config
+from .config import Config, day_of
 from .entities import Action, Alert, Decision
 from .features import NUMERIC_COLUMNS, build_feature_frame
 
@@ -62,7 +62,7 @@ def classifier_decisions(
             )
             continue
         seen.add(key)
-        day = alert.timestamp.normalize()
+        day = day_of(alert.timestamp, config)
         candidates[day].append((score, idx))
 
     chosen: set[int] = set()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .config import Config
+from .config import Config, day_of
 from .entities import Action, Alert, Decision
 
 
@@ -41,7 +41,7 @@ def baseline_decisions(alerts: list[Alert], config: Config) -> list[Decision]:
             continue
 
         seen_exact.add(key)
-        day = alert.timestamp.normalize()
+        day = day_of(alert.timestamp, config)
         rank = config.severity_rank.get(alert.severity, 0)
         candidates_by_day.setdefault(day, []).append((rank, alert.timestamp, idx))
         decisions.append(

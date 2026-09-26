@@ -34,7 +34,9 @@ def _queue_rows(result) -> list[dict]:
             continue
         rows.append({
             "shown_at": item["confirm"], "kind": item["kind"], "service": item["service"],
-            "detail": "metrics stopped" if item["kind"] == "gap" else f"+{item['rise']:.4g} at confirmation",
+            "detail": {"gap": "metrics stopped", "leak": f"slow rise +{item['rise']:.4g}"}.get(
+                item["kind"], f"+{item['rise']:.4g} at confirmation"
+            ),
             "until": item["end"], "alerts_inside": item["alerts_inside"],
         })
     for alert, decision in zip(result.alerts, result.decisions):

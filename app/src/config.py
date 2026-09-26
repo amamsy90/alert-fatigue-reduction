@@ -1,6 +1,8 @@
 """Configuration parameters (design spec section 5)."""
 from dataclasses import dataclass, field
 
+import pandas as pd
+
 
 @dataclass
 class Config:
@@ -50,7 +52,27 @@ class Config:
     gap_minutes: int = 10
     # Gaps starting within this many minutes on different services are one item.
     gap_group_minutes: int = 10
+    # Phase 3 options, off by default (see run_queue_eval.py rows p3_*):
+    # metric items within this many minutes on other services share one slot
+    group_minutes: float = 0.0
+    # unused slots carried to the next day, at most this many
+    carry_over_max: int = 0
+    # Slow-leak detector: a second jump rule with a 3-hour median window, so a leak
+    # that ramps over hours is still caught (run_robustness.py). None = off.
+    leak_window_minutes: int | None = 180
+    leak_rise_bytes: float = 0.5e9
+    leak_min_points: int = 20
     # Hours added to UTC before cutting days (e.g. 8 for a China-time on-call day).
     day_offset_hours: float = 0.0
     # Reproducibility
     random_seed: int = 42
+
+
+def day_of(ts: pd.Timestamp, config: "Config | None" = None) -> pd.Timestamp:
+    """On-call day of `ts`: UTC shifted by `day_offset_hours`, then cut at midnight.
+
+    Every per-day budget (queue, alert policy, severity baseline, stored `day`)
+    uses this, so all of them agree on where a day starts.
+    """
+    offset = config.day_offset_hours if config is not None else 0.0
+    return (ts + pd.Timedelta(hours=offset)).normalize()

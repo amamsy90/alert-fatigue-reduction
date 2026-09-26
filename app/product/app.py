@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ipaddress
 import os
 import secrets
 import tempfile
@@ -64,6 +65,18 @@ def _ingest_token_ok(request: Request) -> bool | None:
     return secrets.compare_digest(given.encode(), token.encode())
 
 
+def _is_private(host: str | None) -> bool:
+    """Loopback, private (RFC 1918, Docker bridge) and link-local count as private.
+    A host that is not an IP address (test client, Unix socket) counts as local."""
+    if not host:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return ip.is_loopback or ip.is_private or ip.is_link_local
+
+
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     if request.url.path in INGEST_PATHS:
@@ -73,7 +86,21 @@ async def require_login(request: Request, call_next):
         if ok is True:
             return await call_next(request)
     settings = _auth_settings()
-    if settings is None or request.url.path in OPEN_PATHS:
+    if settings is None:
+        # No password: serve this machine and private networks only, unless the
+        # operator says otherwise. A public address must never reach an open queue.
+        client = request.client.host if request.client else None
+        if (
+            request.url.path not in OPEN_PATHS
+            and not _is_private(client)
+            and os.environ.get("ALLOW_OPEN_ACCESS") != "1"
+        ):
+            return Response(
+                "Set APP_PASSWORD before exposing this app (or ALLOW_OPEN_ACCESS=1).",
+                status_code=403,
+            )
+        return await call_next(request)
+    if request.url.path in OPEN_PATHS:
         return await call_next(request)
     if not _credentials_ok(request.headers.get("authorization"), *settings):
         return Response(

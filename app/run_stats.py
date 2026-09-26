@@ -18,6 +18,7 @@ from src.eval_stats import (
     bootstrap_mean_ci,
     by_service_rows,
     chance_overlap,
+    false_jumps_near_other_faults,
     faults_with_jumps,
     sign_test_greater,
     signal_counts,
@@ -38,6 +39,9 @@ def main() -> None:
     proposed = _fold_rates(walk, "proposed")
     tuned = _fold_rates(walk, "jumps_tuned")
     delta = _fold_rates(walk, "delta_5m")
+    carry = _fold_rates(walk, "p3_carryover")
+    delta_carry = _fold_rates(walk, "delta_5m_carryover")
+    carry_vs = sign_test_greater(carry, delta_carry)
     ci = bootstrap_mean_ci(proposed)
     ci_tuned = bootstrap_mean_ci(tuned)
     vs_delta = sign_test_greater(proposed, delta)
@@ -46,6 +50,9 @@ def main() -> None:
           f"jumps_tuned {ci_tuned.mean:.1%}; delta_5m {np.mean(delta):.1%}")
     print(f"proposed > delta_5m in {vs_delta.wins}/{vs_delta.n} non-tied folds (p = {vs_delta.p_value:.4f}); "
           f"jumps_tuned > delta_5m {tuned_vs_delta.wins}/{tuned_vs_delta.n} (p = {tuned_vs_delta.p_value:.4f})")
+
+    print(f"With carry-over (Phase 3): proposed {np.mean(carry):.1%} vs delta_5m {np.mean(delta_carry):.1%}, "
+          f"{carry_vs.wins}/{carry_vs.n} non-tied folds (p = {carry_vs.p_value:.4f})")
 
     data = load_gaia()
     split_at = data.origin + pd.Timedelta(days=config.split_day)
@@ -66,6 +73,7 @@ def main() -> None:
     in_gap = faults_in_gaps(gaps, test_faults)
     chance = chance_overlap(test_faults, jumps)
     ceiling = oracle_ceiling(test_faults, config)
+    near = false_jumps_near_other_faults(data.faults, jumps)
     delays = [
         (j.confirm - f.start).total_seconds() / 60
         for j in jumps
@@ -76,6 +84,9 @@ def main() -> None:
     print(f"Faults that started inside a monitoring gap: {len(in_gap)}; gap items: {len(gaps)}")
     print(f"Chance overlap (jumps shifted 1-6 h): {chance[0]:.1%} (range {chance[1]:.1%}-{chance[2]:.1%})")
     print(f"Oracle ceiling at K={config.budget_k}: {ceiling:.1%}")
+    print(f"False jumps starting within 10 min of a fault on any service: {near['near_share']:.1%} "
+          f"of {int(near['false_jumps'])} (random times: {near['chance_share']:.1%}) — "
+          f"{'no sign' if near['near_share'] <= near['chance_share'] * 1.2 else 'a sign'} of faults logged under the wrong service.")
     print(f"Fault start -> jump confirmed: median {np.median(delays):.2f} min, p90 {np.percentile(delays, 90):.2f}")
 
     rows = by_service_rows(test_faults, test_alerts, jumps)
@@ -100,6 +111,11 @@ def main() -> None:
         "tuned_wins_vs_delta": tuned_vs_delta.wins,
         "tuned_sign_n_vs_delta": tuned_vs_delta.n,
         "tuned_sign_p_vs_delta": tuned_vs_delta.p_value,
+        "carry_mean": round(float(np.mean(carry)), 4),
+        "delta_carry_mean": round(float(np.mean(delta_carry)), 4),
+        "carry_wins_vs_delta": carry_vs.wins,
+        "carry_sign_n_vs_delta": carry_vs.n,
+        "carry_sign_p_vs_delta": carry_vs.p_value,
         "test_faults": n,
         **{f"signal_{k}": v for k, v in signals.items()},
         "faults_with_metric_data": len(with_data),
@@ -108,6 +124,9 @@ def main() -> None:
         "gap_items": len(gaps),
         "chance_overlap": round(chance[0], 4),
         "oracle_ceiling_k20": round(ceiling, 4),
+        "false_jumps": int(near["false_jumps"]),
+        "false_jumps_near_fault": round(near["near_share"], 4),
+        "false_jumps_near_chance": round(near["chance_share"], 4),
         "confirm_minutes_median": round(float(np.median(delays)), 2),
         "confirm_minutes_p90": round(float(np.percentile(delays, 90)), 2),
         "weakest_fold": int(weak["fold"]),

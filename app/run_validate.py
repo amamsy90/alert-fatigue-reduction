@@ -30,14 +30,34 @@ def main() -> None:
     _near(float(_row(q, "logs_severity")["detection_rate"]), 0.0, 0.001, "logs baseline K=20")
     _near(float(_row(q, "delta_5m")["detection_rate"]), 0.689, 0.005, "delta_5m K=20")
     _near(float(_row(q, "jumps_tuned")["detection_rate"]), 0.726, 0.005, "jumps_tuned K=20")
-    _near(float(_row(q, "proposed")["detection_rate"]), 0.710, 0.005, "proposed K=20")
+    _near(float(_row(q, "proposed")["detection_rate"]), 0.702, 0.005, "proposed K=20")
+    _near(float(_row(q, "p3_grouped")["detection_rate"]), 0.715, 0.005, "grouped K=20")
+    _near(float(_row(q, "p3_carryover")["detection_rate"]), 0.743, 0.005, "carry-over K=20")
+    _near(float(_row(q, "delta_5m_carryover")["detection_rate"]), 0.725, 0.005, "delta carry-over K=20")
+    _near(float(_row(q, "p3_ranker")["detection_rate"]), 0.702, 0.005, "ranker K=20")
     _near(float(_row(q, "jumps_hindsight")["detection_rate"]), 0.729, 0.005, "old hindsight K=20")
     _near(float(_row(q, "proposed")["oracle_ceiling"]), 0.849, 0.005, "oracle ceiling K=20")
     if float(_row(q, "proposed")["false_items_per_day"]) >= float(_row(q, "delta_5m")["false_items_per_day"]):
         _fail("proposed must show fewer false items a day than delta_5m")
 
+    m = pd.read_csv(ROOT / "miss_causes_gaia.csv")
+    miss = m[(m["queue"] == "proposed") & (m["budget_k"] == 20)].iloc[0]
+    _near(float(miss["no_metric_data"]), 166, 2, "misses: no metric data")
+    _near(float(miss["budget_full"]), 191, 5, "misses: budget full")
+    if int(miss["no_jump"]) + int(miss["below_threshold"]) > 15:
+        _fail("detector misses grew; the 'misses are data gaps and budget' claim no longer holds")
+
+    r = pd.read_csv(ROOT / "robustness_gaia.csv").set_index(["shape", "detector"])["detection_rate"]
+    _near(float(r[("step_1g", "jump_0.5g")]), 1.0, 0.02, "robustness 1 GB step")
+    _near(float(r[("step_0.25g", "jump_0.5g")]), 0.01, 0.03, "robustness 0.25 GB step")
+    _near(float(r[("ramp_1g", "jump+leak_3h")]), 0.99, 0.03, "robustness ramp with leak rule")
+    _near(float(r[("step_0.5g", "jump_0.5g+threshold")]), 0.0, 0.03, "learned threshold drops 0.5 GB steps")
+
     s = pd.read_csv(ROOT / "stats_gaia.csv").iloc[0]
-    _near(float(s["mean"]), 0.734, 0.01, "walk-forward proposed mean")
+    _near(float(s["mean"]), 0.725, 0.01, "walk-forward proposed mean")
+    _near(float(s["carry_mean"]), 0.768, 0.01, "walk-forward carry-over mean")
+    _near(float(s["delta_carry_mean"]), 0.743, 0.01, "walk-forward delta carry-over mean")
+    _near(float(s["false_jumps_near_fault"]), 0.246, 0.02, "false jumps near a fault")
     _near(float(s["tuned_mean"]), 0.748, 0.01, "walk-forward jumps_tuned mean")
     _near(float(s["delta_mean"]), 0.707, 0.01, "walk-forward delta_5m mean")
     if int(s["tuned_wins_vs_delta"]) != 8:
@@ -51,7 +71,7 @@ def main() -> None:
         _fail("every injected fault must still be a memory anomaly")
 
     print("VALIDATION OK")
-    for name in ("logs_severity", "static_p99", "delta_5m", "jumps_tuned", "proposed"):
+    for name in ("logs_severity", "static_p99", "delta_5m", "jumps_tuned", "proposed", "p3_carryover"):
         r = _row(q, name)
         print(f"  K=20 {name:14s} {float(r['detection_rate']):.1%}  false/day {float(r['false_items_per_day'])}")
     print(f"  walk-forward proposed {float(s['mean']):.1%} (CI {float(s['ci_low']):.1%}-{float(s['ci_high']):.1%})")

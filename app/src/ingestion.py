@@ -20,8 +20,8 @@ import pandas as pd
 
 from .entities import Alert, Fault
 
-# Map our canonical names -> column names in the raw GAIA files.
-# TODO(T1): adjust after inspecting the real GAIA files.
+# Map our canonical names -> column names in your export. The defaults match the
+# CSVs the CLI and web app accept; edit the right-hand side for other exports.
 ALERT_COLUMN_MAP = {
     "alert_id": "alert_id",
     "timestamp": "timestamp",
@@ -79,19 +79,25 @@ def align_alerts_to_faults(
 ) -> tuple[list[Alert], list[Fault]]:
     """Label each alert with the fault it belongs to (time window + component).
 
-    Alerts outside every fault window are labelled noise (fault_id=None).
-    Faults that no alert matched are reported to the caller via the returned
-    fault list (they cap achievable recall).
+    Alerts outside every fault window are labelled noise (fault_id=None). A
+    fault with component "" or "*" matches any source. The first fault in
+    `faults` order that covers an alert wins.
     """
-    matched_faults: set[str] = set()
+    wildcard = [f for f in faults if f.component in ("", "*")]
+    by_service: dict[str, list[Fault]] = {}
+    for fault in faults:
+        if fault.component not in ("", "*"):
+            by_service.setdefault(fault.component, []).append(fault)
+    order = {id(f): i for i, f in enumerate(faults)}
     for alert in alerts:
-        for fault in faults:
+        best = None
+        for fault in wildcard + by_service.get(alert.source, []):
             if fault.start <= alert.timestamp <= fault.end and (
-                fault.component in ("", "*") or alert.source == fault.component
+                best is None or order[id(fault)] < order[id(best)]
             ):
-                alert.fault_id = fault.fault_id
-                matched_faults.add(fault.fault_id)
-                break
+                best = fault
+        if best is not None:
+            alert.fault_id = best.fault_id
     return alerts, faults
 
 

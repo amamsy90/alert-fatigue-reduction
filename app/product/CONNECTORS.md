@@ -43,6 +43,8 @@ Or, without a login for the whole app, set `INGEST_TOKEN` and send it as a beare
 
 If scoring a `score_now` batch fails, the alerts stay in the buffer for the next run.
 
+Without `APP_PASSWORD` the app answers only this machine and private networks (loopback, 10/8, 172.16/12, 192.168/16 — Docker's bridge included). Requests from public addresses get 403 until you set a password (or `ALLOW_OPEN_ACCESS=1`).
+
 Point Alertmanager at the same URL. The app accepts Alertmanager's own webhook (version 4) as well as the `{alerts: [...]}` list. Firing alerts become queue rows; resolved alerts are ignored. Service comes from labels `service`, then `app`, `container`, `job`, `instance`.
 
 ```yaml
@@ -62,7 +64,7 @@ Escalations are sent only when **both** are true:
 1. `SHADOW_MODE=0` (or the job is run with `"shadow_mode": false`)
 2. `PAGERDUTY_ROUTING_KEY` is set (Events API v2 integration key)
 
-Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump or monitoring gap** also becomes one event (dedup key = kind + service + start, so re-scoring the same history does not open a second incident). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
+Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start, so re-scoring the same history does not open a second incident). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
 
 ```text
 SHADOW_MODE=0
@@ -96,6 +98,6 @@ GAIA-fitted weights are for the public demo. For Careem, e&, Mashreq, or any oth
 1. Keep this app and the escalate / ask / hide policy.
 2. Export ~2 weeks of their alerts + container memory.
 3. Label faults from incident tickets (or SRE review).
-4. Retrain with the same week-1 / week-2 protocol (`run_memory_clf.py` pattern).
+4. Retrain with the same early-window / later-window protocol (`src/experiment.py` pattern).
 
 Do not deploy GAIA-only weights as production scoring for a live queue.

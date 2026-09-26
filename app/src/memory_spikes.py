@@ -48,7 +48,9 @@ class Spike:
     # Time of the point that confirms the episode, and the rise known by then.
     confirm: pd.Timestamp | None = None
     rise_at_confirm: float = 0.0
-    kind: str = "jump"  # "jump" | "gap" | "rule"
+    kind: str = "jump"  # "jump" | "gap" | "rule" | "leak"
+    # Recent median at the confirming point (the "normal" level the rise is measured from).
+    level_at_confirm: float = 0.0
 
     @property
     def shown_at(self) -> pd.Timestamp:
@@ -169,8 +171,44 @@ def detect_jumps(
         if detect_until is not None:
             hot = hot[hot.index < detect_until]
         service = str(part["service"].iloc[0])
-        spikes.extend(_episodes(hot, str(series_id), service, config))
+        for ep in _episodes(hot, str(series_id), service, config):
+            level = baseline.get(ep.confirm)
+            ep.level_at_confirm = float(level) if level is not None and pd.notna(level) else 0.0
+            spikes.append(ep)
     return spikes
+
+
+def detect_leaks(
+    metrics: pd.DataFrame,
+    config: Config | None = None,
+    detect_from: pd.Timestamp | None = None,
+    detect_until: pd.Timestamp | None = None,
+) -> list[Spike]:
+    """Slow rises: the jump rule with a long median window (`leak_window_minutes`)
+    and a longer run of hot points (`leak_min_points`). Episodes that overlap a
+    fast jump on the same series are dropped (the jump already covers them).
+    Returns [] when `leak_window_minutes` is None."""
+    config = config or Config()
+    if not config.leak_window_minutes:
+        return []
+    from dataclasses import replace
+
+    slow = replace(
+        config,
+        memory_jump_mode="absolute",
+        memory_jump_window_minutes=config.leak_window_minutes,
+        memory_jump_bytes=config.leak_rise_bytes,
+        memory_min_points=config.leak_min_points,
+    )
+    fast = detect_jumps(metrics, config, detect_from=detect_from, detect_until=detect_until)
+    leaks = detect_jumps(metrics, slow, detect_from=detect_from, detect_until=detect_until)
+    out = []
+    for leak in leaks:
+        if any(j.series_id == leak.series_id and j.start <= leak.end and j.end >= leak.start for j in fast):
+            continue
+        leak.kind = "leak"
+        out.append(leak)
+    return out
 
 
 def _episodes(

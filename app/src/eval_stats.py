@@ -190,3 +190,35 @@ def week_pressure(faults: list[Fault], start: pd.Timestamp, end: pd.Timestamp) -
 
 def jumps_starting_in(jumps: list[Spike], start: pd.Timestamp, end: pd.Timestamp) -> int:
     return sum(1 for jump in jumps if start <= jump.start < end)
+
+
+def false_jumps_near_other_faults(
+    faults: list[Fault], jumps: list[Spike], minutes: float = 10.0, seed: int = 0
+) -> dict[str, float]:
+    """Are "false" jumps (no fault on their own service) really faults logged under
+    another service? Compare the share of false jumps that start within `minutes`
+    of ANY fault start with the share of random times that do."""
+    by_service: dict[str, list[Fault]] = defaultdict(list)
+    for fault in faults:
+        by_service[fault.component].append(fault)
+    false = [
+        j for j in jumps
+        if not any(j.start <= f.end and j.end >= f.start for f in by_service.get(j.service, []))
+    ]
+    starts = np.sort(np.array([f.start.value for f in faults], dtype=np.int64))
+    window = int(minutes * 60e9)
+
+    def _near(values: np.ndarray) -> np.ndarray:
+        i = np.searchsorted(starts, values)
+        after = np.abs(values - starts[np.clip(i, 0, len(starts) - 1)])
+        before = np.abs(values - starts[np.clip(i - 1, 0, len(starts) - 1)])
+        return np.minimum(after, before) <= window
+
+    if not false or not len(starts):
+        return {"false_jumps": float(len(false)), "near_share": 0.0, "chance_share": 0.0}
+    observed = _near(np.array([j.start.value for j in false], dtype=np.int64)).mean()
+    lo = min(j.start.value for j in jumps)
+    hi = max(j.start.value for j in jumps)
+    rng = np.random.default_rng(seed)
+    chance = _near(rng.integers(lo, hi, 100_000, dtype=np.int64)).mean()
+    return {"false_jumps": float(len(false)), "near_share": float(observed), "chance_share": float(chance)}

@@ -495,7 +495,7 @@
       document.getElementById("jumps-note").textContent =
         `${jumps.length} of ${total} metric items shown, in the order they were confirmed (at most K=${k} items a day). ` +
         "Log alerts may use a quarter of the slots; an alert inside a shown jump rides on it. " +
-        "A jump with no alerts inside may be a fault the logs missed. A gap means the metrics stopped.";
+        "A jump with no alerts inside may be a fault the logs missed. \"slow\" is a leak over hours; a gap means the metrics stopped.";
       const tbody = document.getElementById("jump-rows");
       tbody.innerHTML = "";
       jumps.forEach(j => {
@@ -506,7 +506,7 @@
           <td>${escapeHtml(j.service)}</td>
           <td>${escapeHtml((j.confirm || j.start).replace("T", " ").slice(0, 16))} UTC</td>
           <td>${minutes}</td>
-          <td class="spike">${isGap ? "no data" : "+" + Number(j.rise_gb).toFixed(2) + " GB"}</td>
+          <td class="spike">${isGap ? "no data" : (j.kind === "leak" ? "slow +" : "+") + Number(j.rise_gb).toFixed(2) + " GB"}</td>
           <td class="${j.alerts_inside ? "" : "silent"}">${j.alerts_inside || "none"}</td>
           <td>${j.escalated_inside}</td>
           <td class="verdict">${verdictButtons("jump", j.id, j.verdict)}</td>`;

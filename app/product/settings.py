@@ -10,6 +10,10 @@
 | ALERT_SHARE         | 0.25       | share of the daily budget log alerts may use |
 | GAP_MINUTES         | 10         | no metric point for this long = a monitoring-gap item |
 | DAY_OFFSET_HOURS    | 0          | hours added to UTC before cutting on-call days |
+| LEAK_WINDOW_MINUTES | 180        | slow-leak detector window; 0 = off |
+| LEAK_BYTES          | 0.5e9      | slow-leak rise over the long median |
+| GROUP_MINUTES       | 0          | metric items this close on other services share one slot |
+| CARRY_OVER_MAX      | 0          | unused slots carried to the next day (e.g. 10) |
 """
 from __future__ import annotations
 
@@ -37,4 +41,8 @@ def config_from_env(budget_k: int = 20) -> Config:
         alert_share=_float("ALERT_SHARE", base.alert_share),
         gap_minutes=int(_float("GAP_MINUTES", base.gap_minutes)),
         day_offset_hours=_float("DAY_OFFSET_HOURS", base.day_offset_hours),
+        leak_window_minutes=int(_float("LEAK_WINDOW_MINUTES", base.leak_window_minutes or 0)) or None,
+        leak_rise_bytes=_float("LEAK_BYTES", base.leak_rise_bytes),
+        group_minutes=_float("GROUP_MINUTES", base.group_minutes),
+        carry_over_max=int(_float("CARRY_OVER_MAX", base.carry_over_max)),
     )
