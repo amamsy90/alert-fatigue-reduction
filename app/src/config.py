@@ -52,6 +52,10 @@ class Config:
     # use their own frozen value instead; everyone else uses this global one.
     confirm_min_rise: float | None = None
     confirm_min_rise_by_series: dict[str, float] = field(default_factory=dict)
+    # GAIA experiments: use the per-series gates for "proposed" too. Off by default so
+    # the published tables use the single week-1 gate; the per-series variant is its
+    # own row (p3_per_series). The web app learns per-series gates regardless.
+    confirm_per_series: bool = False
     # Share of the daily budget log alerts may use (jumps and gaps are never blocked
     # by alerts). 0.25 of K=20 is 5 alert slots.
     alert_share: float = 0.25

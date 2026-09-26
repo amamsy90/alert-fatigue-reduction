@@ -1,6 +1,6 @@
 ﻿# Alert Fatigue Reduction — Project Plan
 
-**Author:** AISHA AL  **Course:** [Course name]  **Date:** [Date]  **Version:** 2.0
+**Author:** Aishah Mohamed Alyammahi  **Course:** Software Engineering and Programming  **Date:** [Date]  **Version:** 2.0
 **Sector:** Cloud microservice operations (online platforms)
 
 ---

@@ -1,7 +1,7 @@
 ﻿# Alert Fatigue Reduction in Cloud Microservice Operations — Project Proposal
 
-**Author:** AISHA AL
-**Course / Supervisor:** [Course name / supervisor]
+**Author:** Aishah Mohamed Alyammahi
+**Course:** Software Engineering and Programming
 **Date:** [Date]
 **Sector:** Cloud microservice operations (online platforms)
 
