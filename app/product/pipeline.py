@@ -24,7 +24,7 @@ from src.ingestion import align_alerts_to_faults, load_alerts, load_faults, time
 from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks, load_metric_folder
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
 from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_threshold
-from src.sample_data import generate
+from src.sample_data import generate_demo_day
 
 from .model_store import SavedModel, load_model, save_model
 from .settings import config_from_env, live_detector
@@ -244,6 +244,7 @@ def score_alerts(
     saved: SavedModel | None = None,
     config: Config | None = None,
     faults: list[Fault] | None = None,
+    use_saved_detector: bool = True,
 ) -> ScoredQueue:
     """Score EVERY alert in the batch and build the day-by-day causal queue.
 
@@ -255,7 +256,9 @@ def score_alerts(
     """
     config = config or config_from_env(budget_k)
     has_metrics = metrics is not None and not metrics.empty
-    detector = live_detector()
+    # Sample mode passes False: that series is bytes sized for the built-in rule.
+    # A detector saved from Evaluate-my-data is for another metric.
+    detector = live_detector() if use_saved_detector else None
     rise_unit = (
         ("x normal spread" if detector.kind in ("jump", "delta") else "beyond usual range")
         if detector is not None
@@ -414,11 +417,20 @@ def run_job(
     faults: list[Fault] | None = None
     source = mode
 
+    sample_config = None
     if mode == "sample":
-        generate(paths["sample_dir"], seed=Config().random_seed)
+        generate_demo_day(paths["sample_dir"])
         alerts = load_alerts(paths["sample_dir"] / "alerts.csv")
         faults = load_faults(paths["sample_dir"] / "faults.csv")
         alerts, faults = align_alerts_to_faults(alerts, faults)
+        metrics = load_metrics_csv(paths["sample_dir"] / "metrics.csv")
+        # Keep the leak window from the environment (0 turns leaks off) but
+        # score this byte series with the absolute 0.5 GB rule it was built for.
+        sample_config = replace(
+            config_from_env(budget_k),
+            memory_jump_mode="absolute",
+            memory_jump_bytes=Config().memory_jump_bytes,
+        )
     elif mode == "gaia":
         run_path = paths["gaia_run"]
         if not run_path.exists():
@@ -462,7 +474,14 @@ def run_job(
     feedback_stats = apply_feedback(alerts, store)
     saved = load_model()
     result = score_alerts(
-        alerts, metrics=metrics, budget_k=budget_k, shadow_mode=shadow_mode, saved=saved, faults=faults
+        alerts,
+        metrics=metrics,
+        budget_k=budget_k,
+        shadow_mode=shadow_mode,
+        saved=saved,
+        faults=faults,
+        config=sample_config,
+        use_saved_detector=mode != "sample",
     )
     real_marks = store.feedback_summary()["real"]
     if result.model is not None:

@@ -60,6 +60,21 @@ Why this reframe: on GAIA, log triage alone misses about 82% of faults, and a me
 - Other fault types (CPU, disk, code) on another benchmark (RCAEval, TrainTicket-based sets).
 - Slack / Opsgenie paging.
 
+## Demo notes
+
+**Run sample** on the queue page is a one-day metric demo, not the old alerts-only file. One click writes `data/sample_product/` via `src/sample_data.generate_demo_day` and scores it with the built-in absolute memory rule (a saved Evaluate-my-data detector is ignored for that click, because that detector may be tuned in other units):
+
+- `checkout`: +1.2 GB for 8 minutes at 09:00, with log lines inside the window
+- `payments`: metrics missing 14:00–15:30 (a monitoring-gap item)
+- `cart`: +1 GB over two hours from 12:00 (a slow leak; the 15-minute jump rule does not cover it)
+- a few other log lines that are noise
+
+The job reports `has_metrics=true`, `jumps_shown>=1`, and gap and leak counts (leaks only while `LEAK_WINDOW_MINUTES` is not 0). Fewer than 10 alerts, so this click stays rules-only and does not fit a confirmation threshold on the same day. The queue page shows jump / gap / leak as labelled cards and a metric filter; the escalate filter does not hide those cards.
+
+The 14-day alerts-only generator `src.sample_data.generate` is unchanged. `run_m1.py` and the classifier smoke test still use it. Do not quote them as the system result.
+
+Instructor questions and a five-minute script: `VIVA_ANSWERS.md`. Headline numbers stay the ones in `FINAL_REPORT.md`.
+
 ## Out of scope before submission
 
 A new dataset. It is listed as future work (RCAEval, Nezha/TrainTicket) in the report.
@@ -70,5 +85,5 @@ A new dataset. It is listed as future work (RCAEval, Nezha/TrainTicket) in the r
 |---|---|
 | 1 | Phase 1 + 2 code and numbers — done |
 | 2 | Phase 3, open review items, documents (md, Word, slides) — done |
-| 3 | Fill name / course / date; rehearse the deck; dry-run the demo (CLI + Docker) |
+| 3 | Fill name / course / date; rehearse the deck; dry-run the demo (Run sample now includes a jump, a gap and a leak — see `VIVA_ANSWERS.md`; CLI + Docker) |
 | 4 | Freeze, `run_validate.py`, submit |
