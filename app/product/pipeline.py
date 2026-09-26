@@ -23,8 +23,8 @@ from src.gaia_loader import load_run_folder
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults, time_split
 from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks, load_metric_folder
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
-from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_threshold
-from src.sample_data import generate
+from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_thresholds
+from src.sample_data import generate_demo_day
 
 from .model_store import SavedModel, load_model, save_model
 from .settings import config_from_env, live_detector
@@ -197,6 +197,9 @@ class ScoredQueue:
     config: Config | None = None
     rise_unit: str = "GB"
     detector_label: str = "built-in memory-jump rule"
+    # Per-series confirm rise learned on the early window only. Empty if there
+    # was no held-out window (the one-day sample) or no labels.
+    confirm_by_series: dict | None = None
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -244,6 +247,7 @@ def score_alerts(
     saved: SavedModel | None = None,
     config: Config | None = None,
     faults: list[Fault] | None = None,
+    use_saved_detector: bool = True,
 ) -> ScoredQueue:
     """Score EVERY alert in the batch and build the day-by-day causal queue.
 
@@ -255,7 +259,9 @@ def score_alerts(
     """
     config = config or config_from_env(budget_k)
     has_metrics = metrics is not None and not metrics.empty
-    detector = live_detector()
+    # Sample mode passes False: that series is bytes sized for the built-in rule.
+    # A detector saved from Evaluate-my-data is for another metric.
+    detector = live_detector() if use_saved_detector else None
     rise_unit = (
         ("x normal spread" if detector.kind in ("jump", "delta") else "beyond usual range")
         if detector is not None
@@ -316,10 +322,39 @@ def score_alerts(
     else:
         decisions = baseline_decisions(alerts, config)
 
-    if detector is None and config.confirm_min_rise is None and faults and jumps and split_at is not None:
-        early = [f for f in faults if f.start < split_at]
-        thr = tune_confirm_threshold([j for j in jumps if j.shown_at < split_at], early, config)
-        config = replace(config, confirm_min_rise=thr)
+    confirm_by_series: dict[str, float] = {}
+    # Learn the confirm gate on the early window only, and only when a later
+    # window exists. The one-day sample has no later window, so it stays on the
+    # built-in rule and is not fit on the same points it shows.
+    metric_split = split_at
+    if metric_split is None and has_metrics and faults:
+        metric_split = metrics["timestamp"].min() + pd.Timedelta(days=config.split_day)
+    has_later = bool(
+        metric_split is not None
+        and (
+            any(j.shown_at >= metric_split for j in jumps)
+            or any(f.start >= metric_split for f in faults or [])
+        )
+    )
+    if (
+        detector is None
+        and config.confirm_min_rise is None
+        and faults
+        and jumps
+        and has_later
+    ):
+        global_thr, confirm_by_series = tune_confirm_thresholds(
+            jumps, faults, config, train_until=metric_split
+        )
+        config = replace(
+            config,
+            confirm_min_rise=global_thr,
+            confirm_min_rise_by_series=confirm_by_series,
+        )
+    elif detector is not None and detector.kind == "jump" and detector.levels:
+        confirm_by_series = {
+            str(sid): float(gate[0]) for sid, gate in detector.levels.items() if gate
+        }
 
     candidates: list[QueueItem] = (
         spike_items(jumps, config) + spike_items(leaks, config) + spike_items(gaps, config)
@@ -355,6 +390,7 @@ def score_alerts(
         config=config,
         rise_unit=rise_unit,
         detector_label=(detector.label() if detector is not None else "built-in memory-jump rule"),
+        confirm_by_series=confirm_by_series,
     )
 
 
@@ -414,11 +450,20 @@ def run_job(
     faults: list[Fault] | None = None
     source = mode
 
+    sample_config = None
     if mode == "sample":
-        generate(paths["sample_dir"], seed=Config().random_seed)
+        generate_demo_day(paths["sample_dir"])
         alerts = load_alerts(paths["sample_dir"] / "alerts.csv")
         faults = load_faults(paths["sample_dir"] / "faults.csv")
         alerts, faults = align_alerts_to_faults(alerts, faults)
+        metrics = load_metrics_csv(paths["sample_dir"] / "metrics.csv")
+        # Keep the leak window from the environment (0 turns leaks off) but
+        # score this byte series with the absolute 0.5 GB rule it was built for.
+        sample_config = replace(
+            config_from_env(budget_k),
+            memory_jump_mode="absolute",
+            memory_jump_bytes=Config().memory_jump_bytes,
+        )
     elif mode == "gaia":
         run_path = paths["gaia_run"]
         if not run_path.exists():
@@ -462,7 +507,14 @@ def run_job(
     feedback_stats = apply_feedback(alerts, store)
     saved = load_model()
     result = score_alerts(
-        alerts, metrics=metrics, budget_k=budget_k, shadow_mode=shadow_mode, saved=saved, faults=faults
+        alerts,
+        metrics=metrics,
+        budget_k=budget_k,
+        shadow_mode=shadow_mode,
+        saved=saved,
+        faults=faults,
+        config=sample_config,
+        use_saved_detector=mode != "sample",
     )
     real_marks = store.feedback_summary()["real"]
     if result.model is not None:
@@ -504,6 +556,8 @@ def run_job(
             "leak_items": sum(1 for j in result.jumps if j["kind"] == "leak" and j["shown"]),
             "rise_unit": result.rise_unit,
             "detector": result.detector_label,
+            "confirm_by_series": result.confirm_by_series or {},
+            "confirm_min_rise": None if result.config is None else result.config.confirm_min_rise,
             "has_metrics": metrics is not None and not metrics.empty,
             "label_source": result.label_source,
             "model_used": result.model_used,

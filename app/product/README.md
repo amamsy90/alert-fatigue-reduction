@@ -22,7 +22,7 @@ A jump with no alerts inside is still shown: it may be a fault the logs missed. 
 ## Phase 1 — local web app
 
 - Browser UI at `/` (port 8080)
-- Run **sample** or **GAIA**, or upload alerts CSV (+ optional memory CSV and faults CSV)
+- Run **sample** (one synthetic day: jump, monitoring gap, slow leak, and a few log lines) or **GAIA**, or upload alerts CSV (+ optional memory CSV and faults CSV)
 - Change K (5 / 10 / 20 / 50)
 - FastAPI + SQLite + Docker Compose
 

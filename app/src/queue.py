@@ -37,12 +37,27 @@ class QueueItem:
     attached: bool = False
 
 
+def confirm_gate(spike: Spike, config: Config) -> float | None:
+    """Rise a jump must reach before the queue shows it.
+
+    A series with a threshold learned on the training window uses that frozen
+    number. Every other series uses the global `confirm_min_rise` (or none).
+    """
+    table = config.confirm_min_rise_by_series or {}
+    if spike.service in table:
+        return table[spike.service]
+    if spike.series_id in table:
+        return table[spike.series_id]
+    return config.confirm_min_rise
+
+
 def spike_items(spikes: list[Spike], config: Config, use_threshold: bool = True) -> list[QueueItem]:
-    thr = config.confirm_min_rise if use_threshold else None
     items = []
     for spike in spikes:
-        if spike.kind == "jump" and thr is not None and spike.rise_at_confirm < thr:
-            continue
+        if use_threshold and spike.kind == "jump":
+            thr = confirm_gate(spike, config)
+            if thr is not None and spike.rise_at_confirm < thr:
+                continue
         items.append(QueueItem(spike.shown_at, spike.kind, spike.service, spike))
     return items
 
@@ -256,6 +271,42 @@ def tune_confirm_threshold(
         if best is None or cost < best[0]:
             best = (cost, float(thr))
     return best[1] if best else None
+
+
+def tune_confirm_thresholds(
+    jumps: list[Spike],
+    faults: list[Fault],
+    config: Config,
+    *,
+    train_until: pd.Timestamp | None = None,
+    min_jumps: int = 3,
+) -> tuple[float | None, dict[str, float]]:
+    """Global confirm rise, plus one threshold per series, both from the training window.
+
+    Pass `train_until` to ignore jumps and faults at or after that time, so a
+    test-window point cannot move the number. A series with fewer than
+    `min_jumps` training jumps, or with no training fault of its own, is left
+    out of the map and keeps the global threshold (the current single gate).
+    The cost is the same one `tune_confirm_threshold` minimises.
+    """
+    if train_until is not None:
+        jumps = [j for j in jumps if j.shown_at < train_until]
+        faults = [f for f in faults if f.start < train_until]
+    global_thr = tune_confirm_threshold(jumps, faults, config)
+    own_faults = _faults_by_service(faults)
+    grouped: dict[str, list[Spike]] = defaultdict(list)
+    for jump in jumps:
+        if jump.kind == "jump":
+            grouped[jump.service].append(jump)
+    by_series: dict[str, float] = {}
+    for service, series_jumps in grouped.items():
+        series_faults = own_faults.get(service, [])
+        if len(series_jumps) < min_jumps or not series_faults:
+            continue
+        thr = tune_confirm_threshold(series_jumps, series_faults, config)
+        if thr is not None:
+            by_series[service] = thr
+    return global_thr, by_series
 
 
 def n_days_between(start: pd.Timestamp, end: pd.Timestamp, config: Config) -> int:
