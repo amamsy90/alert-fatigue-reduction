@@ -3,8 +3,8 @@
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
 **Final report**
-**Author:** AISHA AL
-**Course / Supervisor:** [Course name / supervisor]
+**Author:** Aishah Mohamed Alyammahi
+**Course:** Software Engineering and Programming
 **Date:** [Date]
 
 Numbers come from scripts under `app/` and are checked by `python run_validate.py`. Every file is listed in `VALIDATION.md`. The review that led to this version is `CODE_REVIEW.md`; the plan is `ROADMAP.md`.
@@ -173,6 +173,7 @@ What this shows:
 | Full queue (reference) | 70.2% | 17.6 | 72.5% | — |
 | **Learned jump ranker** instead of the rise threshold | 70.2% | 17.6 | 73.2% | No gain: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs |
 | **Group** metric items within 2 min on other services into one slot | 71.5% | 17.5 | 74.0% | Small gain; one item may then name two services |
+| **Confirm level per series** (learned on week 1; off in the headline) | 70.0% | 17.5 | 71.8% | Mixed: the detector alone keeps 72.6% with fewer false items (0.8 vs 1.0 a day), but the levels reject real faults — 25 misses below threshold instead of 3, and 84.1% vs 85.9% at K = 50. The web app uses it; the published tables use the single gate |
 | **Carry over** up to 10 unused slots to the next day | **74.4%** | 18.6 | **76.9%** | Largest gain; the average stays under K. The same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%); the full queue still wins **8/8** weeks (p = 0.0039) |
 
 Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice.

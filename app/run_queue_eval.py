@@ -42,7 +42,7 @@ def main() -> None:
                 f"{len(run.test_jumps)} jumps, {len(run.test_gaps)} gap items. "
                 f"Week-1 confirm threshold {thr / 1e9 if thr else 0:.2f} GB."
             )
-        for name in ("proposed", "jumps_tuned"):
+        for name in ("proposed", "jumps_tuned", "p3_per_series"):
             counts = miss_causes(run, data, cfg, name)
             misses.append({"queue": name, "budget_k": k, **counts})
             print(f"K={k:2d}  misses {name:12s} " + "  ".join(f"{c} {counts[c]}" for c in MISS_CAUSES))
