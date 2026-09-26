@@ -21,3 +21,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Files the Claude desktop app drops here
+Claude outputs/
