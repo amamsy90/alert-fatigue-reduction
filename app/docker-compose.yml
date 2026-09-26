@@ -2,13 +2,18 @@ services:
   oncall-queue:
     build: .
     ports:
-      - "8080:8080"
+      # Bound to this machine only. Change to "8080:8080" to share it, and set a password first.
+      - "127.0.0.1:8080:8080"
     environment:
-      SHADOW_MODE: "1"
+      SHADOW_MODE: "1"             # 0 = page PagerDuty for escalations, jumps and gaps
       QUEUE_DB: /app/product/data/queue.db
-      # The container listens on all interfaces, so set a password before sharing it.
       APP_USER: ${APP_USER:-oncall}
       APP_PASSWORD: ${APP_PASSWORD:-}
+      INGEST_TOKEN: ${INGEST_TOKEN:-}   # Alertmanager: http_config.authorization.credentials
+      JUMP_MODE: ${JUMP_MODE:-absolute} # relative for metrics that are not memory in bytes
+      JUMP_BYTES: ${JUMP_BYTES:-500000000}
+      JUMP_RATIO: ${JUMP_RATIO:-0.3}
+      ALERT_SHARE: ${ALERT_SHARE:-0.25}
       # PROM_URL: http://host.docker.internal:9090
       # PROM_SERVICE_LABEL: app
       # PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}

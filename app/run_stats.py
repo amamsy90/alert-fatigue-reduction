@@ -1,7 +1,5 @@
-"""Defend the headline numbers: interval, test vs baseline, why faults are missed.
-
-Reads the saved walk-forward table. Reloads GAIA only for the per-service
-and silent-fault counts (no retraining).
+"""Numbers a marker can defend. Reads the walk-forward table; reloads GAIA for
+signal counts, per-service rates, chance overlap and confirmation times.
 
 Usage:
     python run_stats.py
@@ -11,121 +9,115 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src.config import Config
 from src.eval_stats import (
+    SIGNALS,
     bootstrap_mean_ci,
     by_service_rows,
-    jumps_starting_in,
+    chance_overlap,
+    faults_with_jumps,
     sign_test_greater,
     signal_counts,
 )
-from src.gaia_loader import load_run_folder
-from src.ingestion import time_split
-from src.memory_spikes import detect_jumps, load_metric_folder
+from src.experiment import faults_with_metric_data, load_gaia
+from src.memory_spikes import detect_gaps, detect_jumps, faults_in_gaps
+from src.queue import oracle_ceiling
 
 
-def _walk_forward_stats(path: Path) -> dict:
-    walk = pd.read_csv(path)
-    queue = walk.loc[walk["queue"] == "shared_jumps_1st"].sort_values("fold")
-    base = walk.loc[walk["queue"] == "baseline"].sort_values("fold")
-    if list(queue["fold"]) != list(base["fold"]):
-        raise SystemExit("walk-forward folds are not aligned between queue and baseline")
-    rates = [float(x) for x in queue["detection_rate"]]
-    base_rates = [float(x) for x in base["detection_rate"]]
-    interval = bootstrap_mean_ci(rates)
-    test = sign_test_greater(rates, base_rates)
-    weak = queue.loc[queue["detection_rate"].idxmin()]
-    others = queue.loc[queue["fold"] != weak["fold"]]
-    return {
-        "folds": interval.n,
-        "mean": round(interval.mean, 4),
-        "ci_low": round(interval.low, 4),
-        "ci_high": round(interval.high, 4),
-        "min": round(min(rates), 4),
-        "max": round(max(rates), 4),
-        "wins_vs_baseline": test.wins,
-        "sign_n": test.n,
-        "sign_p": test.p_value,
-        "weakest_fold": int(weak["fold"]),
-        "weakest_faults": int(weak["faults"]),
-        "weakest_rate": round(float(weak["detection_rate"]), 4),
-        "weakest_items_per_day": round(float(weak["items_per_day"]), 2),
-        "weakest_train_until": str(weak["train_until"]),
-        "weakest_test_end": str(weak["test_end"]),
-        "other_mean_items_per_day": round(float(others["items_per_day"].mean()), 2),
-        "budget_k": int(weak["budget_k"]),
-    }
+def _fold_rates(walk: pd.DataFrame, queue: str) -> list[float]:
+    part = walk.loc[walk["queue"] == queue].sort_values("fold")
+    return [float(x) for x in part["detection_rate"]]
 
 
 def main() -> None:
     config = Config()
-    walk_path = Path("results") / "walkforward_gaia.csv"
-    wf = _walk_forward_stats(walk_path)
-    print(
-        f"Walk-forward mean {wf['mean']:.1%} "
-        f"(95% bootstrap CI {wf['ci_low']:.1%}-{wf['ci_high']:.1%}) "
-        f"over {wf['folds']} folds."
-    )
-    print(
-        f"Queue > baseline in {wf['wins_vs_baseline']}/{wf['sign_n']} folds "
-        f"(p = {wf['sign_p']:.4f} if each fold is a coin flip)."
-    )
+    walk = pd.read_csv(Path("results") / "walkforward_gaia.csv")
+    proposed = _fold_rates(walk, "proposed")
+    tuned = _fold_rates(walk, "jumps_tuned")
+    delta = _fold_rates(walk, "delta_5m")
+    ci = bootstrap_mean_ci(proposed)
+    ci_tuned = bootstrap_mean_ci(tuned)
+    vs_delta = sign_test_greater(proposed, delta)
+    tuned_vs_delta = sign_test_greater(tuned, delta)
+    print(f"Walk-forward proposed {ci.mean:.1%} (95% CI {ci.low:.1%}-{ci.high:.1%}); "
+          f"jumps_tuned {ci_tuned.mean:.1%}; delta_5m {np.mean(delta):.1%}")
+    print(f"proposed > delta_5m in {vs_delta.wins}/{vs_delta.n} non-tied folds (p = {vs_delta.p_value:.4f}); "
+          f"jumps_tuned > delta_5m {tuned_vs_delta.wins}/{tuned_vs_delta.n} (p = {tuned_vs_delta.p_value:.4f})")
 
-    alerts, faults = load_run_folder("data/gaia_raw/run/run")
-    metrics = load_metric_folder("data/gaia_metrics")
-    tags = Counter(f.description for f in faults)
-    print(f"Injection tags: {dict(tags)}")
-
-    _, test_alerts = time_split(alerts, config.split_day)
-    _, test_faults = time_split(faults, config.split_day)
-    origin = min(a.timestamp for a in alerts)
-    split_at = origin + pd.Timedelta(days=config.split_day)
-    test_jumps = detect_jumps(metrics, config, detect_from=split_at)
-
-    signals = signal_counts(test_faults, test_alerts, test_jumps)
+    data = load_gaia()
+    split_at = data.origin + pd.Timedelta(days=config.split_day)
+    tags = Counter(f.description for f in data.faults)
+    test_alerts = [a for a in data.alerts if a.timestamp >= split_at]
+    test_faults = [f for f in data.faults if f.start >= split_at]
+    jumps = detect_jumps(data.metrics, config, detect_from=split_at)
+    gaps = detect_gaps(data.metrics, config, detect_from=split_at)
+    with_data = faults_with_metric_data(test_faults, data.metrics)
     n = len(test_faults)
-    print("Test faults by signal (why a log-only system cannot hit 95%):")
-    for key in ("log_and_jump", "jump_only", "log_only", "silent"):
-        print(f"  {key:13s} {signals[key]:4d}  ({signals[key] / n:.1%})")
 
-    service_rows = by_service_rows(test_faults, test_alerts, test_jumps)
+    signals = signal_counts(test_faults, test_alerts, jumps, with_data)
+    print("Test faults by signal:")
+    for key in SIGNALS:
+        print(f"  {key:15s} {signals[key]:4d}  ({signals[key] / n:.1%})")
+    jumped = faults_with_jumps(test_faults, jumps)
+    caught_with_data = len(jumped & with_data) / len(with_data) if with_data else 0.0
+    in_gap = faults_in_gaps(gaps, test_faults)
+    chance = chance_overlap(test_faults, jumps)
+    ceiling = oracle_ceiling(test_faults, config)
+    delays = [
+        (j.confirm - f.start).total_seconds() / 60
+        for j in jumps
+        for f in test_faults
+        if f.component == j.service and j.start <= f.end and j.end >= f.start
+    ]
+    print(f"Jump rule on faults with metric data: {caught_with_data:.1%} ({len(jumped & with_data)}/{len(with_data)})")
+    print(f"Faults that started inside a monitoring gap: {len(in_gap)}; gap items: {len(gaps)}")
+    print(f"Chance overlap (jumps shifted 1-6 h): {chance[0]:.1%} (range {chance[1]:.1%}-{chance[2]:.1%})")
+    print(f"Oracle ceiling at K={config.budget_k}: {ceiling:.1%}")
+    print(f"Fault start -> jump confirmed: median {np.median(delays):.2f} min, p90 {np.percentile(delays, 90):.2f}")
+
+    rows = by_service_rows(test_faults, test_alerts, jumps)
     print("Test faults by service:")
-    for row in service_rows:
-        print(
-            f"  {row['service']:14s} faults {row['faults']:4d}  "
-            f"log {row['log_rate']:.1%}  jump {row['jump_rate']:.1%}"
-        )
+    for row in rows:
+        print(f"  {row['service']:14s} faults {row['faults']:4d}  log {row['log_rate']:.1%}  jump {row['jump_rate']:.1%}")
 
-    weak_start = pd.Timestamp(wf["weakest_train_until"], tz="UTC")
-    weak_end = pd.Timestamp(wf["weakest_test_end"], tz="UTC")
-    weak_jumps = jumps_starting_in(test_jumps, weak_start, weak_end)
-    print(
-        f"Weakest week is fold {wf['weakest_fold']} "
-        f"({wf['weakest_train_until']} to {wf['weakest_test_end']}): "
-        f"{wf['weakest_rate']:.1%} on {wf['weakest_faults']} faults, "
-        f"{wf['weakest_items_per_day']} items/day vs budget {wf['budget_k']}. "
-        f"Other folds average {wf['other_mean_items_per_day']} items/day. "
-        f"Jumps starting that week: {weak_jumps}."
-    )
-    if wf["weakest_items_per_day"] < wf["budget_k"]:
-        print(
-            "The budget was not full that week. Do not say K ran out; "
-            "fewer qualifying jumps were shown."
-        )
+    weak = walk.loc[walk["queue"] == "proposed"].sort_values("detection_rate").iloc[0]
+    print(f"Weakest fold {int(weak['fold'])} ({weak['train_until']} to {weak['test_end']}): "
+          f"{weak['detection_rate']:.1%}; faults with metric data {weak['faults_with_metric_data']:.0%}.")
 
-    out = Path("results")
-    out.mkdir(exist_ok=True)
     headline = {
-        **wf,
+        "folds": ci.n,
+        "mean": round(ci.mean, 4),
+        "ci_low": round(ci.low, 4),
+        "ci_high": round(ci.high, 4),
+        "tuned_mean": round(ci_tuned.mean, 4),
+        "delta_mean": round(float(np.mean(delta)), 4),
+        "wins_vs_delta": vs_delta.wins,
+        "sign_n_vs_delta": vs_delta.n,
+        "sign_p_vs_delta": vs_delta.p_value,
+        "tuned_wins_vs_delta": tuned_vs_delta.wins,
+        "tuned_sign_n_vs_delta": tuned_vs_delta.n,
+        "tuned_sign_p_vs_delta": tuned_vs_delta.p_value,
         "test_faults": n,
         **{f"signal_{k}": v for k, v in signals.items()},
+        "faults_with_metric_data": len(with_data),
+        "jump_rate_with_data": round(caught_with_data, 4),
+        "faults_in_gaps": len(in_gap),
+        "gap_items": len(gaps),
+        "chance_overlap": round(chance[0], 4),
+        "oracle_ceiling_k20": round(ceiling, 4),
+        "confirm_minutes_median": round(float(np.median(delays)), 2),
+        "confirm_minutes_p90": round(float(np.percentile(delays, 90)), 2),
+        "weakest_fold": int(weak["fold"]),
+        "weakest_rate": round(float(weak["detection_rate"]), 4),
+        "weakest_with_data": float(weak["faults_with_metric_data"]),
         "injection_tags": ";".join(f"{k}:{v}" for k, v in tags.items()),
-        "weakest_jumps": weak_jumps,
     }
+    out = Path("results")
     pd.DataFrame([headline]).to_csv(out / "stats_gaia.csv", index=False)
-    pd.DataFrame(service_rows).to_csv(out / "stats_by_service.csv", index=False)
+    pd.DataFrame(rows).to_csv(out / "stats_by_service.csv", index=False)
     print(f"Wrote {out / 'stats_gaia.csv'} and {out / 'stats_by_service.csv'}")
 
 

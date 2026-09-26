@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,8 @@ from fastapi.testclient import TestClient
 
 # Ensure imports resolve when pytest runs from app/
 os.environ.setdefault("SHADOW_MODE", "1")
-os.environ["QUEUE_DB"] = str(Path(__file__).resolve().parent / "_tmp_queue.db")
+# Import-time store lives in the OS temp folder, not in the repo; each test gets its own.
+os.environ["QUEUE_DB"] = str(Path(tempfile.mkdtemp()) / "import_queue.db")
 
 from product.app import app  # noqa: E402
 from product.store import QueueStore  # noqa: E402
@@ -90,8 +92,10 @@ def test_feedback_becomes_real_labels_for_the_next_upload(client):
         files={"alerts_file": ("alerts.csv", csv_text, "text/csv")},
         data={"budget_k": "20"},
     )
-    # No labels and no severe alerts: nothing to learn from yet.
-    assert first.status_code == 400
+    # No labels yet: the batch is still queued, on rules only (no model is trained).
+    assert first.status_code == 200, first.text
+    assert first.json()["meta"]["model_used"] == "rules_only"
+    assert first.json()["meta"]["alert_count"] == len(rows)
 
     sample = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20}).json()
     items = client.get("/queue", params={"job_id": sample["job_id"]}).json()["items"]
@@ -132,8 +136,10 @@ def test_small_live_batch_is_scored_with_the_saved_model(client):
         {"timestamp": "2026-02-01T10:00:00Z", "source": "web-01", "severity": "warning", "message": "slow"},
         {"timestamp": "2026-02-01T10:01:00Z", "source": "db-01", "severity": "error", "message": "timeout"},
     ]
-    # Too few to train on, and nothing saved yet.
-    assert client.post("/ingest/alerts", json={"alerts": few, "score_now": True}).status_code == 400
+    # Too few to train on and nothing saved yet: rules only, nothing is lost.
+    early = client.post("/ingest/alerts", json={"alerts": few, "score_now": True})
+    assert early.status_code == 200, early.text
+    assert early.json()["job"]["meta"]["model_used"] == "rules_only"
 
     trained = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20}).json()
     assert trained["meta"]["model_used"] == "trained"
@@ -200,9 +206,11 @@ def test_jumps_are_queue_items_capped_per_day(tmp_path):
 
     t0 = pd.Timestamp("2026-01-10 08:00", tz="UTC")
     spikes = [
-        Spike("web", "webservice1", t0, t0 + pd.Timedelta(minutes=5), 1.2e9),
-        Spike("db", "dbservice1", t0 + pd.Timedelta(hours=1), t0 + pd.Timedelta(hours=1, minutes=3), 0.7e9),
-        Spike("db", "dbservice1", t0 + pd.Timedelta(hours=2), t0 + pd.Timedelta(hours=2, minutes=3), 0.6e9),
+        Spike("web", "webservice1", t0, t0 + pd.Timedelta(minutes=5), 1.4e9, rise_at_confirm=1.2e9),
+        Spike("db", "dbservice1", t0 + pd.Timedelta(hours=1), t0 + pd.Timedelta(hours=1, minutes=3), 0.7e9,
+              rise_at_confirm=0.7e9),
+        Spike("db", "dbservice1", t0 + pd.Timedelta(hours=2), t0 + pd.Timedelta(hours=2, minutes=3), 3.0e9,
+              rise_at_confirm=0.6e9),
     ]
     alert = Alert("a1", t0 + pd.Timedelta(minutes=2), "webservice1", "error", "error", "oom")
     items = _jump_items(spikes, [alert], [Decision("a1", Action.ESCALATE, 0.9, "")])
@@ -224,6 +232,7 @@ def test_jumps_are_queue_items_capped_per_day(tmp_path):
     )
     shown, total = store.get_jumps(job_id, per_day=2)
     assert total == 3
+    # First confirmed first; the later, bigger peak does not jump the queue.
     assert [j["rise_gb"] for j in shown] == [1.2, 0.7]
 
 
@@ -292,3 +301,39 @@ def test_ingest_webhook_score_now(client):
     q = client.get("/queue", params={"job_id": job_id})
     assert q.status_code == 200
     assert q.json()["count"] > 0
+
+
+def test_every_alert_of_a_batch_is_in_the_queue(client):
+    """Regression: the early (training) half of a batch used to be dropped."""
+    import pandas as pd
+
+    job = client.post("/jobs/run", json={"mode": "sample", "budget_k": 20}).json()
+    from product.pipeline import _default_paths
+
+    raw = pd.read_csv(_default_paths()["sample_dir"] / "alerts.csv")
+    assert job["meta"]["alert_count"] == len(raw)
+    assert len(job["days"]) == pd.to_datetime(raw["timestamp"]).dt.date.nunique()
+
+
+def test_failed_scoring_keeps_the_ingest_buffer(client, monkeypatch):
+    import product.app as app_module
+
+    def boom(*args, **kwargs):
+        raise ValueError("scoring failed")
+
+    monkeypatch.setattr(app_module, "run_job", boom)
+    row = {"timestamp": "2026-02-01T10:00:00Z", "source": "web-01", "severity": "error", "message": "x"}
+    res = client.post("/ingest/alerts", json={"alerts": [row], "score_now": True})
+    assert res.status_code == 400
+    assert app_module.STORE.buffer_stats()["buffered_batches"] == 1
+
+
+def test_ingest_token(client, monkeypatch):
+    monkeypatch.setenv("INGEST_TOKEN", "s3cret")
+    row = {"timestamp": "2026-02-01T10:00:00Z", "source": "web-01", "severity": "error", "message": "x"}
+    assert client.post("/ingest/alerts", json={"alerts": [row]}).status_code == 401
+    ok = client.post("/ingest/alerts", json={"alerts": [row]}, headers={"Authorization": "Bearer s3cret"})
+    assert ok.status_code == 200
+    # The token opens only the ingest paths.
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    assert client.get("/queue", headers={"Authorization": "Bearer s3cret"}).status_code == 401

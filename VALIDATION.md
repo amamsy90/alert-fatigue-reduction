@@ -1,84 +1,67 @@
 # Training, testing, and validation
 
-This is the record a reviewer should use. Every headline number has a script and a file. The product (web app, PagerDuty) is not part of this validation.
+This is the record a reviewer should use. Every headline number has a script and a file. The web app and connectors are not part of this validation.
 
-**Data:** GAIA MicroSS, July–August 2021. 34,863 alerts, 1,367 injected memory faults.  
-**Split:** first 7 days train (3,630 alerts, 141 faults). Later 55 days test (31,233 alerts, 1,226 faults). No shuffle.
+**Data:** GAIA MicroSS, July–August 2021. 34,863 log lines, 1,367 injected faults (all `memory_anomalies`, 1 GB for 600 s).
+**Split:** first 7 days train. Later 55 days test (**1,223 faults**). One split time for alerts, faults and metrics. No shuffle.
 
 ## Protocol
 
 1. **Labels** come from injected faults (service + time window), not from alert severity.
-2. **Clocks:** log lines are China time, converted to UTC on load (`src/gaia_loader.py`). Memory csv timestamps are UTC.
-3. **Jump size (0.5 GB)** is chosen on **week 1 only** (`run_memory.py --sweep`). The test period is not used to pick it.
-4. **Classifier** is logistic regression, miss cost = 10× a false alarm. The escalate threshold is the week-1 score that minimizes cost.
-5. **Queue:** one daily budget K. Biggest jumps first; leftover slots go to escalated alerts. A fault is caught if a shown jump overlaps it **or** a surfaced alert carries its id.
-6. **Honest MTTA:** a jump is confirmed at its second point, about **two minutes**, not the 0.2 minutes the script prints.
+2. **Clocks:** log lines are China time, converted to UTC on load. Metric timestamps are UTC.
+3. **Causal queue** (`src/queue.py`): an item is shown when a live system could know it — a jump at its confirming (2nd) point, a gap 10 minutes after the last point, an alert at its timestamp. At most K a day, first come first served. Alerts may use at most 25% of K. No item is chosen using a later point, a jump's end, or its final peak.
+4. **Learned on the training window only:** jump size 0.5 GB (`run_memory.py --sweep`), jump confirmation threshold, classifier and its escalation threshold, static-rule p99.
+5. **Caught:** a shown jump on the fault's service overlaps the fault window, or a shown alert carries its fault id. Gap items never count as catches.
+6. **Baselines** are rules a team would already run, scored with the same queue: log severity + exact duplicates; `memory > week-1 p99`; `delta(mem[5m]) > 0.5 GB`.
 
-## What was trained
-
-| Piece | Trained on | Frozen before test? |
-|---|---|---|
-| Jump size 0.5 GB | Week-1 fault overlap | Yes |
-| Classifier weights | Week-1 alerts + week-1 jumps | Yes (main split) |
-| Cost threshold | Week-1 scores | Yes (main split) |
-| Jump rule itself | No fit (rise over own 15-minute median) | Yes |
-
-Walk-forward (below) **retrains** the classifier on all days before each later week. The jump size stays 0.5 GB.
-
-## Main test (one split, 1,226 faults)
+## Main test
 
 Script: `python run_queue_eval.py` → `app/results/queue_eval_gaia.csv`
 
-| Queue at K=20 | Faults caught | Items / day | False / day |
+| Queue at K=20 | Caught | Items / day | False / day |
 |---|---|---|---|
-| Severity baseline | 0.0% | 0.8 | 0.8 |
-| Learned alerts only | 12.9% | 5.8 | 0.6 |
-| Shared list, jumps first | **72.8%** | 17.8 | 1.3 |
+| logs_severity | 0.0% | 0.8 | 0.8 |
+| static_p99 | 57.2% | 16.0 | 3.0 |
+| delta_5m (fair baseline) | 68.9% | 17.4 | 2.1 |
+| jumps_online | 67.8% | 17.5 | 2.4 |
+| **jumps_tuned** | **72.6%** | 17.1 | **1.0** |
+| **proposed** (jumps + gaps + alerts) | **71.0%** | 17.6 | 1.4 |
+| jumps_hindsight (old headline, not causal) | 72.9% | 17.5 | 1.3 |
 
-Same queue at other budgets: 19.2% (K=5), 38.8% (K=10), 86.0% (K=50).
+Oracle ceiling at K=20: **84.9%** (22 faults a day > 20 slots). Proposed at K=5 / 10 / 50: 19.5% / 38.6% / 85.9%.
 
-Memory jumps alone (no budget): `python run_memory.py --rule jump` → `memory_gaia_jump.csv`  
-**86.1%** of test faults overlap a jump (1,056 / 1,226); 256 jumps have no fault. Old rule (mean + 3σ): 53.8%.
-
-## Walk-forward (does the result hold later?)
+## Walk-forward
 
 Script: `python run_walkforward.py` → `app/results/walkforward_gaia.csv`
 
-Train on everything before the fold, score the next 7 days, K=20, jumps first.
+Everything learned is re-learned before each later week; the week is scored once, K=20.
 
-| Fold | Test week | Faults | Baseline | Queue |
-|---|---|---|---|---|
-| 1 | 8–15 Jul | 161 | 0% | 84.5% |
-| 2 | 15–22 Jul | 134 | 0% | 79.8% |
-| 3 | 22–29 Jul | 162 | 0% | 77.8% |
-| 4 | 29 Jul–5 Aug | 163 | 0% | 68.7% |
-| 5 | 5–12 Aug | 162 | 0% | 71.6% |
-| 6 | 12–19 Aug | 139 | 0% | 78.4% |
-| 7 | 19–26 Aug | 173 | 0% | 52.6% |
-| 8 | 26–31 Aug | 129 | 0% | 84.5% |
+| Fold | Test week | Faults | With metric data | delta_5m | jumps_tuned | proposed |
+|---|---|---|---|---|---|---|
+| 1 | 8–15 Jul | 161 | 100% | 77.6% | 84.5% | 83.2% |
+| 2 | 15–22 Jul | 134 | 91% | 73.9% | 81.3% | 81.3% |
+| 3 | 22–29 Jul | 162 | 94% | 72.2% | 77.2% | 72.2% |
+| 4 | 29 Jul–5 Aug | 163 | 82% | 67.5% | 69.3% | 67.5% |
+| 5 | 5–12 Aug | 162 | 84% | 69.1% | 71.6% | 71.0% |
+| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 77.0% |
+| 7 | 19–26 Aug | 173 | 61% | 51.4% | 52.0% | 52.0% |
+| 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 83.0% |
 
-**Mean 74.7%** (95% bootstrap CI **67.3–80.8%**; min 52.6%, max 84.5%). Close to the 72.8% one-shot test. Queue > baseline in **8/8** folds (p = 0.0039). Fold 7 is weaker (52.6%, 11.8 items/day vs K=20 — the budget was not full). The method is not equally strong every week. Baseline stays 0% in every fold.
+Means: delta_5m **70.7%**, jumps_tuned **74.8%** (8/8 wins, p = 0.0039), proposed **73.4%** (95% CI 66.2–79.7%; 6 wins, 2 ties, p = 0.016). Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
 
-## Why 95% is the wrong target
+## Signals and checks
 
 Script: `python run_stats.py` → `app/results/stats_gaia.csv`, `stats_by_service.csv`
 
-Of 1,226 test faults: **70.9%** have a jump and no log; **15.1%** have both; **2.8%** have a log only; **11.3%** have neither. All 1,367 injections in the folder are `memory_anomalies`. Jump overlap is 81–91% on every service; log rates are ~0–3% except the two mobile services.
+- Test faults: 71.0% jump only, 15.1% log and jump, 2.8% log only, 10.8% no metric data, 0.3% silent with data.
+- Jump overlap where metric data exists: **99.6%** (1,053 / 1,057).
+- Chance overlap (jumps shifted 1–6 h): **2.6%**.
+- Fault start → jump confirmed: median **0.72 min**, p90 0.93 min.
+- Faults starting inside a monitoring gap: 170; 23 gap items in the test period.
 
-## What the older scripts measure
+## Older scripts (alerts only)
 
-These are **alerts only**. They do not count a silent memory jump as a catch. Do not quote them as the system result.
-
-| Script | File | What it is |
-|---|---|---|
-| `run_m1.py` | `m1_gaia.csv` | Baseline only |
-| `run_m2.py` | `m2_gaia.csv` | Classifier vs baseline (logs) |
-| `run_m4.py` | `m4_gaia.csv` | Cost-threshold policy (logs) |
-| `run_stretch.py` | `stretch_gaia.csv` | Ask-a-person on logs only |
-
-## Original 95% targets
-
-The proposal listed 95% recall and 95% detection at K=20. Those assumed every fault leaves a log alert. On this data most do not (**70.9%** have a jump and no log). **72.8% at K=20** and **86.1% jump overlap** are the measured figures. At K=50 the queue reaches 86.0%, the jump-rule ceiling. The mark is the win over baseline plus the walk-forward interval, not 95%.
+`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretch.py`, `run_memory_clf.py` score log alerts only and do not count a jump as a catch. Do not quote them as the system result.
 
 ## Reproduce
 
@@ -86,7 +69,6 @@ The proposal listed 95% recall and 95% detection at K=20. Those assumed every fa
 cd app
 $env:PYTHONPATH = (Get-Location).Path
 python -m pytest -q
-python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --rule jump
 python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --sweep
 python run_queue_eval.py
 python run_walkforward.py
@@ -94,4 +76,4 @@ python run_stats.py
 python run_validate.py
 ```
 
-`run_validate.py` fails if a headline number in the result csv files no longer matches this document.
+`run_validate.py` fails if a headline number in the result files no longer matches this document.

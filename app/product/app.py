@@ -29,6 +29,7 @@ app = FastAPI(
 )
 
 OPEN_PATHS = {"/health"}
+INGEST_PATHS = {"/ingest/alerts", "/ingest/alertmanager"}
 
 
 def _auth_settings() -> tuple[str, str] | None:
@@ -52,8 +53,25 @@ def _credentials_ok(header: str | None, user: str, password: str) -> bool:
     return user_ok and password_ok
 
 
+def _ingest_token_ok(request: Request) -> bool | None:
+    """None when INGEST_TOKEN is unset. Accepts `Authorization: Bearer <token>`
+    (Alertmanager `http_config.authorization`) or `?token=<token>`."""
+    token = os.environ.get("INGEST_TOKEN")
+    if not token:
+        return None
+    header = request.headers.get("authorization") or ""
+    given = header[7:].strip() if header.lower().startswith("bearer ") else request.query_params.get("token", "")
+    return secrets.compare_digest(given.encode(), token.encode())
+
+
 @app.middleware("http")
 async def require_login(request: Request, call_next):
+    if request.url.path in INGEST_PATHS:
+        ok = _ingest_token_ok(request)
+        if ok is False:
+            return Response("Bad ingest token", status_code=401)
+        if ok is True:
+            return await call_next(request)
     settings = _auth_settings()
     if settings is None or request.url.path in OPEN_PATHS:
         return await call_next(request)
@@ -108,6 +126,7 @@ def _connector_status() -> dict:
     return {
         "shadow_mode": shadow,
         "login_required": _auth_settings() is not None,
+        "ingest_token_required": bool(os.environ.get("INGEST_TOKEN")),
         "webhook": {
             "ready": True,
             "path": "/ingest/alertmanager",
@@ -151,7 +170,7 @@ def connectors():
 def jobs_run(body: RunRequest):
     try:
         if body.mode == "ingest":
-            rows = STORE.drain_buffer()
+            rows, last_id = STORE.peek_buffer()
             if not rows:
                 raise HTTPException(400, "Ingest buffer is empty")
             result = run_job(
@@ -161,6 +180,7 @@ def jobs_run(body: RunRequest):
                 shadow_mode=body.shadow_mode,
                 alert_rows=rows,
             )
+            STORE.ack_buffer(last_id)  # only after the job was saved
         else:
             result = run_job(
                 STORE,
@@ -298,16 +318,17 @@ async def ingest_alerts(request: Request):
     buffered = STORE.buffer_alerts(rows)
     response: dict = {"buffered_batches": buffered, "received": len(rows)}
     if score_now:
-        drained = STORE.drain_buffer()
+        rows_now, last_id = STORE.peek_buffer()
         try:
             result = run_job(
                 STORE,
                 mode="ingest",
                 budget_k=budget_k,
-                alert_rows=drained,
+                alert_rows=rows_now,
             )
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 — rows stay buffered for the next try
+            raise HTTPException(400, f"{exc} (alerts kept in the buffer)") from exc
+        STORE.ack_buffer(last_id)
         response["job"] = result
     return response
 

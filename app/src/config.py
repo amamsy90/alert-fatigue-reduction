@@ -35,5 +35,22 @@ class Config:
     # Memory jumps: a point is hot when it rises this far above its own recent median.
     memory_jump_bytes: float = 0.5e9
     memory_jump_window_minutes: int = 15
+    # "absolute": rise > memory_jump_bytes. "relative": rise > memory_jump_ratio * median
+    # (use relative for metrics that are not container memory in bytes).
+    memory_jump_mode: str = "absolute"
+    memory_jump_ratio: float = 0.3
+    # Causal queue: a confirmed jump is shown only if its rise at confirmation is at
+    # least this big. None = use every jump; tuned on the training window by
+    # src.queue.tune_confirm_threshold.
+    confirm_min_rise: float | None = None
+    # Share of the daily budget log alerts may use (jumps and gaps are never blocked
+    # by alerts). 0.25 of K=20 is 5 alert slots.
+    alert_share: float = 0.25
+    # A series with no point for this long is a monitoring gap (one queue item).
+    gap_minutes: int = 10
+    # Gaps starting within this many minutes on different services are one item.
+    gap_group_minutes: int = 10
+    # Hours added to UTC before cutting days (e.g. 8 for a China-time on-call day).
+    day_offset_hours: float = 0.0
     # Reproducibility
     random_seed: int = 42

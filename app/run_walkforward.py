@@ -1,9 +1,9 @@
-"""Walk-forward check: retrain on everything before each later week, then score that week.
+"""Walk-forward: retrain on everything before each later week, then score that week.
 
-Week 1 (days 0-7) is only used to train. Each later 7-day block is scored once,
-then added to the training pool. The jump size stays 0.5 GB (chosen on week 1).
-The headline split (train week 1, test all later days at once) is still the
-main result. This script asks whether that result was a lucky later period.
+Per fold, everything learned is re-learned from the past only: the classifier,
+its cost threshold, and the jump confirmation threshold. Every system is scored
+with the same causal queue. The fair comparison is `proposed` vs `delta_5m`
+(a plain Prometheus rate rule), not vs the log-severity rule (always 0% here).
 
 Usage:
     python run_walkforward.py
@@ -14,98 +14,49 @@ from pathlib import Path
 
 import pandas as pd
 
-from run_queue_eval import (
-    _alert_items,
-    _jump_items,
-    _score,
-    _shared,
-)
-from src.baseline import baseline_decisions
-from src.classifier import AlertClassifier
 from src.config import Config
-from src.eval_stats import exclusive_window_days
-from src.features import build_feature_frame
-from src.gaia_loader import load_run_folder
-from src.memory_spikes import detect_jumps, load_metric_folder
-from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
-
-
-def _in_window(items, start, end):
-    return [x for x in items if start <= _when(x) < end]
-
-
-def _when(item):
-    return getattr(item, "timestamp", None) or item.start
+from src.experiment import faults_with_metric_data, load_gaia, run_window, score_window
 
 
 def main() -> None:
     config = Config(budget_k=20)
-    alerts, faults = load_run_folder("data/gaia_raw/run/run")
-    metrics = load_metric_folder("data/gaia_metrics")
-    origin = min(a.timestamp for a in alerts)
-    last = max(a.timestamp for a in alerts)
-    fold_days = 7
-    rows = []
-    fold = 0
-    test_start = origin + pd.Timedelta(days=config.split_day)
-    while test_start < last:
-        test_end = min(test_start + pd.Timedelta(days=fold_days), last + pd.Timedelta(seconds=1))
-        train_alerts = [a for a in alerts if a.timestamp < test_start]
-        test_alerts = _in_window(alerts, test_start, test_end)
-        test_faults = _in_window(faults, test_start, test_end)
-        if len(test_alerts) < 10 or len(test_faults) < 5:
+    data = load_gaia()
+    end = data.last + pd.Timedelta(seconds=1)
+    test_start = data.origin + pd.Timedelta(days=config.split_day)
+    rows, fold = [], 0
+    while test_start < end:
+        test_end = min(test_start + pd.Timedelta(days=7), end)
+        if sum(1 for f in data.faults if test_start <= f.start < test_end) < 5:
             break
-        if len({a.fault_id is not None for a in train_alerts}) < 2:
-            break
-        train_jumps = detect_jumps(metrics, config, detect_until=test_start)
-        test_jumps = detect_jumps(metrics, config, detect_from=test_start, detect_until=test_end)
-        model = AlertClassifier(config).fit(train_alerts, train_jumps)
-        threshold = tune_threshold(
-            train_alerts, model.predict_proba(train_alerts, train_jumps), config
-        )
-        proba = model.predict_proba(test_alerts, test_jumps)
-        in_jump = [
-            bool(v)
-            for v in build_feature_frame(test_alerts, config, test_jumps)["during_memory_spike"]
-        ]
-        n_days = exclusive_window_days(test_start, test_end)
-        learned = _alert_items(
-            test_alerts,
-            spike_review_decisions(
-                test_alerts, proba, config, threshold, bayes_threshold(config), in_jump
-            ),
-        )
-        shown = _shared(_jump_items(test_jumps), learned, config.budget_k)
-        base = _alert_items(test_alerts, baseline_decisions(test_alerts, config))
-        row_sys = _score("shared_jumps_1st", config.budget_k, shown, test_faults, n_days)
-        row_base = _score("baseline", config.budget_k, base, test_faults, n_days)
+        run = run_window(data, test_start, test_end, config)
         fold += 1
-        for row, name in ((row_sys, "shared_jumps_1st"), (row_base, "baseline")):
-            row["fold"] = fold
-            row["train_until"] = test_start.date().isoformat()
-            row["test_end"] = test_end.date().isoformat()
-            row["queue"] = name
-            row["threshold"] = round(threshold, 3)
+        with_data = faults_with_metric_data(run.test_faults, data.metrics)
+        for row in score_window(run, config):
+            row.update(
+                fold=fold,
+                train_until=test_start.date().isoformat(),
+                test_end=test_end.date().isoformat(),
+                faults_with_metric_data=round(len(with_data) / len(run.test_faults), 4),
+            )
             rows.append(row)
+        by = {r["queue"]: r for r in rows if r["fold"] == fold}
         print(
-            f"Fold {fold} train < {test_start.date()}  test {test_start.date()}–{test_end.date()}  "
-            f"faults {row_sys['faults']}  "
-            f"baseline {row_base['detection_rate']:.1%}  "
-            f"queue {row_sys['detection_rate']:.1%}  "
-            f"false/day {row_sys['false_items_per_day']}"
+            f"Fold {fold} {test_start.date()}–{test_end.date()}  faults {by['proposed']['faults']}  "
+            f"with data {len(with_data) / len(run.test_faults):.0%}  "
+            f"delta_5m {by['delta_5m']['detection_rate']:.1%}  "
+            f"jumps_tuned {by['jumps_tuned']['detection_rate']:.1%}  "
+            f"proposed {by['proposed']['detection_rate']:.1%}  "
+            f"(thr {run.confirm_threshold / 1e9 if run.confirm_threshold else 0:.2f} GB)"
         )
         test_start = test_end
 
     out = Path("results") / "walkforward_gaia.csv"
-    pd.DataFrame(rows).to_csv(out, index=False)
-    sys_rows = [r for r in rows if r["queue"] == "shared_jumps_1st"]
-    if sys_rows:
-        rates = [r["detection_rate"] for r in sys_rows]
-        print(
-            f"Walk-forward mean detection {sum(rates) / len(rates):.1%} "
-            f"(min {min(rates):.1%}, max {max(rates):.1%}) over {len(sys_rows)} folds. "
-            f"Wrote {out}"
-        )
+    out.parent.mkdir(exist_ok=True)
+    frame = pd.DataFrame(rows)
+    frame.to_csv(out, index=False)
+    means = frame.groupby("queue")["detection_rate"].mean()
+    print("Mean over folds: " + ", ".join(f"{q} {means[q]:.1%}" for q in means.index))
+    print(f"Wrote {out}")
 
 
 if __name__ == "__main__":

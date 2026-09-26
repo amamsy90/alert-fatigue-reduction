@@ -1,29 +1,33 @@
-"""Run classify + memory spikes + review policy into queue decisions."""
+"""Score a batch into the on-call queue: metric jumps, monitoring gaps, log alerts.
+
+The queue is causal (src/queue.py): items appear when a live system could know
+them, first come first served, at most K a day. With no labels it runs on rules
+only (metric jumps + gaps + alert severity); with labels or on-call marks the
+alert classifier takes over the alert share of the budget.
+"""
 from __future__ import annotations
 
 import os
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pandas as pd
 
+from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
 from src.config import Config
-from src.entities import Action, Alert, Decision, Fault
+from src.entities import SURFACED_ACTIONS, Action, Alert, Decision, Fault
 from src.features import build_feature_frame
 from src.gaia_loader import load_run_folder
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults, time_split
-from src.memory_spikes import Spike, detect_jumps, load_metric_folder
-from src.policy import (
-    bayes_threshold,
-    share_budget_with_jumps,
-    spike_review_decisions,
-    tune_threshold,
-)
+from src.memory_spikes import Spike, detect_gaps, detect_jumps, load_metric_folder
+from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
+from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_threshold
 from src.sample_data import generate
 
 from .model_store import SavedModel, load_model, save_model
+from .settings import config_from_env
 from .store import QueueStore
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -88,31 +92,42 @@ def _spike_flags(alerts: list[Alert], spikes: list, config: Config) -> list[bool
 
 
 def _jump_items(
-    spikes: list[Spike], alerts: list[Alert], decisions: list[Decision]
+    spikes: list[Spike],
+    alerts: list[Alert],
+    decisions: list[Decision],
+    shown: set[int] | None = None,
 ) -> list[dict]:
-    """One queue item per memory jump, with the alerts that fell inside it.
+    """One row per jump or gap, with the alerts that fell inside it.
 
-    A jump with no alerts inside still matters: it may be a fault the logs missed.
+    `shown` holds id() of the spikes the causal queue showed; the rest are kept
+    (total counts, feedback) but marked shown=False. A jump with no alerts inside
+    still matters: it may be a fault the logs missed.
     """
     by_service: dict[str, list[tuple[Alert, Decision]]] = defaultdict(list)
     for alert, decision in zip(alerts, decisions):
         by_service[alert.source].append((alert, decision))
     items = []
     for spike in spikes:
+        services = spike.service.split(",")
         inside = [
             decision
-            for alert, decision in by_service.get(spike.service, [])
+            for service in services
+            for alert, decision in by_service.get(service, [])
             if spike.start <= alert.timestamp <= spike.end
         ]
         items.append(
             {
-                "day": spike.start.normalize().date().isoformat(),
+                "day": spike.shown_at.normalize().date().isoformat(),
                 "service": spike.service,
                 "start": spike.start.isoformat(),
                 "end": spike.end.isoformat(),
-                "rise_gb": round(spike.peak_rise / 1e9, 3),
+                "confirm": spike.shown_at.isoformat(),
+                "kind": spike.kind,
+                "rise_gb": round(spike.rise_at_confirm / 1e9, 3),
+                "rise": spike.rise_at_confirm,  # metric units (relative mode is not bytes)
                 "alerts_inside": len(inside),
                 "escalated_inside": sum(d.action == Action.ESCALATE for d in inside),
+                "shown": shown is None or id(spike) in shown,
             }
         )
     return items
@@ -185,6 +200,8 @@ class ScoredQueue:
     model: AlertClassifier | None = None
     train_alerts: int = 0
     training: dict | None = None
+    # Jumps and gaps the queue showed (what PagerDuty would page).
+    shown_spikes: list | None = None
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -219,6 +236,10 @@ def _class_report(alerts: list[Alert], proba, threshold: float) -> dict:
     }
 
 
+def _rules_only_training(note: str) -> dict:
+    return {"model_used": "rules_only", "note": note, "train": None, "test": None, "threshold": None}
+
+
 def score_alerts(
     alerts: list[Alert],
     *,
@@ -226,121 +247,131 @@ def score_alerts(
     budget_k: int = 20,
     shadow_mode: bool = True,
     saved: SavedModel | None = None,
+    config: Config | None = None,
+    faults: list[Fault] | None = None,
 ) -> ScoredQueue:
-    """Fit on the early window and score the later one; fall back to `saved`.
+    """Score EVERY alert in the batch and build the day-by-day causal queue.
 
-    The saved model is used when this batch cannot be trained on (too few alerts
-    or one label class), or when it could only be trained on the severity
-    stand-in while the saved model learned from real or confirmed labels.
+    Alert scores come from, in order of preference: a model trained on this
+    batch's labels (fit on the early window, reported on the later one), the
+    last saved model, or the severity rule (rules-only mode, no labels needed).
+    Metric jumps and gaps never need labels. `faults` (e.g. GAIA ground truth)
+    lets the jump confirmation threshold be tuned on the early window.
     """
-    config = Config(budget_k=budget_k)
+    config = config or config_from_env(budget_k)
     has_metrics = metrics is not None and not metrics.empty
+    jumps = detect_jumps(metrics, config) if has_metrics else []
+    gaps = detect_gaps(metrics, config) if has_metrics else []
+
     trained = _train(alerts, metrics if has_metrics else None, config)
-    prefer_saved = saved is not None and saved.label_source != "weak_severity" and (
-        trained is None or trained["label_source"] == "weak_severity"
-    )
-    if prefer_saved:
-        score_alerts_list = alerts
-        # Memory values must be bytes: the jump size is an absolute rise.
-        score_spikes = detect_jumps(metrics, config) if has_metrics else []
-        model = saved.model
-        escalate_threshold = saved.escalate_threshold
-        review_threshold = saved.review_threshold
-        label_source = saved.label_source
-        model_used, train_count = "saved", saved.train_alerts
-        training = {
-            "model_used": "saved",
-            "note": "This batch was too small or weakly labelled, so the last saved model scored it.",
-            "train": None,
-            "test": None,
-            "threshold": escalate_threshold,
-        }
-    elif trained is not None:
-        score_alerts_list = trained["score_alerts"]
-        score_spikes = trained["score_spikes"]
+    prefer_saved = saved is not None and saved.label_source != "weak_severity" and trained is None
+    if trained is not None:
         model = trained["model"]
         escalate_threshold = trained["escalate_threshold"]
         review_threshold = trained["review_threshold"]
         label_source = trained["label_source"]
         model_used, train_count = "trained", trained["train_alerts"]
         training = trained["training"]
+        split_at = trained["split_at"]
+    elif prefer_saved:
+        model = saved.model
+        escalate_threshold = saved.escalate_threshold
+        review_threshold = saved.review_threshold
+        label_source = saved.label_source
+        model_used, train_count = "saved", saved.train_alerts
+        training = {"model_used": "saved", "note": "This batch had too few labels, so the last saved model scored it.",
+                    "threshold": round(float(escalate_threshold), 4), "train": None, "test": None}
+        split_at = None
     else:
-        raise ValueError(
-            "Cannot train on this batch (need 10+ alerts with both fault-like and "
-            "noise examples) and no saved model exists yet"
+        model = None
+        escalate_threshold = review_threshold = 1.0
+        label_source, model_used, train_count = "none", "rules_only", 0
+        training = _rules_only_training(
+            "No labels yet: log alerts are ranked by severity. Metric jumps and gaps do not need labels. "
+            "Mark items Real / Noise to train a model."
         )
+        split_at = None
 
-    proba = model.predict_proba(score_alerts_list, score_spikes)
-    flags = _spike_flags(score_alerts_list, score_spikes, config)
-    decisions = spike_review_decisions(
-        score_alerts_list, proba, config, escalate_threshold, review_threshold, flags
+    flags = [bool(v) for v in build_feature_frame(alerts, config, jumps)["during_memory_spike"]] if alerts else []
+    if model is not None and alerts:
+        proba = model.predict_proba(alerts, jumps)
+        decisions = spike_review_decisions(alerts, proba, config, escalate_threshold, review_threshold, flags)
+        if model_used == "saved":
+            training["test"] = _class_report(alerts, proba, escalate_threshold)
+    else:
+        decisions = baseline_decisions(alerts, config)
+
+    if config.confirm_min_rise is None and faults and jumps and split_at is not None:
+        early = [f for f in faults if f.start < split_at]
+        thr = tune_confirm_threshold([j for j in jumps if j.shown_at < split_at], early, config)
+        config = replace(config, confirm_min_rise=thr)
+
+    candidates: list[QueueItem] = (
+        spike_items(jumps, config) + spike_items(gaps, config) + alert_items(alerts, decisions)
     )
-    jumps_per_day: dict[pd.Timestamp, int] = defaultdict(int)
-    for spike in score_spikes:
-        jumps_per_day[spike.start.normalize()] += 1
-    decisions = share_budget_with_jumps(score_alerts_list, decisions, jumps_per_day, config)
+    shown = build_queue(candidates, config)
+    shown_alerts = {id(item.payload): item for item in shown if item.kind == "alert"}
+    final: list[Decision] = []
+    for alert, decision in zip(alerts, decisions):
+        item = shown_alerts.get(id(alert))
+        if decision.action in SURFACED_ACTIONS and item is None:
+            final.append(Decision(decision.alert_id, Action.SUPPRESS, decision.confidence, "daily budget used"))
+        elif item is not None and item.attached:
+            final.append(Decision(decision.alert_id, decision.action, decision.confidence,
+                                  f"{decision.reason}; inside a shown memory jump"))
+        else:
+            final.append(decision)
+    shown_spikes = {id(item.payload) for item in shown if item.kind != "alert"}
     _ = shadow_mode  # recorded by caller in the store
-    if model_used == "saved":
-        training = {
-            "model_used": "saved",
-            "note": "This batch was too small or weakly labelled, so the last saved model scored it.",
-            "threshold": round(float(escalate_threshold), 4),
-            "train": None,
-            "test": _class_report(score_alerts_list, proba, escalate_threshold),
-        }
     return ScoredQueue(
-        alerts=score_alerts_list,
-        decisions=decisions,
+        alerts=alerts,
+        decisions=final,
         escalate_threshold=escalate_threshold,
         review_threshold=review_threshold,
         spike_flags=flags,
-        jumps=_jump_items(score_spikes, score_alerts_list, decisions),
+        jumps=_jump_items(jumps + gaps, alerts, final, shown_spikes),
         label_source=label_source,
         model_used=model_used,
         model=model if model_used == "trained" else None,
         train_alerts=train_count,
         training=training,
+        shown_spikes=[item.payload for item in shown if item.kind != "alert"],
     )
 
 
 def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) -> dict | None:
-    """Fit on this batch, or None when it has too few alerts or labels to learn from."""
+    """Fit on the early window of this batch, or None without two label classes.
+
+    No severity stand-in labels: a model that only copies severity adds nothing
+    over rules-only mode, and it used to overwrite a better saved model.
+    """
     if len(alerts) < 10:
         return None
     train_alerts, test_alerts, split_at = _split(alerts, config)
     if len({a.fault_id is not None for a in train_alerts}) < 2:
-        for a in train_alerts:
-            if a.severity in ("critical", "error", "high") and a.fault_id is None:
-                a.fault_id = "weak"
-        if len({a.fault_id is not None for a in train_alerts}) < 2:
-            return None
-    train_spikes: list = []
-    test_spikes: list = []
-    if metrics is not None:
-        train_spikes = detect_jumps(metrics, config, detect_until=split_at)
-        test_spikes = detect_jumps(metrics, config, detect_from=split_at)
+        return None
+    train_spikes = detect_jumps(metrics, config, detect_until=split_at) if metrics is not None else []
+    test_spikes = detect_jumps(metrics, config, detect_from=split_at) if metrics is not None else []
     model = AlertClassifier(config).fit(train_alerts, train_spikes)
     train_proba = model.predict_proba(train_alerts, train_spikes)
     escalate_threshold = tune_threshold(train_alerts, train_proba, config)
-    score_alerts_list = test_alerts if test_alerts else alerts
-    score_spikes = test_spikes if test_alerts else train_spikes + test_spikes
-    test_proba = (
-        model.predict_proba(score_alerts_list, score_spikes) if score_alerts_list else []
-    )
+    test_proba = model.predict_proba(test_alerts, test_spikes) if test_alerts else []
     return {
         "model": model,
         "escalate_threshold": escalate_threshold,
         "review_threshold": bayes_threshold(config),
         "label_source": _label_source(train_alerts),
         "train_alerts": len(train_alerts),
-        "score_alerts": score_alerts_list,
-        "score_spikes": score_spikes,
+        "split_at": split_at,
         "training": {
             "model_used": "trained",
-            "note": "Fit on the early window only. Threshold is frozen before the later days are scored.",
+            "note": (
+                "Fit on the early window; the threshold is frozen before the later window. "
+                "Every alert is in the queue, but only the later window is an honest test."
+            ),
             "threshold": round(float(escalate_threshold), 4),
             "train": _class_report(train_alerts, train_proba, escalate_threshold),
-            "test": _class_report(score_alerts_list, test_proba, escalate_threshold),
+            "test": _class_report(test_alerts, test_proba, escalate_threshold) if test_alerts else None,
         },
     }
 
@@ -361,18 +392,19 @@ def run_job(
 
     paths = _default_paths()
     metrics: pd.DataFrame | None = None
+    faults: list[Fault] | None = None
     source = mode
 
     if mode == "sample":
         generate(paths["sample_dir"], seed=Config().random_seed)
         alerts = load_alerts(paths["sample_dir"] / "alerts.csv")
         faults = load_faults(paths["sample_dir"] / "faults.csv")
-        alerts, _ = align_alerts_to_faults(alerts, faults)
+        alerts, faults = align_alerts_to_faults(alerts, faults)
     elif mode == "gaia":
         run_path = paths["gaia_run"]
         if not run_path.exists():
             raise FileNotFoundError(f"GAIA run folder not found: {run_path}")
-        alerts, _faults = load_run_folder(run_path)
+        alerts, faults = load_run_folder(run_path)
         metrics_dir = paths["gaia_metrics"]
         if metrics_dir.exists():
             metrics = load_metric_folder(metrics_dir)
@@ -386,7 +418,7 @@ def run_job(
         if metrics_path:
             metrics = load_metrics_csv(metrics_path)
         if faults_path:
-            alerts, _ = align_alerts_to_faults(alerts, load_faults(faults_path))
+            alerts, faults = align_alerts_to_faults(alerts, load_faults(faults_path))
         source = "upload"
     elif mode == "ingest":
         if not alert_rows:
@@ -405,7 +437,7 @@ def run_job(
     feedback_stats = apply_feedback(alerts, store)
     saved = load_model()
     result = score_alerts(
-        alerts, metrics=metrics, budget_k=budget_k, shadow_mode=shadow_mode, saved=saved
+        alerts, metrics=metrics, budget_k=budget_k, shadow_mode=shadow_mode, saved=saved, faults=faults
     )
     real_marks = store.feedback_summary()["real"]
     if result.model is not None:
@@ -424,7 +456,7 @@ def run_job(
     if not shadow_mode:
         from .pagerduty import notify_escalations
 
-        page = notify_escalations(result.alerts, decisions)
+        page = notify_escalations(result.alerts, decisions, spikes=result.shown_spikes)
     job_id = store.save_job(
         source=source,
         budget_k=budget_k,
@@ -440,7 +472,9 @@ def run_job(
             "escalate": sum(1 for d in decisions if d.action.value == "escalate"),
             "review": sum(1 for d in decisions if d.action.value == "review"),
             "suppress": sum(1 for d in decisions if d.action.value == "suppress"),
-            "jumps": len(result.jumps),
+            "jumps": sum(1 for j in result.jumps if j["kind"] == "jump"),
+            "jumps_shown": sum(1 for j in result.jumps if j["kind"] == "jump" and j["shown"]),
+            "gap_items": sum(1 for j in result.jumps if j["kind"] == "gap" and j["shown"]),
             "has_metrics": metrics is not None and not metrics.empty,
             "label_source": result.label_source,
             "model_used": result.model_used,

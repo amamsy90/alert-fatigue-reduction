@@ -9,7 +9,7 @@
 
 ## 1. Summary
 
-This project focuses on **one sector: cloud microservice operations** — the on-call queue behind an online platform built from many small services (login, database, cache, web front ends). Those services raise a constant stream of alerts; most are noise — duplicates, or many symptoms of a single underlying fault. The on-call engineer can check only a few at a time, so genuine incidents get missed and users of the platform pay the delay. The system builds one daily queue of at most K items. The biggest **memory jumps** (a service's memory suddenly rising well above its own recent level) take the first slots; each remaining alert is **escalated**, sent to a person to **ask**, or **suppressed**. It combines classification with memory-jump detection and is evaluated on the open GAIA MicroSS dataset, which records every injected fault, against fixed severity thresholds plus exact duplicate suppression.
+This project focuses on **one sector: cloud microservice operations** — the on-call queue behind an online platform built from many small services (login, database, cache, web front ends). Those services raise a constant stream of alerts; most are noise — duplicates, or many symptoms of a single underlying fault. The on-call engineer can check only a few at a time, so genuine incidents get missed and users of the platform pay the delay. The system builds one daily queue of at most K items. **Memory jumps** (a service's memory suddenly rising well above its own recent level) and **monitoring gaps** are shown as soon as they are confirmed; log alerts may use a quarter of the slots and are **escalated**, sent to a person to **ask**, or **suppressed**. It is evaluated on the open GAIA MicroSS dataset, which records every injected fault, against the rules a team already runs: log severity with duplicate suppression, and Prometheus-style static and rate rules on memory.
 
 ## 2. Problem and motivation
 
@@ -58,9 +58,9 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 - *Done when:* jumps overlap injected memory faults on the same service, and one-point blips are not reported.
 
 ### M4 — Budget-aware decision policy
-- One daily budget of K items shared by jumps and alerts. The biggest jumps take the first slots; alerts fill what is left, escalations before "ask a person". An alert inside a jump on the same service is marked for the classifier.
+- One daily budget of K items, first come first served, with no look-ahead. A jump is shown at its confirming point if its rise by then passes a threshold learned on the training week; a monitoring gap after 10 minutes of silence; log alerts use at most 25% of K, and an alert inside a shown jump rides on it.
 - Rank by expected cost so the top-K items fit the human budget; sweep K = 5, 10, 20, 50 per day.
-- *Done when:* the policy beats the baseline on faults caught at every budget K; walk-forward mean stays near the one-shot test; weaker weeks and silent faults are reported, not hidden.
+- *Done when:* the queue beats a Prometheus-style rate rule at K=20 in real time; walk-forward mean stays near the one-shot test; weaker weeks and data gaps are reported, not hidden.
 
 ### Stretch — human-in-the-loop
 - Only uncertain alerts inside a memory jump are routed to a person, instead of every uncertain alert; report how decisions change when staff can handle more or fewer items.
@@ -79,31 +79,30 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 
 | Claim | How it is shown |
 |---|---|
-| Beats the usual on-call rule under a budget | **72.8%** vs **0%** at K=20; also wins at K=5 / 10 / 50 |
-| Not a lucky later month | Walk-forward mean **74.7%**, 95% interval **67.3–80.8%**; wins **8/8** later weeks (p = 0.0039) |
-| Jumps, not alert text, find the faults | **70.9%** of test faults have a jump and **no log line**; alerts alone catch 12.9% |
-| Jump rule is not one lucky service | Jump overlap **81–91%** on all ten services |
-| Limits are stated | **11.3%** of test faults are silent (no log, no jump); fold 7 drops to 52.6% and showed 11.8 items/day, so K=20 was not full |
+| Beats the rules a team already runs, in real time | K=20: full queue **71.0%**, jumps + learned threshold **72.6%**, vs Prometheus-style rate rule **68.9%**, static rule 57.2%, log severity 0%; fewer false items (1.0–1.4 vs 2.1 a day) |
+| Not a lucky later month | Walk-forward (everything re-learned each week): full queue **73.4%** (95% CI 66.2–79.7%); jumps + threshold **74.8%**, beats the rate rule **8/8** weeks (p = 0.0039) |
+| Jumps, not alert text, find the faults | **71.0%** of test faults have a jump and **no log line** |
+| Near the ceiling | Best possible at K=20 is 84.9% (22 faults a day); the queue reaches 84–86% of it |
+| Limits are stated | Every fault is 1 GB for 600 s; **10.8%** of test faults fall in monitoring gaps (no data), shown as gap items; fold 7 is a 2.5-day metric outage |
 
-The 95% recall / 95% detection figures were an **early hope**. They are not the success test. A log-only classifier cannot reach them: only **17.9%** of test faults leave any log (15.1% log+jump, 2.8% log only). Full argument: `FINAL_REPORT.md`.
+The 95% recall / 95% detection figures were an **early hope**. They are not the success test: only **17.9%** of test faults leave any log, and at K=20 no method can exceed 84.9%. Full argument: `FINAL_REPORT.md`.
 
-MTTA is from the injection timestamp to the first shown item. A jump is only confirmed at its second point (~2 minutes).
+Time to confirm is from the injection timestamp to the jump's confirming point: median **0.72 minutes**.
 
-### Preliminary results (test period, 1,226 faults)
+### Results (test period, 1,223 faults)
 
 | Measure | Result |
 |---|---|
-| Memory jumps overlapping an injected fault | 86.1% (1,056 of 1,226); 256 jumps with no fault |
-| First version (mean + 3σ), for comparison | 53.8% (660 of 1,226); 322 jumps with no fault |
-| Baseline, faults caught at 20 items/day | 0% — the lines inside a fault are warnings, not errors |
-| Learned alerts only, faults caught at 20/day | 12.9% |
-| Shared queue (jumps first, then alerts), faults caught at 20/day | **72.8%**, about 18 items and 1.3 false items per day |
-| Shared queue at 5 / 10 / 50 items per day | 19.2% / 38.8% / 86.0% |
-| Walk-forward (retrain each later week, K=20) | Mean **74.7%** (95% CI **67.3–80.8%**; min 52.6%, max 84.5%); baseline 0% every week |
-| Test faults with a jump but no log | **70.9%** (869 / 1,226) |
-| Test faults with neither a log nor a jump | **11.3%** (138 / 1,226) |
+| Jump overlap, no budget | 86.1%; **99.6%** of faults that have metric data |
+| First version (mean + 3σ), for comparison | 53.8% |
+| Chance overlap (jumps shifted 1–6 h) | 2.6% |
+| Log severity baseline at K=20 | 0% — the lines inside a fault are warnings, not errors |
+| Rate rule `delta(mem[5m]) > 0.5 GB` at K=20 | 68.9%, 2.1 false items a day |
+| Full queue at K=20 | **71.0%**, about 18 items and 1.4 false items a day |
+| Full queue at 5 / 10 / 50 items per day | 19.5% / 38.6% / 85.9% |
+| Walk-forward (K=20) | full queue 73.4%; jumps + threshold 74.8%; rate rule 70.7% |
 
-Two cautions. Every GAIA fault is a memory program, so this data favours the memory rule; on a real platform some faults will not touch memory, and the alert classifier matters more. Time to first shown item is reported by the script as under a minute, but a jump is only confirmed at its second point, so about two minutes is the honest figure. Keep this dataset: the finding *is* that most injected faults leave no log. A new mixed-fault set would need CPU/disk series we do not have, and would hide that result.
+Cautions. Every GAIA fault is the same memory program, so this data favours a memory rule; on a real platform some faults will not touch memory, and the alert share of the budget matters more. Keep this dataset for the submission: the finding *is* that most injected faults leave no log.
 
 ## 7. Risks and mitigations
 

@@ -81,19 +81,21 @@ def mtta_minutes(
 
 
 def false_alert_burden_per_day(
-    decisions: list[Decision], alerts: list[Alert]
+    decisions: list[Decision], alerts: list[Alert], n_days: int | None = None
 ) -> float:
-    """False alerts surfaced per day, averaged over the stream (criterion 4)."""
+    """False alerts surfaced per day over the whole scored period (criterion 4).
+
+    The denominator is the days covered by `alerts` (or `n_days`), not the span
+    between the first and last surfaced alert, which overstated the rate.
+    """
     truth = {a.alert_id: a.fault_id is not None for a in alerts}
-    ts_by_alert = {a.alert_id: a.timestamp for a in alerts}
     surfaced = _surfaced_ids(decisions)
     if not surfaced:
         return 0.0
-    days = max(
-        1,
-        (max(ts_by_alert[a] for a in surfaced) - min(ts_by_alert[a] for a in surfaced)).days
-        + 1,
-    )
+    if n_days is None:
+        stamps = [a.timestamp for a in alerts]
+        n_days = (max(stamps).normalize() - min(stamps).normalize()).days + 1
+    days = max(1, n_days)
     false_surfaced = sum(1 for aid in surfaced if not truth.get(aid, False))
     return false_surfaced / days
 

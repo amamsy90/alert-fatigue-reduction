@@ -32,6 +32,17 @@ receivers:
             password_file: /etc/alertmanager/oncall_password
 ```
 
+Or, without a login for the whole app, set `INGEST_TOKEN` and send it as a bearer token (only `/ingest/*` accepts it; a wrong token gets 401):
+
+```yaml
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/oncall_ingest_token
+```
+
+If scoring a `score_now` batch fails, the alerts stay in the buffer for the next run.
+
 Point Alertmanager at the same URL. The app accepts Alertmanager's own webhook (version 4) as well as the `{alerts: [...]}` list. Firing alerts become queue rows; resolved alerts are ignored. Service comes from labels `service`, then `app`, `container`, `job`, `instance`.
 
 ```yaml
@@ -51,7 +62,7 @@ Escalations are sent only when **both** are true:
 1. `SHADOW_MODE=0` (or the job is run with `"shadow_mode": false`)
 2. `PAGERDUTY_ROUTING_KEY` is set (Events API v2 integration key)
 
-Each escalate becomes one `trigger` event. Dedup key is the alert id. Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
+Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump or monitoring gap** also becomes one event (dedup key = kind + service + start, so re-scoring the same history does not open a second incident). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
 
 ```text
 SHADOW_MODE=0

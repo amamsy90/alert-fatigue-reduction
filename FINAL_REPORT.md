@@ -1,37 +1,41 @@
-# Alert Fatigue Reduction in Cloud Microservice Operations
+# Budgeted Incident Detection for Cloud Microservice On-Call
 
-**Final report**  
-**Author:** [Your name]  
-**Course / Supervisor:** [Course name / supervisor]  
+*(Alert Fatigue Reduction in Cloud Microservice Operations)*
+
+**Final report**
+**Author:** [Your name]
+**Course / Supervisor:** [Course name / supervisor]
 **Date:** [Date]
 
-This report is what to hand in for the technical mark. Numbers come from scripts under `app/` and are checked by `python run_validate.py`. Detail of every file is in `VALIDATION.md`.
+Numbers come from scripts under `app/` and are checked by `python run_validate.py`. Every file is listed in `VALIDATION.md`. The review that led to this version is `CODE_REVIEW.md`; the plan is `ROADMAP.md`.
 
 ---
 
 ## 1. Problem
 
-On a cloud microservice platform, many small services (login, database, cache, web) raise thousands of alerts a day. The person on duty can only check a few. Real faults are missed because attention ran out, not because the monitor was silent. Users of the platform pay that delay.
+On a cloud microservice platform, many small services raise thousands of alerts a day, and the person on duty can check only a few. Real faults are missed because attention runs out, not because the monitor was silent.
 
-Today’s usual rule — fixed severity plus deleting exact copies — does not read the alert, does not treat a memory jump as one incident, and does not change when five slots are free or fifty.
+The usual rule — fixed log severity plus deleting exact copies — reads only logs. On the dataset used here, **82% of injected faults never write a log line** during the fault. They only show up in metrics.
 
-**Goal.** Under a fixed daily budget K, catch more injected faults than that rule. The mark is the win plus a walk-forward check, not 95% recall.
+**Goal.** Under a fixed daily budget of K items, catch more injected faults than the rules a team would already run, **in real time** (no item may be chosen using information from later in the day), with fewer false items.
 
-**Sector.** Cloud microservice operations only. Not banks or hospitals as separate industries.
+**Sector.** Cloud microservice operations only.
 
 ---
 
 ## 2. Design
 
-One daily list of at most K items:
+One queue, at most K items a day, **first come, first served**:
 
-1. The biggest **memory jumps** take the first slots.
-2. Leftover slots go to alerts: **escalate**, then **ask** (only if the alert sits inside a jump).
-3. The rest are **hidden**.
+1. **Metric jumps.** A point is hot when it is more than **0.5 GB** above the median of the previous **15 minutes** on the same service. Two hot points no more than two minutes apart **confirm** a jump. A jump is shown at its confirmation point, and only if its rise at that point is at least a threshold learned on the training window (0.62 GB on week 1).
+2. **Monitoring gaps.** A service with no metric point for **10 minutes** is shown as a gap item ("we are blind here"). Gaps that start together on several services are one item.
+3. **Log alerts** may use at most **a quarter** of the slots (5 of 20). An alert on a service whose shown jump is still running rides on that jump and uses no slot (one incident, one item).
 
-A **jump** is memory on one service rising more than **0.5 GB** above the median of the previous **15 minutes**, for at least two points no more than two minutes apart. One jump is one incident. Logs from that service during the jump belong to it.
+Nothing in the queue looks at a later point, the end of a jump, or its final peak.
 
-A missed fault costs **10×** one extra alert. The escalate threshold is the week-1 score that minimizes that cost.
+A missed fault costs **10×** a false item. Both learned thresholds (jump confirmation, alert escalation) minimise that cost on the training window only.
+
+For metrics that are not memory in bytes, a **relative mode** marks a point hot when it is, say, 30% above its recent median (`JUMP_MODE=relative`).
 
 Full design: `design_specification.md`.
 
@@ -41,114 +45,116 @@ Full design: `design_specification.md`.
 
 | Layer | What it is |
 |---|---|
-| `app/src/` | Library: load GAIA, features, classifier, jump detector, policy, metrics |
+| `app/src/` | Library: GAIA loader, jump and gap detector, metric baselines, causal queue, classifier, policy, statistics |
+| `app/src/experiment.py` | One train/test window, every system, one scorer — used by every results script |
 | `app/run_*.py` | One script per experiment; writes `app/results/` |
-| `app/tests/` | 40 automated tests |
-| `app/product/` | Local queue for demo (not used in the scores) |
+| `app/tests/` | 62 automated tests |
+| `app/product/` | Web app (shadow mode, Real/Noise marks, Alertmanager webhook, Prometheus, PagerDuty) and a CLI (`python -m product.cli score …`) |
 
-Clocks: log lines are China time, converted to UTC so they line up with memory files (`src/gaia_loader.py`). That fix changed jump overlap from about 2.5% to the figures below.
-
-There is no text-clustering of incidents. The unused `Incident` group type was removed so the code matches the design.
+Log lines are China time and are converted to UTC so they line up with the metric files (`src/gaia_loader.py`).
 
 ---
 
 ## 4. Training
 
-**Data.** GAIA MicroSS (CloudWise), July–August 2021. 34,863 alerts, 1,367 injected memory faults. Every fault is a short program that holds extra memory on one service, so the correct answer is known.
+**Data.** GAIA MicroSS (CloudWise), July–August 2021: 34,863 log lines, 1,367 injected faults. Every fault is the same program: it holds **1 GB of extra memory for 600 s** on one service, so the correct answer is known.
 
-**Train window.** First 7 days: 3,630 alerts, 141 faults.
+**Train window.** The first 7 days. **Test window.** The next 55 days: **1,223 faults**. Days are never shuffled; one split time is used for alerts, faults and metrics alike.
 
 | What is learned | How |
 |---|---|
-| Jump size 0.5 GB | Chosen on week 1 only (`run_memory.py --sweep`). Week 2 is not used. |
-| Classifier | Logistic regression on week-1 alerts. Miss = 10× a false alarm. |
-| Cost threshold | Lowest week-1 score at which escalating still reduces cost. |
-
-The jump **rule** (rise over own recent median) has no fitted mean. That is why a service whose normal memory level drifts is not flagged for days.
+| Jump size 0.5 GB | Chosen on week 1 only (`run_memory.py --sweep`) |
+| Jump confirmation threshold | Rise at confirmation with the lowest week-1 cost → **0.62 GB** |
+| Alert classifier | Logistic regression on week-1 alerts; a miss weighs 10× a false alarm |
+| Alert escalation threshold | Lowest week-1 cost |
+| Static-rule baseline | Week-1 99th percentile per service |
 
 ---
 
 ## 5. Testing
 
-**Test window.** The next 55 days: 31,233 alerts, 1,226 faults. Days are never shuffled.
+**Caught** = a shown jump on the fault's service overlaps the injection window, or a shown alert carries the fault's id. Gap items never count as catches.
 
-A fault is **caught** if a shown jump on its service overlaps the injection window, **or** a surfaced alert carries its fault id.
+**Baselines are the rules a team would already have**, all scored with the same causal queue:
 
-**Main result** (`run_queue_eval.py`, K = 20 items a day):
+| System (K = 20 items a day) | Caught | Share of the best possible | Items / day | False / day |
+|---|---|---|---|---|
+| Log severity + exact duplicates | 0.0% | 0% | 0.8 | 0.8 |
+| Static rule: memory > week-1 p99 | 57.2% | 67% | 16.0 | 3.0 |
+| Rate rule: `delta(mem[5m]) > 0.5 GB` | 68.9% | 81% | 17.4 | 2.1 |
+| Jump rule, first come | 67.8% | 80% | 17.5 | 2.4 |
+| **Jump rule + learned confirmation threshold** | **72.6%** | **86%** | 17.1 | **1.0** |
+| **Full queue** (jumps + gaps + alerts) | **71.0%** | **84%** | 17.6 | 1.4 |
+| *Old headline: day's jumps ranked by final peak (not real time)* | *72.9%* | *86%* | *17.5* | *1.3* |
 
-| System | Faults caught | Items / day | False / day |
-|---|---|---|---|
-| Severity + exact duplicates | **0%** | 0.8 | 0.8 |
-| Learned alerts only | 12.9% | 5.8 | 0.6 |
-| Shared queue, jumps first | **72.8%** | 17.8 | 1.3 |
+**Best possible at K = 20 is 84.9%**: GAIA injects 22 faults a day, more than 20 on 34 of 55 days.
 
-Same queue at K = 5 / 10 / 50: 19.2% / 38.8% / 86.0%. Baseline stays 0% at every budget.
+At K = 5 / 10 / 50 the full queue catches 19.5% / 38.6% / 85.9% (rate rule: 19.3% / 38.6% / 86.0%). Its advantage is at the realistic budget K = 20, where slots are scarce, and in false items (1.0–1.4 a day vs 2.1).
+
+The metric-only queue scores slightly higher than the full queue on GAIA (72.6% vs 71.0%) because every GAIA fault is a memory fault: alerts and gap items spend slots that jumps would have used. On a platform with CPU, disk or code faults, the alert share is the part that catches them. Both rows are reported.
+
+The old ranking needed the whole day in advance. Replacing it with a learned confirmation threshold keeps the score (72.6% vs 72.9%), cuts false items (1.0 vs 1.3 a day), and makes the queue usable live.
+
+**Time to confirm.** Median **0.72 minutes** from fault start to the confirming point (p90 0.93). Metrics are sampled every 30 seconds.
+
+**Chance check.** If each service's jumps are shifted by a random 1–6 hours, only **2.6%** of faults still overlap one. The 86% overlap is not an artifact of wide windows.
 
 ![Faults caught versus daily budget K](figures/detection_vs_k.svg)
 
-Memory jumps with no budget cap: **86.1%** of test faults overlap a jump (1,056 / 1,226). The first rule (week-1 mean + 3σ) reached 53.8%.
+---
 
-The baseline is 0% because log lines inside a GAIA memory fault are **warnings**, not errors, and most faults leave **no log line at all**.
+## 6. Validation (walk-forward)
+
+Before each later week, **everything learned is re-learned from the past only** — the classifier, its threshold, and the jump confirmation threshold (0.62–0.75 GB across folds). That week is then scored once. `run_walkforward.py`, K = 20.
+
+| Fold | Test week | Faults | With metric data | Rate rule | Jumps + threshold | Full queue |
+|---|---|---|---|---|---|---|
+| 1 | 8–15 Jul | 161 | 100% | 77.6% | 84.5% | 83.2% |
+| 2 | 15–22 Jul | 134 | 91% | 73.9% | 81.3% | 81.3% |
+| 3 | 22–29 Jul | 162 | 94% | 72.2% | 77.2% | 72.2% |
+| 4 | 29 Jul–5 Aug | 163 | 82% | 67.5% | 69.3% | 67.5% |
+| 5 | 5–12 Aug | 162 | 84% | 69.1% | 71.6% | 71.0% |
+| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 77.0% |
+| 7 | 19–26 Aug | 173 | **61%** | 51.4% | 52.0% | 52.0% |
+| 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 83.0% |
+| **Mean** | | | | **70.7%** | **74.8%** | **73.4%** (95% CI 66.2–79.7%) |
+
+- Jumps + threshold beat the rate rule in **8/8** weeks (sign test p = 0.0039).
+- The full queue beats it in 6 weeks and ties in 2 (p = 0.016 over the 6 non-tied weeks).
+- The comparison is against a real rule. The log-severity rule scores 0% every week, so a test against it would prove nothing; it is shown only as the usual practice.
+
+**Fold 7** is weak because of a **monitoring outage**: every service's metrics stop from 20 Aug 13:18 UTC for 2 days 12 hours, so only 61% of that week's faults have any metric data. The full queue shows this outage as a gap item within 10 minutes. The drop is not a weakness of the detection rule; no metric-based method could catch those faults.
 
 ---
 
-## 6. Validation
+## 7. What "success" means on this data
 
-The one-shot 72.8% could have been a lucky later period. So the classifier was **retrained** before each later week and that week was scored once. Jump size stayed 0.5 GB.
-
-`run_walkforward.py` — 8 folds, K = 20. Interval from `run_stats.py`.
-
-| Fold | Test week | Faults | Queue | Baseline | Items / day |
-|---|---|---|---|---|---|
-| 1 | 8–15 Jul | 161 | 84.5% | 0% | 18.1 |
-| 2 | 15–22 Jul | 134 | 79.8% | 0% | 17.0 |
-| 3 | 22–29 Jul | 162 | 77.8% | 0% | 17.5 |
-| 4 | 29 Jul–5 Aug | 163 | 68.7% | 0% | 15.3 |
-| 5 | 5–12 Aug | 162 | 71.6% | 0% | 16.1 |
-| 6 | 12–19 Aug | 139 | 78.4% | 0% | 17.4 |
-| 7 | 19–26 Aug | 173 | **52.6%** | 0% | **11.8** |
-| 8 | 26–31 Aug | 129 | 84.5% | 0% | 18.7 |
-| **Mean** | | | **74.7%** (95% CI **67.3–80.8%**) | **0%** | |
-
-![Walk-forward detection by later week](figures/walkforward.svg)
-
-The queue beats the baseline in **8/8** later weeks (p = 0.0039 if each week is a coin flip). The mean sits next to 72.8%, so the one-shot test was not a lucky fortnight.
-
-Fold 7 is weaker (**52.6%**). That week showed **11.8 items a day**, so the budget of 20 was **not** full. Other later weeks average **17.2 items a day**. The miss is fewer qualifying jumps that week, not a queue that ran out of slots. The method is not equally strong every week; that week must be reported.
-
-`python run_validate.py` checks that these headlines still match the csv files.
-
----
-
-## 7. What “success” means on this data
-
-Early write-ups listed 95% recall and 95% detection at K = 20. Those numbers assume every fault leaves a log alert. On GAIA MicroSS that is false. `run_stats.py` counts the signals on the 1,226 test faults:
+`run_stats.py` splits the 1,223 test faults by the signal they left:
 
 | Signal | Count | Share | What can catch it |
 |---|---|---|---|
-| Jump, no log | 869 | **70.9%** | Memory rule only |
+| Jump, no log | 868 | **71.0%** | Metric rule only |
 | Log and jump | 185 | 15.1% | Either path |
 | Log, no jump | 34 | 2.8% | Alerts only |
-| Neither (silent) | 138 | 11.3% | Nothing in this system |
+| No log, no metric data (monitoring gap) | 132 | 10.8% | Nothing — shown as a gap item |
+| No log, data but no jump | 4 | 0.3% | Nothing |
 
-A log-only classifier is capped near **17.9%**. That is why alerts alone score 12.9% at K=20, and why 95% was the wrong target.
+- **Where metric data exists, the jump rule overlaps 99.6% of faults** (1,053 / 1,057).
+- 170 test faults start inside a monitoring gap. At K=20 the gap items shown cover 159 of them (all 170 at K=50), so on-call knows those windows were blind.
+- A log-only classifier is capped near **17.9%** (the faults that leave any log). That is why the early 95% target was wrong.
 
 | Early target | Measured | Verdict |
 |---|---|---|
-| 95% detection at K=20 | **72.8%** vs **0%** baseline | Beats baseline; 95% is not the claim |
-| 95% detection | **86.0%** at K=50 | Jump-rule ceiling (86.1% have a jump) |
-| Jump overlaps the fault | **86.1%**; one-point blips ignored | Met |
-| Works on every service | Jump overlap **81–91%** on all ten | Met |
-| Walk-forward not lucky | Mean **74.7%**, CI **67.3–80.8%**, 8/8 wins | Met |
-| ≥90% fewer items than raw alerts | ~18 shown vs 31,233 test alerts | Met as a reduction of the pile |
-| MTTA 50% below baseline | Baseline MTTA is empty (0 catches) | Report **~2 minutes** to confirm a jump |
-| 80% fewer false items than baseline | 1.3 vs 0.8 per day at K=20 | Not met; more faults are caught |
+| 95% detection at K=20 | 71–73% (ceiling 84.9%) | Not possible at K=20: more faults per day than slots. 84–86% of the ceiling |
+| Beat the usual rule | +2–4 points over a rate rule, 8/8 weeks; 0% for log severity | Met, against a fair rule |
+| Fewer false items | 1.0–1.4 vs 2.1 a day (rate rule) | Met |
+| Works on every service | Jump overlap 81–91% on all ten | Met |
+| Walk-forward not lucky | Mean 73.4–74.8%, CI 66.2–79.7% | Met |
+| Real-time | Confirmed in 0.72 min, no look-ahead | Met |
 
-**Success for this project** is: a designed method, a frozen train window, a held-out test, a walk-forward interval, a win over the baseline on faults caught, and the silent-fault ceiling stated.
+Per service (test period):
 
-Eight of ten services almost never write a log during a fault (0–3%). Only `mobservice1` and `mobservice2` do (~85%). Jumps still overlap 81–91% of faults on every service (`run_stats.py` → `stats_by_service.csv`):
-
-| Service | Test faults | With a log | With a jump |
+| Service | Faults | With a log | With a jump |
 |---|---|---|---|
 | dbservice1 | 129 | 0.8% | 91.5% |
 | dbservice2 | 148 | 2.0% | 81.1% |
@@ -158,19 +164,20 @@ Eight of ten services almost never write a log during a fault (0–3%). Only `mo
 | mobservice2 | 116 | 87.1% | 87.1% |
 | redisservice1 | 111 | 2.7% | 82.0% |
 | redisservice2 | 114 | 0.0% | 86.0% |
-| webservice1 | 123 | 0.8% | 84.5% |
-| webservice2 | 127 | 0.0% | 89.8% |
-
-The strength is the memory rule plus the shared budget, not the text classifier. At K=20 the leftover alert slots add **no extra** caught faults versus jumps alone (both 72.8%).
+| webservice1 | 122 | 0.8% | 85.2% |
+| webservice2 | 125 | 0.0% | 90.4% |
 
 ---
 
 ## 8. Limits (say these if asked)
 
-1. **Every GAIA fault is a memory program** (1,367 / 1,367). Say “on this dataset.” On a live platform, CPU or disk faults need the alert path. Do not swap the dataset in the last month: the local files are memory only, and the main finding is that most of these faults leave no log.
-2. **About two minutes**, not 0.2 minutes, to confirm a jump (second hot point).
-3. **A company cannot use GAIA weights as is.** Shadow mode and Real / Noise marks exist so they can label their own queue and retrain.
-4. Scripts `run_m1`, `run_m2`, `run_m4`, `run_stretch` are **alerts only**. Do not quote them as the system result.
+1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The 0.5 GB threshold is half of it. Say "on this dataset." Relative mode and the alert share exist for other fault types, but they are not measured here.
+2. **The win over a plain Prometheus rate rule is modest** (+2–4 points at K=20). The larger gains are fewer false items, a real-time queue, and flagging monitoring gaps.
+3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
+4. **A company cannot use GAIA weights as is.** Rules-only mode works without labels; shadow mode and Real/Noise marks collect labels for training.
+5. `run_m1`, `run_m2`, `run_m4`, `run_stretch` are alerts-only experiments. Do not quote them as the system result.
+
+**Future work.** Test on benchmarks with other fault types (for example RCAEval or TrainTicket-based sets); rank jumps with a learned model; group jumps across services into one incident.
 
 ---
 
@@ -180,11 +187,13 @@ The strength is the memory rule plus the shared budget, not the text classifier.
 cd app
 $env:PYTHONPATH = (Get-Location).Path
 python -m pytest -q
+python run_queue_eval.py
+python run_walkforward.py
 python run_stats.py
 python run_validate.py
 ```
 
-Needs local GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large).
+Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large). Without GAIA: `python examples/make_example.py`, then `python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv`.
 
 ---
 
@@ -193,10 +202,11 @@ Needs local GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics
 | Item | Where |
 |---|---|
 | Design | `design_specification.md` |
-| Plan | `project_plan.md` |
+| Plan / roadmap | `project_plan.md`, `ROADMAP.md` |
 | Validation record | `VALIDATION.md` |
+| Review of the earlier version | `CODE_REVIEW.md` |
 | This report | `FINAL_REPORT.md` |
 | Code + tests | `app/` |
 | Result tables | `app/results/` |
 | Figures | `figures/detection_vs_k.svg`, `figures/walkforward.svg` |
-| Demo (optional) | http://127.0.0.1:8083/ |
+| Tool | Web app `docker compose up` (http://127.0.0.1:8080/), CLI `python -m product.cli` |

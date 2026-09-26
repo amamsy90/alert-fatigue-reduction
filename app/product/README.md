@@ -10,13 +10,14 @@ Not the end customer of the app (rider, bank client). They benefit when the on-c
 
 ## What this product does
 
-One daily list of at most **K** items:
+One daily list of at most **K** items, first come first served (nothing is chosen with hindsight):
 
-1. The biggest **memory jumps** take the first slots (rise more than 0.5 GB above the last 15 minutes, at least two points).
-2. Leftover slots go to **escalate** (send now), then **ask** (only if the alert is inside a jump).
-3. The rest are **hidden**.
+1. **Metric jumps**, shown when confirmed (rise more than 0.5 GB — or 30% in relative mode — above the last 15 minutes, at least two points).
+2. **Monitoring gaps**: a service silent for 10 minutes.
+3. **Log alerts** — **escalate** (send now), then **ask** — using at most 25% of the slots. An alert inside a shown jump rides on it.
+4. The rest are **hidden**.
 
-A jump with no alerts inside is still shown: it may be a fault the logs missed.
+A jump with no alerts inside is still shown: it may be a fault the logs missed. With no labels the app runs on rules only; Real / Noise marks train a model later.
 
 ## Phase 1 — local web app
 
@@ -36,7 +37,7 @@ A jump with no alerts inside is still shown: it may be a fault the logs missed.
 
 ## Out of scope
 
-- Slack / Opsgenie paging
+- Slack / Opsgenie paging (PagerDuty is built)
 - Multi-tenant SaaS, SSO, bank compliance packs
 - Full GAIA business / trace archives
 
@@ -47,7 +48,7 @@ GAIA MicroSS is the **public proof** (train week 1, test the next 55 days).
 A company would:
 
 1. Keep this app and the escalate / ask / hide policy
-2. Feed **their** alerts and container memory (bytes)
+2. Feed **their** alerts and metrics (memory in bytes, or any metric with `JUMP_MODE=relative`); try an export first with `python -m product.cli score`
 3. Mark items Real / Noise in shadow mode
 4. Retrain on those labels — do **not** ship GAIA-fitted weights unchanged
 

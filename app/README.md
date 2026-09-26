@@ -1,121 +1,116 @@
-# Alert Fatigue Reduction — Application
+# On-call queue — budgeted incident detection from metrics
 
-M1 implementation per the design specification: data pipeline, baseline
-(fixed thresholds + duplicate suppression), and the full metric harness.
+Your services raise more alerts than one person can read. This tool gives on-call **at most K items a day**, in the order they happen:
 
-## Setup
+1. **Metric jumps** — a service's metric suddenly rising well above its own last 15 minutes (e.g. +0.5 GB of memory, or +30% of anything in relative mode). Shown ~30 s after the jump starts.
+2. **Monitoring gaps** — a service stopped sending metrics for 10 minutes. You are blind there; that is worth knowing.
+3. **Log alerts** — ranked by severity (no labels needed) or by a model trained on your Real / Noise marks. They may use at most a quarter of the slots, and an alert inside a shown jump rides on it instead of taking a slot.
 
-```powershell
+It runs in **shadow mode** by default: nothing is paged until you turn it on.
+
+On the public GAIA benchmark it catches **71–73%** of injected faults at 20 items a day (the best possible is 85%), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with half the false items. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
+
+---
+
+## Try it in two minutes (no server, no labels)
+
+```bash
 cd app
-python -m venv .venv
-.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+export PYTHONPATH=$(pwd)            # PowerShell: $env:PYTHONPATH = (Get-Location).Path
+python examples/make_example.py    # tiny synthetic export: one jump, one drift, one outage
+python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv --out queue.csv
 ```
 
-## Run the M1 smoke test (no GAIA download needed)
+On your own data:
 
-```powershell
-python run_m1.py --sample
+| File | Columns |
+|---|---|
+| alerts csv | `timestamp, source, severity, message` (optional `alert_id, alert_type`) |
+| metrics csv | `timestamp, value, service` — one row per sample; `service` must match alert `source` |
+| faults csv (optional) | `fault_id, start, end, component` — past incidents; enables training and a score |
+
+Metric not memory in bytes? Add `--jump-mode relative --jump-ratio 0.3`.
+
+## Run the web app
+
+```bash
+uvicorn product.app:app --port 8080
 ```
 
-Generates two weeks of synthetic GAIA-like data, runs the baseline at budgets
-K = 5/10/20/50, and writes `results/m1_sample.csv`.
+Open http://127.0.0.1:8080 → **Run sample**, or upload your CSVs. Mark items **Real / Noise**; the next run trains on the marks. **Download confirmed faults** exports them as `faults.csv`.
 
-## Run on the real GAIA data
+Docker (bound to localhost; set `APP_PASSWORD` before sharing):
 
-1. Download the dataset: https://github.com/CloudWise-OpenSource/GAIA-DataSet
-2. Put the MicroSS run folder at `data/gaia_raw/run/run` and memory csv files at `data/gaia_metrics`.
-3. Run (this is the path used for all published numbers):
-
-```powershell
-python run_m1.py --gaia-run data/gaia_raw/run/run
+```bash
+docker compose up --build
 ```
 
-## Tests
+## Connect it to your stack
 
-```powershell
-pytest
+| What | How |
+|---|---|
+| Alertmanager | Webhook receiver → `POST /ingest/alertmanager`. Set `INGEST_TOKEN` and use `http_config.authorization.credentials`. |
+| Prometheus | `PROM_URL=http://prometheus:9090` (default query `container_memory_working_set_bytes`; override with `PROM_QUERY`, map services with `PROM_SERVICE_LABEL`). |
+| PagerDuty | `PAGERDUTY_ROUTING_KEY=…` and `SHADOW_MODE=0`. Escalated alerts, shown jumps and gaps are paged with stable dedup keys. |
+
+Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
+
+## Settings (environment variables)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SHADOW_MODE` | `1` | `0` = page PagerDuty |
+| `APP_PASSWORD` / `APP_USER` | none / `oncall` | Basic-auth login for everything except `/health` |
+| `INGEST_TOKEN` | none | Bearer token for `/ingest/*` |
+| `JUMP_MODE` | `absolute` | `relative` for metrics that are not bytes |
+| `JUMP_BYTES` | `5e8` | Absolute rise that makes a point hot |
+| `JUMP_RATIO` | `0.3` | Relative rise (30% over the recent median) |
+| `JUMP_WINDOW_MINUTES` | `15` | Recent-median window |
+| `CONFIRM_MIN_RISE` | none | Only show jumps at least this big when confirmed |
+| `ALERT_SHARE` | `0.25` | Share of the daily budget log alerts may use |
+| `GAP_MINUTES` | `10` | Silence that becomes a gap item |
+| `DAY_OFFSET_HOURS` | `0` | Hours added to UTC before cutting on-call days |
+| `QUEUE_DB`, `MODEL_PATH` | `product/data/…` | Where state is kept |
+
+## How it decides
+
+- **No labels (day one):** rules only — jumps, gaps, log severity with duplicate suppression.
+- **With labels or marks:** a cost-sensitive classifier (a miss weighs 10× a false alarm) ranks log alerts; the escalate threshold is learned on the early window. A model is saved and reused for small webhook batches; the page reminds you to retrain after 7 days or new Real marks.
+- **Always causal:** nothing is chosen using data from later in the day.
+
+---
+
+## Reproduce the course results (GAIA)
+
+1. Download GAIA MicroSS: https://github.com/CloudWise-OpenSource/GAIA-DataSet
+2. Put the run tables at `data/gaia_raw/run/run` and the memory csv files at `data/gaia_metrics`.
+3. Run:
+
+```bash
+python -m pytest -q
+python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --sweep   # jump size, week 1
+python run_queue_eval.py      # headline table, K = 5/10/20/50
+python run_walkforward.py     # 8 later weeks, everything re-learned each week
+python run_stats.py           # intervals, sign tests, signals, chance overlap, confirm time
+python run_validate.py        # fails if the docs and the csv files disagree
 ```
+
+Every system in the table goes through the same code (`src/experiment.py`, `src/queue.py`). See [../VALIDATION.md](../VALIDATION.md).
+
+Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretch.py`, `run_memory_clf.py`) score log alerts only; do not quote them as the system result.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
-| `src/entities.py` | Alert / Fault / Decision data model |
-| `src/config.py` | Budget K, cost ratio, thresholds, split day, seed |
-| `src/ingestion.py` | GAIA loading, alert-to-fault alignment, time split |
-| `src/baseline.py` | Fixed thresholds + exact dedup (the benchmark) |
-| `src/memory_spikes.py` | Memory jumps (0.5 GB over the last 15 minutes) |
-| `src/metrics.py` | Precision/recall, reduction, detection, MTTA, false-alert burden |
-| `run_memory.py` | Score spikes against injected faults |
-| `src/sample_data.py` | Synthetic GAIA-like generator for smoke tests |
-| `run_m1.py` | M1 pipeline runner (D1 deliverable) |
-
-## Run M2 (classifier vs baseline)
-
-```powershell
-python run_m2.py --gaia-run data/gaia_raw/run/run
-python run_m2.py --sample
-```
-
-Trains on week 1 with a missed fault weighed 10x a false alarm, then spends each daily budget on the highest-scoring alerts in week 2. Results land in `results/m2_gaia.csv`.
-
-## Run memory spikes
-
-```powershell
-python run_memory.py --sample
-python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run
-```
-
-A jump is memory rising more than 0.5 GB above the median of the previous 15 minutes, for at least two points. The 0.5 GB size is chosen on week 1 only (`--sweep`). Use `--rule jump` for the published 86.1% figure. A csv is used only when its name contains the service and "memory".
-
-## Run M4 (decision policy)
-
-```powershell
-python run_m4.py --gaia-run data/gaia_raw/run/run
-python run_m4.py --sample
-```
-
-Chooses an escalate threshold on week 1, then spends each daily budget on week 2. Results land in `results/m4_gaia.csv`. **Alerts only** — do not quote this as the system result. The system gate is `run_queue_eval.py`: more faults caught than the baseline at every K.
-
-## Run the stretch (ask a person, budget sensitivity)
-
-```powershell
-python run_stretch.py --gaia-run data/gaia_raw/run/run
-```
-
-**Alerts only** — does not count silent memory jumps. The system result is `run_queue_eval.py` (72.8% at K=20) and `run_walkforward.py` (mean 74.7% across later weeks). `run_stats.py` adds the 95% interval, the 8/8 test vs baseline, and why most faults have no log. Check headlines with `python run_validate.py`. See [../VALIDATION.md](../VALIDATION.md).
-
-## On-call product (local web app)
-
-See [PRODUCTION_PLAN.md](PRODUCTION_PLAN.md) and [product/README.md](product/README.md).
-
-```powershell
-cd app
-pip install -r requirements.txt
-$env:PYTHONPATH = (Get-Location).Path
-$env:SHADOW_MODE = "1"
-uvicorn product.app:app --reload --port 8083
-```
-
-Open http://127.0.0.1:8083 — **Run sample** or **Run GAIA**, set budget K, filter escalate / ask / hide. When memory data is loaded, a **Memory jumps** table lists the biggest K jumps per day with the alerts inside each; a jump with no alerts inside may be a fault the logs missed.
-
-Each alert and jump has **Real / Noise** buttons. Click again to clear. Every later run uses the marks as labels automatically: alerts on the same service inside a Real window (a jump's own window, or ±5 minutes around a Real alert) count as faults, and an alert marked Noise counts as noise even inside a window. The page shows the live precision of what people marked (share of marked jumps and alerts that were real). **Download confirmed faults** exports the Real windows as `faults.csv` for use elsewhere.
-
-Each training run saves the model (`product/data/model.pkl`, or `MODEL_PATH`). Batches too small to train on, such as a few webhook alerts, are scored with the saved model; so are batches that could only use the severity stand-in when the saved model learned from real or confirmed labels. `GET /model` shows its age, and the page recommends retraining after 7 days or when new Real marks arrive; the next full batch (upload or GAIA) retrains it.
-
-Login is off by default for local use. Set a password before anyone else can reach the app (the browser asks for it; `/health` stays open for uptime checks):
-
-```powershell
-$env:APP_USER = "oncall"        # optional, this is the default
-$env:APP_PASSWORD = "choose-a-long-password"
-```
-
-Docker:
-
-```powershell
-cd app
-docker compose up --build
-```
-
-Connectors (webhook + Prometheus): [product/CONNECTORS.md](product/CONNECTORS.md).
+| `src/memory_spikes.py` | Jumps (absolute / relative), gaps, old mean + 3σ rule |
+| `src/baselines_metric.py` | Static and rate (`delta`) rules — the fair baselines |
+| `src/queue.py` | Causal queue, scorer, oracle ceiling, confirm-threshold tuning |
+| `src/experiment.py` | One window, every system — used by all results scripts |
+| `src/classifier.py`, `src/policy.py`, `src/features.py` | Alert classifier and cost policy |
+| `src/eval_stats.py` | Bootstrap CI, sign test, signal counts, chance overlap |
+| `src/gaia_loader.py` | GAIA run tables → alerts + faults (UTC) |
+| `product/` | Web app, CLI, store, connectors |
+| `examples/` | Synthetic export for the quick start |
+| `tests/` | 62 tests (`python -m pytest -q`) |

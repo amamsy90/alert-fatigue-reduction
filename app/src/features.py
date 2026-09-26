@@ -1,8 +1,8 @@
 """Alert features (design spec section 4.2).
 
 Every feature uses only the alert itself and alerts that arrived earlier, so
-scoring the test week cannot see the future. Metric-anomaly context is left
-out until the GAIA metric files are loaded.
+scoring the test week cannot see the future. `during_memory_spike` is 1 only
+once the jump is confirmed (a live system cannot know it earlier).
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def build_feature_frame(
     """One row per alert, in the same order. Alerts must be time-sorted.
 
     `spikes` are memory episodes. An alert is marked when it falls inside a
-    spike on the same service.
+    spike on the same service, after the spike was confirmed.
     """
     config = config or Config()
     spikes_by_service: dict[str, list] = defaultdict(list)
@@ -105,8 +105,9 @@ def build_feature_frame(
                 "has_error": int(alert.severity in ("error", "critical")),
                 "during_memory_spike": int(
                     any(
-                        spike.start <= alert.timestamp <= spike.end
+                        spike.shown_at <= alert.timestamp <= spike.end
                         for spike in spikes_by_service.get(alert.source, [])
+                        if getattr(spike, "kind", "jump") != "gap"
                     )
                 ),
             }
