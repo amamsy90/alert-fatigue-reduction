@@ -1,6 +1,6 @@
 # Alert Fatigue Reduction — Project Plan
 
-**Author:** [Your name]  **Course:** [Course name]  **Date:** [Date]  **Version:** 1.1
+**Author:** [Your name]  **Course:** [Course name]  **Date:** [Date]  **Version:** 2.0
 **Sector:** Cloud microservice operations (online platforms)
 
 ---
@@ -14,7 +14,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | D1 | Data pipeline + baseline numbers on the shared split | Done (`results/m1_gaia.csv`) |
 | D2 | Alert classifier vs baseline at equal budget | Done (`results/m2_gaia.csv`) |
 | D3 | Memory-jump detector vs injected faults | Done (`results/memory_gaia_jump.csv`) — 86.1% overlap |
-| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 71.0% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
+| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 70.2% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
 | D5 | Local on-call app (shadow mode, marks, saved model) | Done (`app/product/`) |
 | D6 | Final report + name / course / date on documents | Report includes interval + silent-fault table; name / course / date still open |
 
@@ -31,9 +31,9 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | T7 | Load memory series | M3 | Done |
 | T8 | Jump rule: +0.5 GB over 15-minute median, ≥2 points | M3 | Done (replaced mean + 3σ) |
 | T9 | Score jump overlap on week 1 (tune) and test period | M3 | Done |
-| T10 | Shared budget: jumps first, then escalate / ask | M4 | Done |
+| T10 | Causal shared budget: first come, alerts ≤ 25% of K, leaks and gaps as items | M4 | Done |
 | T11 | Queue evaluation at K = 5 / 10 / 20 / 50 | M4 | Done |
-| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, full queue 73.4%, rate rule 70.7%) |
+| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, full queue 72.5%, rate rule 70.7%) |
 | T12 | Stretch: ask only inside a jump; Real / Noise; retrain | D5 | Done |
 | T13 | Final report; name / course / date | D6 | Report in `FINAL_REPORT.md`; fill author fields |
 | T14 | Interval, sign test vs rate rule, signal counts incl. no-metric-data | M4 | Done (`results/stats_gaia.csv`) |
@@ -77,4 +77,4 @@ Core evaluation is complete. One month remains. Do not change the dataset.
 ## 6. Tracking and definition of done
 
 - A task is **done** when its output is computed on the held-out test period, written under `results/`, and reproducible from a script.
-- Course success is a win over the baseline under budget K, a walk-forward interval, and stated limits. The old 95% detection target is **not the claim**: at K=20 the best possible is 84.9%. At K=50 the queue reaches 85.9%. 10.8% of test faults fall in monitoring gaps (no metric data).
+- Course success is a win over the baseline under budget K, a walk-forward interval, and stated limits. The old 95% detection target is **not the claim**: at K=20 the best possible is 84.9%. At K=50 the queue reaches 85.8%. Of the misses at K=20, 46% are metric outages and 52% are a full budget; 2% are the detector. 10.8% of test faults fall in monitoring gaps (no metric data).

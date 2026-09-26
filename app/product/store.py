@@ -6,6 +6,8 @@ import sqlite3
 import uuid
 from pathlib import Path
 
+import pandas as pd
+
 from src.entities import Alert, Decision
 
 
@@ -93,6 +95,9 @@ class QueueStore:
             ):
                 if name not in have:
                     conn.execute(f"ALTER TABLE jumps ADD COLUMN {name} {ddl}")
+            have = {r["name"] for r in conn.execute("PRAGMA table_info(feedback)")}
+            if "alert_id" not in have:
+                conn.execute("ALTER TABLE feedback ADD COLUMN alert_id TEXT")
 
     def latest_job_id(self) -> str | None:
         with self._connect() as conn:
@@ -114,6 +119,7 @@ class QueueStore:
         spike_flags: list[bool],
         jumps: list[dict] | None = None,
         meta: dict | None = None,
+        day_offset_hours: float = 0.0,
     ) -> str:
         """`decisions` and `spike_flags` are aligned with `alerts` by position."""
         if not (len(alerts) == len(decisions) == len(spike_flags)):
@@ -142,7 +148,7 @@ class QueueStore:
             rows = []
             for alert, decision, in_spike in zip(alerts, decisions, spike_flags):
                 ts = alert.timestamp.isoformat()
-                day = alert.timestamp.normalize().date().isoformat()
+                day = (alert.timestamp + pd.Timedelta(hours=day_offset_hours)).normalize().date().isoformat()
                 rows.append(
                     (
                         job_id,
@@ -286,11 +292,11 @@ class QueueStore:
         with self._connect() as conn:
             if kind == "jump":
                 row = conn.execute(
-                    "SELECT service, start, end FROM jumps WHERE id = ?", (item_id,)
+                    "SELECT service, start, end, NULL AS alert_id FROM jumps WHERE id = ?", (item_id,)
                 ).fetchone()
             else:
                 row = conn.execute(
-                    "SELECT source AS service, timestamp AS start, timestamp AS end "
+                    "SELECT source AS service, timestamp AS start, timestamp AS end, alert_id "
                     "FROM decisions WHERE id = ?",
                     (item_id,),
                 ).fetchone()
@@ -303,12 +309,13 @@ class QueueStore:
             else:
                 conn.execute(
                     """
-                    INSERT INTO feedback (kind, item_id, verdict, service, start, end, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO feedback (kind, item_id, verdict, service, start, end, created_at, alert_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (kind, item_id) DO UPDATE SET
                         verdict = excluded.verdict, created_at = excluded.created_at
                     """,
-                    (kind, item_id, verdict, row["service"], row["start"], row["end"], pd_utcnow()),
+                    (kind, item_id, verdict, row["service"], row["start"], row["end"], pd_utcnow(),
+                     row["alert_id"]),
                 )
         return {"kind": kind, "id": item_id, "verdict": verdict}
 
@@ -361,13 +368,21 @@ class QueueStore:
                 summary[kind]["precision"] = round(summary[kind]["real"] / marked, 3)
         return summary
 
-    def feedback_noise_alerts(self) -> set[tuple[str, str]]:
-        """(service, timestamp) of alerts a person marked as noise."""
+    def feedback_noise_alerts(self) -> set[tuple[str, int]]:
+        """(service, time in UTC nanoseconds) of alerts a person marked as noise.
+
+        Times are compared as instants, not as text, so a different timestamp
+        format in the next export still matches. Alert ids are stored with the
+        mark but not used to match: uploads without ids get positional ids
+        (w000001, ...) that repeat across unrelated batches.
+        """
+        import pandas as pd
+
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT service, start FROM feedback WHERE kind = 'alert' AND verdict = 'noise'"
             ).fetchall()
-        return {(str(r["service"]), str(r["start"])) for r in rows}
+        return {(str(r["service"]), pd.Timestamp(r["start"]).value) for r in rows}
 
     def job_meta(self, job_id: str) -> dict | None:
         with self._connect() as conn:

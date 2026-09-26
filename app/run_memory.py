@@ -17,7 +17,6 @@ import pandas as pd
 
 from src.config import Config
 from src.gaia_loader import load_run_folder
-from src.ingestion import time_split
 from src.memory_spikes import detect_jumps, detect_spikes, load_metric_folder, score_spikes
 
 
@@ -43,10 +42,12 @@ def _sample_metrics(config: Config) -> tuple[pd.DataFrame, list]:
 def _sweep_jump_sizes(metrics_dir: str, gaia_run: str, config: Config) -> None:
     """Pick the jump size on week 1; week 2 is shown only to report it."""
     metrics = load_metric_folder(metrics_dir)
-    faults = load_run_folder(gaia_run)[1]
-    origin = min(fault.start for fault in faults)
+    alerts, faults = load_run_folder(gaia_run)
+    # One split time for everything: the first log line + split_day (as in src/experiment.py).
+    origin = min(alert.timestamp for alert in alerts)
     boundary = origin + pd.Timedelta(days=config.split_day)
-    week1, week2 = time_split(faults, config.split_day)
+    week1 = [f for f in faults if f.start < boundary]
+    week2 = [f for f in faults if f.start >= boundary]
     rows = []
     for gb in (0.3, 0.5, 0.8, 1.0, 1.5, 2.0):
         trial = replace(config, memory_jump_bytes=gb * 1e9)
@@ -103,10 +104,10 @@ def main() -> None:
         tag = "sample"
     else:
         metrics = load_metric_folder(args.metrics)
-        faults = load_run_folder(args.gaia_run)[1]
-        origin = min(fault.start for fault in faults)
+        alerts, faults = load_run_folder(args.gaia_run)
+        origin = min(alert.timestamp for alert in alerts)
         boundary = origin + pd.Timedelta(days=config.split_day)
-        _, faults = time_split(faults, config.split_day)
+        faults = [f for f in faults if f.start >= boundary]
         tag = "gaia"
 
     if args.sample:

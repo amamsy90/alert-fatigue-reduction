@@ -3,12 +3,13 @@
 Your services raise more alerts than one person can read. This tool gives on-call **at most K items a day**, in the order they happen:
 
 1. **Metric jumps** — a service's metric suddenly rising well above its own last 15 minutes (e.g. +0.5 GB of memory, or +30% of anything in relative mode). Shown ~30 s after the jump starts.
-2. **Monitoring gaps** — a service stopped sending metrics for 10 minutes. You are blind there; that is worth knowing.
-3. **Log alerts** — ranked by severity (no labels needed) or by a model trained on your Real / Noise marks. They may use at most a quarter of the slots, and an alert inside a shown jump rides on it instead of taking a slot.
+2. **Slow leaks** — memory climbing +0.5 GB over its own last 3 hours, which a 15-minute rule (or a Prometheus `delta()` alert) never sees.
+3. **Monitoring gaps** — a service stopped sending metrics for 10 minutes. You are blind there; that is worth knowing.
+4. **Log alerts** — ranked by severity (no labels needed) or by a model trained on your Real / Noise marks. They may use at most a quarter of the slots, and an alert inside a shown jump rides on it instead of taking a slot.
 
 It runs in **shadow mode** by default: nothing is paged until you turn it on.
 
-On the public GAIA benchmark it catches **71–73%** of injected faults at 20 items a day (the best possible is 85%), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with half the false items. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
+On the public GAIA benchmark it catches **70–73%** of injected faults at 20 items a day (the best possible is 85%; 98% of the rest are metric outages or a full budget), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with fewer false items. On synthetic faults added to real series it catches 0.5–2 GB steps and spikes 98–100% of the time and slow leaks 73–99%. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
 
 ---
 
@@ -71,7 +72,11 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `ALERT_SHARE` | `0.25` | Share of the daily budget log alerts may use |
 | `GAP_MINUTES` | `10` | Silence that becomes a gap item |
 | `DAY_OFFSET_HOURS` | `0` | Hours added to UTC before cutting on-call days |
-| `QUEUE_DB`, `MODEL_PATH` | `product/data/…` | Where state is kept |
+| `LEAK_WINDOW_MINUTES` / `LEAK_BYTES` | `180` / `5e8` | Slow-leak rule (byte metrics only); `0` = off |
+| `GROUP_MINUTES` | `0` | Metric items this close on other services share one slot |
+| `CARRY_OVER_MAX` | `0` | Unused slots carried to the next day (e.g. `10`) |
+| `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
+| `QUEUE_DB`, `MODEL_PATH` | `product/data/…` | Where state is kept (the model gets a `.sha256` file; a changed file is refused) |
 
 ## How it decides
 
@@ -93,6 +98,8 @@ python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/ru
 python run_queue_eval.py      # headline table, K = 5/10/20/50
 python run_walkforward.py     # 8 later weeks, everything re-learned each week
 python run_stats.py           # intervals, sign tests, signals, chance overlap, confirm time
+python run_robustness.py      # synthetic 0.25-2 GB steps, spikes, ramps, leaks on the real series
+python make_figures.py        # redraw ../figures/*.svg from the csv files
 python run_validate.py        # fails if the docs and the csv files disagree
 ```
 
@@ -104,7 +111,8 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 
 | Path | Purpose |
 |---|---|
-| `src/memory_spikes.py` | Jumps (absolute / relative), gaps, old mean + 3σ rule |
+| `src/memory_spikes.py` | Jumps (absolute / relative), slow leaks, gaps, old mean + 3σ rule |
+| `src/jump_ranker.py` | Phase 3 learned jump ranker (evaluated; not used by default) |
 | `src/baselines_metric.py` | Static and rate (`delta`) rules — the fair baselines |
 | `src/queue.py` | Causal queue, scorer, oracle ceiling, confirm-threshold tuning |
 | `src/experiment.py` | One window, every system — used by all results scripts |
@@ -113,4 +121,5 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `src/gaia_loader.py` | GAIA run tables → alerts + faults (UTC) |
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
-| `tests/` | 62 tests (`python -m pytest -q`) |
+| `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
+| `tests/` | 74 tests (`python -m pytest -q`) |

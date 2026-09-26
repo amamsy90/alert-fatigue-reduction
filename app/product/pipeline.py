@@ -16,12 +16,12 @@ import pandas as pd
 
 from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
-from src.config import Config
+from src.config import Config, day_of
 from src.entities import SURFACED_ACTIONS, Action, Alert, Decision, Fault
 from src.features import build_feature_frame
 from src.gaia_loader import load_run_folder
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults, time_split
-from src.memory_spikes import Spike, detect_gaps, detect_jumps, load_metric_folder
+from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks, load_metric_folder
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
 from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_threshold
 from src.sample_data import generate
@@ -96,6 +96,7 @@ def _jump_items(
     alerts: list[Alert],
     decisions: list[Decision],
     shown: set[int] | None = None,
+    config: Config | None = None,
 ) -> list[dict]:
     """One row per jump or gap, with the alerts that fell inside it.
 
@@ -117,7 +118,7 @@ def _jump_items(
         ]
         items.append(
             {
-                "day": spike.shown_at.normalize().date().isoformat(),
+                "day": day_of(spike.shown_at, config).date().isoformat(),
                 "service": spike.service,
                 "start": spike.start.isoformat(),
                 "end": spike.end.isoformat(),
@@ -154,7 +155,7 @@ def apply_feedback(alerts: list[Alert], store: QueueStore) -> dict[str, int]:
     for fault in faults:
         by_service[fault.component].append(fault)
     for alert in alerts:
-        if (alert.source, alert.timestamp.isoformat()) in noise:
+        if (alert.source, alert.timestamp.value) in noise:
             if alert.fault_id is not None:
                 overridden += 1
             alert.fault_id = None
@@ -202,6 +203,7 @@ class ScoredQueue:
     training: dict | None = None
     # Jumps and gaps the queue showed (what PagerDuty would page).
     shown_spikes: list | None = None
+    config: Config | None = None
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -262,6 +264,8 @@ def score_alerts(
     has_metrics = metrics is not None and not metrics.empty
     jumps = detect_jumps(metrics, config) if has_metrics else []
     gaps = detect_gaps(metrics, config) if has_metrics else []
+    # Leaks only make sense for byte metrics (the rise is absolute).
+    leaks = detect_leaks(metrics, config) if has_metrics and config.memory_jump_mode == "absolute" else []
 
     trained = _train(alerts, metrics if has_metrics else None, config)
     prefer_saved = saved is not None and saved.label_source != "weak_severity" and trained is None
@@ -307,7 +311,8 @@ def score_alerts(
         config = replace(config, confirm_min_rise=thr)
 
     candidates: list[QueueItem] = (
-        spike_items(jumps, config) + spike_items(gaps, config) + alert_items(alerts, decisions)
+        spike_items(jumps, config) + spike_items(leaks, config) + spike_items(gaps, config)
+        + alert_items(alerts, decisions)
     )
     shown = build_queue(candidates, config)
     shown_alerts = {id(item.payload): item for item in shown if item.kind == "alert"}
@@ -329,13 +334,14 @@ def score_alerts(
         escalate_threshold=escalate_threshold,
         review_threshold=review_threshold,
         spike_flags=flags,
-        jumps=_jump_items(jumps + gaps, alerts, final, shown_spikes),
+        jumps=_jump_items(jumps + leaks + gaps, alerts, final, shown_spikes, config),
         label_source=label_source,
         model_used=model_used,
         model=model if model_used == "trained" else None,
         train_alerts=train_count,
         training=training,
         shown_spikes=[item.payload for item in shown if item.kind != "alert"],
+        config=config,
     )
 
 
@@ -467,6 +473,7 @@ def run_job(
         decisions=decisions,
         spike_flags=result.spike_flags,
         jumps=result.jumps,
+        day_offset_hours=result.config.day_offset_hours if result.config else 0.0,
         meta={
             "alert_count": len(result.alerts),
             "escalate": sum(1 for d in decisions if d.action.value == "escalate"),
@@ -475,6 +482,7 @@ def run_job(
             "jumps": sum(1 for j in result.jumps if j["kind"] == "jump"),
             "jumps_shown": sum(1 for j in result.jumps if j["kind"] == "jump" and j["shown"]),
             "gap_items": sum(1 for j in result.jumps if j["kind"] == "gap" and j["shown"]),
+            "leak_items": sum(1 for j in result.jumps if j["kind"] == "leak" and j["shown"]),
             "has_metrics": metrics is not None and not metrics.empty,
             "label_source": result.label_source,
             "model_used": result.model_used,

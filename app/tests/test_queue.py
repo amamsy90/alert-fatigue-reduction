@@ -109,3 +109,20 @@ def test_prometheus_style_baselines_fire_on_a_step():
     static = detect_static(frame, Config(), fit_until=T0 + pd.Timedelta(minutes=100))
     assert len(delta) == 1 and delta[0].start == T0 + pd.Timedelta(minutes=120)
     assert len(static) == 1 and static[0].kind == "rule"
+
+
+def test_day_offset_moves_every_daily_budget_together():
+    from src.baseline import baseline_decisions
+    from src.config import day_of
+    from src.entities import Action
+
+    # 23:30 UTC is already the next day in China (UTC+8).
+    late = Alert("a1", pd.Timestamp("2026-01-05 23:30", tz="UTC"), "s1", "error", "error", "x1")
+    early = Alert("a2", pd.Timestamp("2026-01-06 00:30", tz="UTC"), "s1", "error", "error", "x2")
+    utc, china = Config(budget_k=1), Config(budget_k=1, day_offset_hours=8)
+    assert day_of(late.timestamp, utc) != day_of(early.timestamp, utc)
+    assert day_of(late.timestamp, china) == day_of(early.timestamp, china)
+    both_shown = [d.action for d in baseline_decisions([late, early], utc)]
+    one_shown = [d.action for d in baseline_decisions([late, early], china)]
+    assert both_shown == [Action.ESCALATE, Action.ESCALATE]
+    assert one_shown == [Action.ESCALATE, Action.SUPPRESS]

@@ -34,8 +34,9 @@ def spike_event(spike: Spike, key: str) -> dict:
     else:
         rise = spike.rise_at_confirm
         amount = f"{rise / 1e9:.2f} GB" if abs(rise) >= 1e6 else f"{rise:.3g}"
+        verb = "has been leaking; now" if spike.kind == "leak" else "jumped"
         summary = (
-            f"{spike.service}: metric jumped {amount} above its recent median "
+            f"{spike.service}: metric {verb} {amount} above its recent median "
             f"at {spike.shown_at:%Y-%m-%d %H:%M} UTC"
         )
         severity = "error"

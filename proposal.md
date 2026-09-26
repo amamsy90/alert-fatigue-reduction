@@ -36,7 +36,7 @@ The project uses **GAIA (Generic AIOps Atlas)**, a free public dataset:
 - **Trustworthy labels** — every fault was injected deliberately and recorded (a program holding extra memory for about ten minutes on one service), so the correct answer is known for each incident. Evaluation does not depend on the alerts' own severity fields.
 - **Free to use** — github.com/CloudWise-OpenSource/GAIA-DataSet
 
-The span supports a realistic time-based evaluation: learn from the first week (3,630 alerts, 141 faults), test on the following 55 days (31,233 alerts, 1,226 faults). The logs are in China time and the memory files in UTC, so both are aligned to UTC on loading.
+The span supports a realistic time-based evaluation: learn from the first week (3,630 alerts, 144 faults), test on the following 55 days (31,233 alerts, 1,223 faults). The logs are in China time and the memory files in UTC, so both are aligned to UTC on loading.
 
 ## 5. Method
 
@@ -79,8 +79,8 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 
 | Claim | How it is shown |
 |---|---|
-| Beats the rules a team already runs, in real time | K=20: full queue **71.0%**, jumps + learned threshold **72.6%**, vs Prometheus-style rate rule **68.9%**, static rule 57.2%, log severity 0%; fewer false items (1.0–1.4 vs 2.1 a day) |
-| Not a lucky later month | Walk-forward (everything re-learned each week): full queue **73.4%** (95% CI 66.2–79.7%); jumps + threshold **74.8%**, beats the rate rule **8/8** weeks (p = 0.0039) |
+| Beats the rules a team already runs, in real time | K=20: jumps + learned threshold **72.6%** and full queue **70.2%**, vs Prometheus-style rate rule **68.9%**, static rule 57.2%, log severity 0%; fewer false items (1.0–1.6 vs 2.1 a day) |
+| Not a lucky later month | Walk-forward (everything re-learned each week): jumps + threshold **74.8%**, beats the rate rule **8/8** weeks (p = 0.0039); full queue **72.5%** (95% CI 65.7–78.3%) |
 | Jumps, not alert text, find the faults | **71.0%** of test faults have a jump and **no log line** |
 | Near the ceiling | Best possible at K=20 is 84.9% (22 faults a day); the queue reaches 84–86% of it |
 | Limits are stated | Every fault is 1 GB for 600 s; **10.8%** of test faults fall in monitoring gaps (no data), shown as gap items; fold 7 is a 2.5-day metric outage |
@@ -94,13 +94,15 @@ Time to confirm is from the injection timestamp to the jump's confirming point: 
 | Measure | Result |
 |---|---|
 | Jump overlap, no budget | 86.1%; **99.6%** of faults that have metric data |
-| First version (mean + 3σ), for comparison | 53.8% |
+| First version (mean + 3σ), for comparison | 54.2% |
 | Chance overlap (jumps shifted 1–6 h) | 2.6% |
 | Log severity baseline at K=20 | 0% — the lines inside a fault are warnings, not errors |
 | Rate rule `delta(mem[5m]) > 0.5 GB` at K=20 | 68.9%, 2.1 false items a day |
-| Full queue at K=20 | **71.0%**, about 18 items and 1.4 false items a day |
-| Full queue at 5 / 10 / 50 items per day | 19.5% / 38.6% / 85.9% |
-| Walk-forward (K=20) | full queue 73.4%; jumps + threshold 74.8%; rate rule 70.7% |
+| Full queue at K=20 | **70.2%**, about 18 items and 1.6 false items a day |
+| Why faults are missed at K=20 | 46% metric outage, 52% budget full, 2% detector |
+| Other fault shapes (synthetic, real series) | 0.5–2 GB steps ≥ 98%; leaks 73–99% with the leak rule; 0.25 GB not detected |
+| Full queue at 5 / 10 / 50 items per day | 19.5% / 38.6% / 85.8% |
+| Walk-forward (K=20) | jumps + threshold 74.8%; full queue 72.5%; rate rule 70.7% |
 
 Cautions. Every GAIA fault is the same memory program, so this data favours a memory rule; on a real platform some faults will not touch memory, and the alert share of the budget matters more. Keep this dataset for the submission: the finding *is* that most injected faults leave no log.
 

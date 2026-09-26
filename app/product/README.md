@@ -13,7 +13,7 @@ Not the end customer of the app (rider, bank client). They benefit when the on-c
 One daily list of at most **K** items, first come first served (nothing is chosen with hindsight):
 
 1. **Metric jumps**, shown when confirmed (rise more than 0.5 GB — or 30% in relative mode — above the last 15 minutes, at least two points).
-2. **Monitoring gaps**: a service silent for 10 minutes.
+2. **Slow leaks** (+0.5 GB over the last 3 hours) and **monitoring gaps** (a service silent for 10 minutes).
 3. **Log alerts** — **escalate** (send now), then **ask** — using at most 25% of the slots. An alert inside a shown jump rides on it.
 4. The rest are **hidden**.
 

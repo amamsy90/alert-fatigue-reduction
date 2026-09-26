@@ -13,7 +13,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from .config import Config
+from .config import Config, day_of
 from .entities import Action, Alert, Decision
 
 
@@ -65,7 +65,7 @@ def policy_decisions(
             )
             continue
         expected_miss = score * config.miss_cost
-        candidates[alert.timestamp.normalize()].append((expected_miss, idx))
+        candidates[day_of(alert.timestamp, config)].append((expected_miss, idx))
 
     chosen: set[int] = set()
     for day_candidates in candidates.values():
@@ -109,7 +109,7 @@ def review_decisions(
             decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "exact duplicate")
             continue
         seen.add(key)
-        day = alert.timestamp.normalize()
+        day = day_of(alert.timestamp, config)
         if score >= escalate_threshold:
             escalate_by_day[day].append((score, idx))
         elif score >= review_threshold:
@@ -162,7 +162,7 @@ def spike_review_decisions(
     used: dict[pd.Timestamp, int] = defaultdict(int)
     for alert, decision in zip(alerts, decisions):
         if decision.action == Action.ESCALATE:
-            used[alert.timestamp.normalize()] += 1
+            used[day_of(alert.timestamp, config)] += 1
 
     candidates: dict[pd.Timestamp, list[tuple[float, int]]] = defaultdict(list)
     for idx, (alert, decision) in enumerate(zip(alerts, decisions)):
@@ -172,7 +172,7 @@ def spike_review_decisions(
             and in_spike[idx]
             and float(proba[idx]) >= review_threshold
         ):
-            candidates[alert.timestamp.normalize()].append((float(proba[idx]), idx))
+            candidates[day_of(alert.timestamp, config)].append((float(proba[idx]), idx))
 
     for day, day_candidates in candidates.items():
         slots = max(0, config.budget_k - used[day])
@@ -190,16 +190,15 @@ def share_budget_with_jumps(
     jumps_per_day: dict[pd.Timestamp, int],
     config: Config,
 ) -> list[Decision]:
-    """One daily budget K for jumps and alerts; jumps take the first slots.
-
-    On GAIA, jumps-first catches 72.8% of faults at K=20 against 53.4% with
-    alerts first (run_queue_eval.py). Escalations outrank asks for what is left.
+    """DEPRECATED (hindsight): reserves slots for every jump of the day before the
+    day has happened. The live queue is src.queue.build_queue; this is kept only
+    so old notebooks still run.
     """
     order = {Action.ESCALATE: 0, Action.REVIEW: 1}
     by_day: dict[pd.Timestamp, list[tuple[int, float, int]]] = defaultdict(list)
     for idx, (alert, decision) in enumerate(zip(alerts, decisions)):
         if decision.action in order:
-            by_day[alert.timestamp.normalize()].append(
+            by_day[day_of(alert.timestamp, config)].append(
                 (order[decision.action], -float(decision.confidence), idx)
             )
     shared = list(decisions)
@@ -217,14 +216,14 @@ def share_budget_with_jumps(
 
 
 def meets_gate(policy: dict, baseline: dict) -> bool:
-    """Detection ahead, MTTA at least 50% lower, false alerts at least 80% lower."""
+    """Detection ahead, MTTA at least 50% lower, false alerts at least 80% lower.
+
+    A baseline that catches nothing has no MTTA; then any policy MTTA passes
+    (there is nothing faster to compare with) as long as detection is ahead.
+    """
     detection_ok = policy["detection_rate"] > baseline["detection_rate"]
     policy_mtta = policy["mtta_minutes"]
     base_mtta = baseline["mtta_minutes"]
-    mtta_ok = (
-        policy_mtta is not None
-        and base_mtta is not None
-        and policy_mtta <= 0.5 * base_mtta
-    )
+    mtta_ok = policy_mtta is not None and (base_mtta is None or policy_mtta <= 0.5 * base_mtta)
     false_ok = policy["false_alerts_per_day"] <= 0.2 * baseline["false_alerts_per_day"]
     return bool(detection_ok and mtta_ok and false_ok)

@@ -18,6 +18,7 @@ converted to UTC before anything is aligned.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from pathlib import Path
 
 import pandas as pd
@@ -49,46 +50,45 @@ def load_run_folder(path: str | Path) -> tuple[list[Alert], list[Fault]]:
 
 
 def parse_run_table(df: pd.DataFrame) -> tuple[list[Alert], list[Fault]]:
-    alerts: list[Alert] = []
-    faults: list[Fault] = []
-    fault_counter = 0
+    """Vectorised: one regex pass per column, one timezone conversion per column."""
+    message = df["message"].astype(str).str.strip()
+    header = message.str.extract(LOG_HEADER_RE)
+    ok = header["ts"].notna()
+    df, message, header = df[ok], message[ok], header[ok]
+    ts = pd.to_datetime(header["ts"]).dt.tz_localize(LOG_TZ).dt.tz_convert("UTC")
+    level = header["level"].str.lower()
+    service = df["service"].astype(str)
+    injection = message.str.extract(INJECTION_RE)
+    is_fault = injection["start"].notna()
 
-    for i, row in df.iterrows():
-        message = str(row["message"]).strip()
-        service = str(row["service"])
-        header = LOG_HEADER_RE.match(message)
-        if header is None:
-            continue  # malformed line: skip (design spec 7: flagged, not guessed)
-        ts = _log_time_to_utc(header.group("ts"))
-        level = header.group("level").lower()
-
-        injection = INJECTION_RE.search(message)
-        if injection:
-            fault_counter += 1
-            start = _log_time_to_utc(injection.group("start"))
-            end = start + pd.Timedelta(seconds=int(injection.group("duration")))
-            faults.append(
-                Fault(
-                    fault_id=f"f{fault_counter:04d}",
-                    start=start,
-                    end=end,
-                    component=service,
-                    description=injection.group("tag"),
-                )
-            )
-            continue
-
-        alerts.append(
-            Alert(
-                alert_id=f"a{i:06d}",
-                timestamp=ts,
-                source=service,
-                alert_type=level,
-                severity=level,
-                message=message[:300],
-            )
+    fault_rows = injection[is_fault]
+    starts = pd.to_datetime(fault_rows["start"], format="mixed").dt.tz_localize(LOG_TZ).dt.tz_convert("UTC")
+    faults = [
+        Fault(
+            fault_id=f"f{n:04d}",
+            start=start,
+            end=start + pd.Timedelta(seconds=int(duration)),
+            component=svc,
+            description=tag,
         )
-
+        for n, (start, duration, svc, tag) in enumerate(
+            zip(starts, fault_rows["duration"], service[is_fault], fault_rows["tag"]), start=1
+        )
+    ]
+    keep = ~is_fault
+    alerts = [
+        Alert(
+            alert_id=f"a{i:06d}",
+            timestamp=t,
+            source=svc,
+            alert_type=lvl,
+            severity=lvl,
+            message=msg[:300],
+        )
+        for i, t, svc, lvl, msg in zip(
+            df.index[keep], ts[keep], service[keep], level[keep], message[keep]
+        )
+    ]
     _label_alerts(alerts, faults)
     alerts.sort(key=lambda a: a.timestamp)
     faults.sort(key=lambda f: f.start)
@@ -96,16 +96,31 @@ def parse_run_table(df: pd.DataFrame) -> tuple[list[Alert], list[Fault]]:
 
 
 def _label_alerts(alerts: list[Alert], faults: list[Fault]) -> None:
-    """Label each alert with the fault whose window covers it, same service."""
+    """Label each alert with the fault whose window covers it, same service.
+
+    Sorted sweep per service (O(n log n)); when windows overlap, the earliest
+    starting fault that still covers the alert wins, as before.
+    """
     by_service: dict[str, list[Fault]] = {}
     for fault in faults:
         by_service.setdefault(fault.component, []).append(fault)
-    for faults_for_service in by_service.values():
-        faults_for_service.sort(key=lambda f: f.start)
+    alerts_by_service: dict[str, list[Alert]] = {}
     for alert in alerts:
-        for fault in by_service.get(alert.source, []):
-            if fault.start <= alert.timestamp <= fault.end:
-                alert.fault_id = fault.fault_id
-                break
-            if fault.start > alert.timestamp:
-                break
+        alerts_by_service.setdefault(alert.source, []).append(alert)
+    for service, service_alerts in alerts_by_service.items():
+        service_faults = sorted(by_service.get(service, []), key=lambda f: f.start)
+        if not service_faults:
+            continue
+        starts = [f.start for f in service_faults]
+        longest = max(f.end - f.start for f in service_faults)
+        for alert in service_alerts:
+            hi = bisect_right(starts, alert.timestamp)
+            match = None
+            for idx in range(hi - 1, -1, -1):
+                fault = service_faults[idx]
+                if fault.start < alert.timestamp - longest:
+                    break
+                if fault.end >= alert.timestamp:
+                    match = fault  # keep going back: the earliest covering fault wins
+            if match is not None:
+                alert.fault_id = match.fault_id

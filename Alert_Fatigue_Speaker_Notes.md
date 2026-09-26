@@ -46,27 +46,23 @@ A company cannot drop in the GAIA-trained model as is. The app runs in shadow mo
 
 ## Slide 4 — Evaluation (4:00–6:00)
 
-Success is four checks, fixed before I look at the scores. Learn on the first week. Test on the fifty-five days after it. I will not shuffle the days. The baseline is fixed severity plus exact copies removed, on the same days.
+Success is fixed before I look at the scores. Learn on the first week. Test on the fifty-five days after it — 1,223 injected faults. I never shuffle the days, and nothing in the queue may use information from later in the day.
 
-The numbers on this slide are from that test period — 1,226 injected faults.
+I compare against rules a team already runs, through the same queue. At twenty items a day: log severity catches none, because the lines inside a fault are warnings. A static memory threshold catches 57 percent. A Prometheus rate rule — memory up half a gigabyte in five minutes — catches 69 percent with about two false items a day.
 
-A memory jump overlaps 86 percent of those faults. The first rule, week-one average plus three standard deviations, only reached 54 percent.
+My jump rule with a threshold learned on week one catches 73 percent with one false item a day. The full queue, which also shows slow leaks, monitoring gaps and a few log alerts, catches 70 percent. The best any method could do at twenty a day is 85 percent, because GAIA injects twenty-two faults a day.
 
-At twenty items a day, the shared queue — jumps first, then alerts — catches 73 percent of the faults. The severity baseline catches none, because the log lines inside a fault are warnings, not errors. Alerts alone catch 13 percent. About 18 items a day, of which about 1.3 are false.
+Of the faults I miss, almost half fall in metric outages and half are days with more faults than slots. Two percent are the detector's fault. Re-learned every week, the detector beats the rate rule in all eight later weeks.
 
-Two cautions, so I do not over-claim. Every GAIA fault is a memory program, so this dataset favours the memory rule. On a real platform some faults will not touch memory, and the alert classifier matters more. Say “on this dataset.” And a jump is only confirmed at its second point, thirty seconds after the first, so the median time to confirm is about 0.7 minutes.
-
-The 95 percent detection target is not met at twenty items a day. Most injected faults leave no log line, so only the memory path can find them.
+Two cautions. Every GAIA fault is the same one-gigabyte memory program — say "on this dataset." I tested other sizes and slow leaks on the real series: half a gigabyte to two gigabytes are caught, a quarter is not, and leaks need the separate leak rule.
 
 ---
 
 ## Slide 5 — Deliverables (6:00–7:00)
 
-Four things you can look at. A pipeline, with the baseline numbers on the shared split. A classifier, compared at the same budget. A memory-jump detector, scored on the injected faults. And a budget policy — send, ask, or hide — with the scripts to rerun the test period.
+Four things you can look at. The evaluation: every system through one real-time queue, with a walk-forward check and a script that fails if the documents and the numbers disagree. The detectors: memory jumps, slow leaks and monitoring gaps. The queue policy, with the alert classifier for the log share. And a tool another team can use today: a command-line scorer for their own export, and a web app in shadow mode with Alertmanager, Prometheus and PagerDuty, that works without labels and learns from Real and Noise marks.
 
-Those pieces are already running, plus a local on-call web app in shadow mode: Real and Noise buttons, a saved model, and a reminder to retrain after seven days or when new Real marks arrive.
-
-That is the proposal: alert fatigue reduction for cloud microservice on-call, on public data with injected faults, tested after week one with four checks. Thank you. I am happy to take questions.
+That is the project: budgeted incident detection for cloud microservice on-call, on public data with injected faults, tested honestly against the rules teams already run. Thank you. I am happy to take questions.
 
 ---
 
@@ -74,18 +70,25 @@ That is the proposal: alert fatigue reduction for cloud microservice on-call, on
 
 Do not say this in the seven minutes unless they ask.
 
-**Where does the work stand?** The logs are China time and the memory files are UTC. After that alignment, the jump rule overlaps 86.1 percent of the 1,223 test faults, and 99.6 percent of the faults that have metric data. At 20 items a day, in real time, the full queue catches 71.0 percent and the jump rule with a learned threshold 72.6 percent. A normal Prometheus rate rule catches 68.9 percent with twice the false items. The best possible at 20 a day is 84.9 percent, because GAIA injects 22 faults a day.
+**Where does the work stand?** The logs are China time and the memory files are UTC. After that alignment, the jump rule overlaps 86.1 percent of the 1,223 test faults, and 99.6 percent of the faults that have metric data. At 20 items a day, in real time, the jump rule with a learned threshold catches 72.6 percent and the full queue 70.2 percent. A normal Prometheus rate rule catches 68.9 percent with twice the false items. The best possible at 20 a day is 84.9 percent, because GAIA injects 22 faults a day.
 
 **How do you explain a memory jump?** Memory on one service sits at its own recent level. A jump is that series rising more than 0.5 GB above the median of the previous 15 minutes, for at least two points no more than two minutes apart. That is one incident. The logs from that service during the jump belong to it. The 0.5 GB size was chosen on week 1 only.
 
 **Can a company use a model trained on open data?** Not as is. Their services and alert text differ, and they have no injected-fault labels. Keep the queue and the jump rule. Run in shadow mode. Mark items Real or Noise. Retrain on those labels. The app already does this.
 
-**Why does the log baseline catch 0%?** The log lines inside a GAIA memory fault are warnings, not errors, so a fixed severity rule never escalates them. Most injected faults have no log line at all. That is why I also compare against metric rules a team would already have — the rate rule is the fair baseline, and I beat it by 2 to 4 points with fewer false items.
+**Why does the log baseline catch 0%?** The log lines inside a GAIA memory fault are warnings, not errors, so a fixed severity rule never escalates them. Most injected faults have no log line at all. That is why I also compare against metric rules a team would already have — the rate rule is the fair baseline. The detector beats it by 3.7 points with half the false items; the full queue by 1.3 points.
 
 **Why not 95% at K=20?** The 95 percent target assumed every fault would leave an alert and that there are fewer faults than slots. On this data 71 percent of test faults have a jump and no log, and there are 22 faults a day for 20 slots, so the ceiling is 84.9 percent. 10.8 percent of faults fall in monitoring gaps, where no metric method can see them; the queue shows those gaps as items.
 
-**Was it a lucky month?** No. Everything learned is re-learned before each later week: the full queue averages 73.4 percent, interval 66.2 to 79.7, and the jump rule with threshold beats the rate rule in all eight weeks. The weak week, 52 percent, is a 2.5-day metric outage on every service: only 61 percent of that week's faults have any metric data.
+**Was it a lucky month?** No. Everything learned is re-learned before each later week: the jump rule with threshold averages 74.8 percent and beats the rate rule in all eight weeks; the full queue, which also spends slots on leaks, gaps and alerts, averages 72.5 percent. The weak week, 52 percent, is a 2.5-day metric outage on every service: only 61 percent of that week's faults have any metric data.
 
 **Did the old version cheat?** The first queue ranked each day's jumps by their final peak, which needs the whole day in advance. I replaced it with a threshold on the rise at confirmation, learned on week one. Same score, fewer false items, and it works live.
 
-**Should you change the dataset?** No. Every injection here is a memory program. That is the finding, not a bug. A new mixed-fault set would need CPU and disk series we do not have.
+**Should you change the dataset?** Not before submission. Every injection here is a memory program; the robustness replay covers other sizes and leaks on the real series. Other fault types (CPU, disk, code) are future work on another benchmark.
+
+
+**Does it only work because every fault is 1 GB?** Partly, and I tested it. I added synthetic faults to the real memory series. Steps from half a gigabyte to two gigabytes, and one-minute spikes, are caught 98 to 100 percent of the time. A quarter of a gigabyte is not: it is below the jump size, so a team must set that size for its own services. Leaks that climb over half an hour or three hours defeat both my jump rule and the Prometheus rate rule, so I added a slow-leak rule: it catches 99 and 73 percent of them for a third of an item a day.
+
+**Why are faults still missed?** At twenty a day I miss 364 faults. 166 are during metric outages, 191 are days with more faults than slots, and only 7 are the detector's fault.
+
+**What did you try that did not work?** A learned model to rank jumps. The rise threshold already gives 94 percent precision, so it added nothing. Carrying unused slots to the next day did help: 74.3 percent at K=20, and it still beats the rate rule given the same carry-over.

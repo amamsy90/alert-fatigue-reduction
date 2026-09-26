@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.config import Config
-from src.experiment import load_gaia, run_window, score_window
+from src.experiment import MISS_CAUSES, load_gaia, miss_causes, run_window, score_window
 
 
 def main() -> None:
@@ -31,7 +31,7 @@ def main() -> None:
     data = load_gaia()
     split_at = data.origin + pd.Timedelta(days=config.split_day)
     end = data.last + pd.Timedelta(seconds=1)
-    rows = []
+    rows, misses = [], []
     for k in config.budget_sweep:
         cfg = replace(config, budget_k=k)
         run = run_window(data, split_at, end, cfg)
@@ -42,18 +42,24 @@ def main() -> None:
                 f"{len(run.test_jumps)} jumps, {len(run.test_gaps)} gap items. "
                 f"Week-1 confirm threshold {thr / 1e9 if thr else 0:.2f} GB."
             )
+        for name in ("proposed", "jumps_tuned"):
+            counts = miss_causes(run, data, cfg, name)
+            misses.append({"queue": name, "budget_k": k, **counts})
+            print(f"K={k:2d}  misses {name:12s} " + "  ".join(f"{c} {counts[c]}" for c in MISS_CAUSES))
         for row in score_window(run, cfg):
             rows.append(row)
             print(
                 f"K={k:2d}  {row['queue']:16s} caught {row['faults_caught']:4d}/{row['faults']} "
                 f"({row['detection_rate']:.1%}, {row['share_of_ceiling']:.0%} of ceiling)  "
                 f"items/day {row['items_per_day']:5.1f}  false/day {row['false_items_per_day']:4.1f}  "
+                f"precision {row['precision']:.0%}  "
                 f"confirm {row['confirm_minutes_median']} min"
             )
     out = Path("results") / "queue_eval_gaia.csv"
     out.parent.mkdir(exist_ok=True)
     pd.DataFrame(rows).to_csv(out, index=False)
-    print(f"Results written to {out}")
+    pd.DataFrame(misses).to_csv(out.parent / "miss_causes_gaia.csv", index=False)
+    print(f"Results written to {out} and {out.parent / 'miss_causes_gaia.csv'}")
 
 
 if __name__ == "__main__":

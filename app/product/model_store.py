@@ -1,11 +1,13 @@
 """Keep the last trained model so small live batches can be scored without retraining."""
 from __future__ import annotations
 
+import hashlib
+import logging
 import os
-import pickle
 from dataclasses import dataclass
 from pathlib import Path
 
+import joblib
 import pandas as pd
 
 from src.classifier import AlertClassifier
@@ -49,19 +51,45 @@ def model_path() -> Path:
     return Path(os.environ.get("MODEL_PATH") or DEFAULT_PATH)
 
 
+log = logging.getLogger(__name__)
+
+
+def _digest_path(path: Path) -> Path:
+    return path.with_name(path.name + ".sha256")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def save_model(saved: SavedModel, path: Path | None = None) -> None:
+    """Write the model with joblib and a SHA-256 next to it (model.pkl.sha256)."""
     path = path or model_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    with tmp.open("wb") as fh:
-        pickle.dump(saved, fh)
+    joblib.dump(saved, tmp)
+    digest = _sha256(tmp)
     tmp.replace(path)
+    _digest_path(path).write_text(digest + "\n", encoding="ascii")
 
 
 def load_model(path: Path | None = None) -> SavedModel | None:
-    """Only ever loads the file this app wrote; never point MODEL_PATH at untrusted files."""
+    """Load the model this app wrote. Refuses a file whose SHA-256 does not match
+    the one saved with it (a replaced or corrupted file is never unpickled).
+
+    Unpickling runs code, so never point MODEL_PATH at a file from elsewhere.
+    A model saved before hashes were written is loaded once and given a hash.
+    """
     path = path or model_path()
     if not path.exists():
         return None
-    with path.open("rb") as fh:
-        return pickle.load(fh)
+    digest_file = _digest_path(path)
+    if digest_file.exists():
+        expected = digest_file.read_text(encoding="ascii").strip()
+        if _sha256(path) != expected:
+            log.error("Refusing %s: SHA-256 does not match %s", path, digest_file.name)
+            return None
+    saved = joblib.load(path)
+    if not digest_file.exists():
+        digest_file.write_text(_sha256(path) + "\n", encoding="ascii")
+    return saved

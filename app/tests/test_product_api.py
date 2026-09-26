@@ -337,3 +337,45 @@ def test_ingest_token(client, monkeypatch):
     # The token opens only the ingest paths.
     monkeypatch.setenv("APP_PASSWORD", "pw")
     assert client.get("/queue", headers={"Authorization": "Bearer s3cret"}).status_code == 401
+
+
+def test_tampered_model_file_is_refused(tmp_path):
+    import pandas as pd
+
+    from product.model_store import SavedModel, load_model, save_model
+
+    path = tmp_path / "model.pkl"
+    save_model(SavedModel(None, 0.5, 0.1, "real", pd.Timestamp.now("UTC").isoformat(), 10, 0), path)
+    assert load_model(path).escalate_threshold == 0.5
+    path.write_bytes(path.read_bytes() + b"x")
+    assert load_model(path) is None
+
+
+def test_no_password_means_private_networks_only(monkeypatch):
+    from product.app import _is_private
+
+    assert _is_private("127.0.0.1") and _is_private("172.17.0.1") and _is_private("10.2.3.4")
+    assert not _is_private("8.8.8.8")
+    public = TestClient(app, client=("8.8.8.8", 5000))
+    assert public.get("/connectors").status_code == 403
+    assert public.get("/health").status_code == 200
+    monkeypatch.setenv("ALLOW_OPEN_ACCESS", "1")
+    assert public.get("/health").status_code == 200
+
+
+def test_noise_mark_matches_the_same_instant_in_another_format(tmp_path):
+    import pandas as pd
+
+    from product.pipeline import apply_feedback
+    from src.entities import Action, Alert, Decision
+
+    store = QueueStore(tmp_path / "q.db")
+    t = pd.Timestamp("2026-01-05 14:13:08", tz="UTC")
+    job = store.save_job(source="t", budget_k=5, escalate_threshold=0.5, review_threshold=0.1,
+                         shadow_mode=True, alerts=[Alert("a1", t, "db", "log", "info", "m")],
+                         decisions=[Decision("a1", Action.ESCALATE, 0.9, "")], spike_flags=[False])
+    item = store.get_queue(job)[0]
+    store.set_feedback("alert", item["id"], "noise")
+    again = Alert("other-id", pd.Timestamp("2026-01-05T22:13:08+08:00"), "db", "log", "info", "m", "f1")
+    apply_feedback([again], store)
+    assert again.fault_id is None
