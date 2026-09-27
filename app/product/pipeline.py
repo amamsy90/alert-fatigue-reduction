@@ -535,8 +535,17 @@ def run_job(
     decisions = result.decisions
     # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
     # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
-    from .ops import PAGEABLE_MODES, can_page, get_routing_key
+    from .ops import PAGEABLE_MODES, can_page, get_routing_key, page_cutoff, set_page_watermark
     from .pagerduty import notify_escalations, would_have_paged
+
+    # Ingest jobs re-score the metric history; only items shown since the last
+    # ingest job are new. Alerts in an ingest batch are all new (the buffer is
+    # acknowledged after each job), so they are not filtered.
+    page_spikes = list(result.shown_spikes or [])
+    run_at = pd.Timestamp.now(tz="UTC")
+    if mode in PAGEABLE_MODES:
+        cutoff = page_cutoff(run_at)
+        page_spikes = [s for s in page_spikes if cutoff < s.shown_at <= run_at]
 
     if mode not in PAGEABLE_MODES:
         page = {"sent": 0, "failed": 0, "skipped": f"mode={mode} never pages"}
@@ -547,8 +556,14 @@ def run_job(
     elif not can_page():
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     else:
-        page = notify_escalations(result.alerts, decisions, spikes=result.shown_spikes)
-    whp = would_have_paged(result.alerts, decisions, spikes=result.shown_spikes)
+        page = notify_escalations(result.alerts, decisions, spikes=page_spikes)
+    whp = would_have_paged(result.alerts, decisions, spikes=page_spikes)
+    if mode in PAGEABLE_MODES:
+        whp["since"] = cutoff.isoformat()
+        # Advance in shadow too, so turning Live on never pages the shadow period.
+        # Keep the old mark if a send failed, so the next job retries it.
+        if not page.get("failed"):
+            set_page_watermark(run_at)
     job_id = store.save_job(
         source=source,
         budget_k=budget_k,

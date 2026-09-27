@@ -168,8 +168,8 @@ class IngestRequest(BaseModel):
 
 def _connector_status() -> dict:
     """What is wired. Secrets (keys, passwords) are never returned."""
-    prom_info = ops_mod.prom_url_status()
-    prom = prom_info.get("url") or ""
+    prom_info = ops_mod.prom_url_status()  # url is already redacted
+    prom = ops_mod.get_prom_url()
     stats = STORE.buffer_stats()
     shadow_info = ops_mod.shadow_status()
     key_info = ops_mod.routing_key_status()
@@ -190,7 +190,7 @@ def _connector_status() -> dict:
         },
         "prometheus": {
             "configured": prom_info["configured"],
-            "url": prom or None,
+            "url": prom_info.get("url"),
             "url_host": prom_info.get("url_host"),
             "source": prom_info.get("source"),
             "query_set": prom_info.get("query_set", False),
@@ -304,11 +304,8 @@ def _prometheus_test() -> dict:
 @app.post("/ops/prometheus/test")
 def ops_run_prometheus_test():
     """Reach Prometheus and run a short memory query. Returns counts only."""
-    result = _prometheus_test()
-    if not ops_mod.get_prom_url() and not result.get("ok"):
-        # Still return 200 with ok=false so the UI can show how to set PROM_URL
-        return result
-    return result
+    # Always 200: with ok=false the UI shows how to set PROM_URL.
+    return _prometheus_test()
 
 
 @app.post("/jobs/run")
