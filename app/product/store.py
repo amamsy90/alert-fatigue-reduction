@@ -422,6 +422,7 @@ class QueueStore:
                 "source": jobs["source"],
                 "shadow_mode": bool(jobs["shadow_mode"]),
                 "pagerduty": meta.get("pagerduty"),
+                "would_have_paged": meta.get("would_have_paged"),
                 "has_metrics": meta.get("has_metrics"),
             }
         return {
