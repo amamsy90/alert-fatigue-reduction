@@ -200,7 +200,7 @@
             <input type="password" id="pd-key" placeholder="Events API v2 key" autocomplete="off" style="min-width:16rem" />
           </div>
           <button type="button" id="btn-save-key" class="secondary">Save key</button>
-          <button type="button" id="btn-clear-key" class="secondary">Clear saved key</button>
+          <button type="button" id="btn-clear-key" class="secondary" hidden>Clear key</button>
           <button type="button" id="btn-test-page">Send test page</button>
         </div>
         <p class="sub" style="margin:0">Save a key first, then type <b>LIVE</b> to go Live. Only <b>ingest</b> jobs page. Sample, GAIA and Evaluate never page.</p>
@@ -421,6 +421,7 @@
       document.getElementById("btn-shadow").disabled = !!c.shadow_mode;
       document.getElementById("btn-live").disabled = !c.shadow_mode;
       document.getElementById("btn-test-page").disabled = !pd.will_page;
+      document.getElementById("btn-clear-key").hidden = !pd.configured;
     }
 
     async function postOps(url, body, method) {
