@@ -236,6 +236,22 @@
         <p class="sub" style="margin:0">Save a key first, then type <b>LIVE</b> to go Live. Only <b>ingest</b> jobs page. Sample, GAIA and Evaluate never page.</p>
         <p id="ops-msg" class="err" hidden style="margin-top:0.4rem"></p>
       </div>
+      <div id="prom-panel" class="card" style="margin-top:0.75rem;max-width:40rem">
+        <h3 style="margin:0 0 0.4rem;color:var(--navy)">Prometheus ops</h3>
+        <p id="prom-status" class="sub" style="margin:0 0 0.6rem"></p>
+        <div class="controls" style="margin-bottom:0.5rem">
+          <div>
+            <label for="prom-url">Prometheus URL</label><br />
+            <input type="url" id="prom-url" placeholder="http://localhost:9090" autocomplete="off" style="min-width:16rem" />
+          </div>
+          <button type="button" id="btn-save-prom" class="secondary">Save URL</button>
+          <button type="button" id="btn-clear-prom" class="secondary" hidden>Clear URL</button>
+          <button type="button" id="btn-test-prom">Test Prometheus</button>
+        </div>
+        <p class="sub" style="margin:0">Save a URL here (like the PD key) or set <code>PROM_URL</code> in the environment. <code>PROM_QUERY</code> and <code>PROM_SERVICE_LABEL</code> stay env-only. Test runs a short probe + query and shows counts only.</p>
+        <p id="prom-test-result" class="meta" style="margin-top:0.5rem" hidden></p>
+        <p id="prom-msg" class="err" hidden style="margin-top:0.4rem"></p>
+      </div>
     </section>
     <div id="shadow" class="shadow" hidden>
       Shadow mode is on — decisions are logged only; nothing is sent to a pager.
@@ -453,10 +469,14 @@
           c.webhook.last_ingest_at ? `Last ingest ${escapeHtml(c.webhook.last_ingest_at)}` : "No webhook received yet",
         ]),
         connCard("Prometheus", c.prometheus.probe && c.prometheus.probe.reachable ? true : c.prometheus.configured ? "warn" : false, [
-          c.prometheus.configured ? escapeHtml(c.prometheus.url) : "PROM_URL is not set",
+          c.prometheus.configured
+            ? escapeHtml(c.prometheus.url_host || c.prometheus.url || "?") +
+              (c.prometheus.source ? " (" + escapeHtml(c.prometheus.source) + ")" : "")
+            : "Not configured — save a URL below or set PROM_URL",
           c.prometheus.probe && c.prometheus.probe.reachable
             ? "Reachable" + (c.prometheus.probe.version ? " (Prometheus " + escapeHtml(c.prometheus.probe.version) + ")" : "")
             : (c.prometheus.probe && c.prometheus.probe.error ? "Unreachable: " + escapeHtml(c.prometheus.probe.error) : "Not probed"),
+          "Use Test Prometheus for a short query pull (series/points counts only).",
         ]),
         connCard("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [
           keyLine,
@@ -478,6 +498,15 @@
       document.getElementById("btn-live").disabled = !c.shadow_mode;
       document.getElementById("btn-test-page").disabled = !pd.will_page;
       document.getElementById("btn-clear-key").hidden = !pd.configured;
+      const prom = c.prometheus || {};
+      document.getElementById("prom-status").textContent = prom.configured
+        ? ("URL: " + (prom.url_host || prom.url || "?") +
+           (prom.source ? " · source " + prom.source : "") +
+           (prom.query_set ? " · PROM_QUERY set" : " · default query") +
+           (prom.service_label ? " · label " + prom.service_label : ""))
+        : "No Prometheus URL — save one below or set PROM_URL in the environment.";
+      document.getElementById("btn-test-prom").disabled = false; // always clickable; API explains how to set URL
+      document.getElementById("btn-clear-prom").hidden = !(prom.source === "ops");
     }
 
     async function postOps(url, body, method) {
@@ -822,6 +851,58 @@
         alert(r.note || "Test page sent.");
         await loadConnectors();
       } catch (e) { opsMsg(e.message || String(e)); }
+    };
+
+    function promMsg(msg) {
+      const el = document.getElementById("prom-msg");
+      if (!msg) { el.hidden = true; el.textContent = ""; return; }
+      el.hidden = false;
+      el.textContent = msg;
+    }
+
+    function showPromTest(r) {
+      const el = document.getElementById("prom-test-result");
+      el.hidden = false;
+      if (!r) { el.textContent = ""; return; }
+      if (r.ok) {
+        el.textContent =
+          "Last probe: OK · host " + (r.url_host || "?") +
+          " · " + (r.series_count ?? 0) + " series · " + (r.points ?? 0) + " points" +
+          (r.version ? " · Prometheus " + r.version : "");
+      } else {
+        el.textContent =
+          "Last probe: failed" +
+          (r.url_host ? " · host " + r.url_host : "") +
+          (r.error ? " · " + r.error : "") +
+          (!r.url_host && r.error === "PROM_URL is not set"
+            ? " — save a URL above or set PROM_URL"
+            : "");
+      }
+    }
+
+    document.getElementById("btn-save-prom").onclick = async () => {
+      const url = document.getElementById("prom-url").value;
+      try {
+        promMsg("");
+        await postOps("/ops/prometheus/url", { url });
+        document.getElementById("prom-url").value = "";
+        await loadConnectors();
+      } catch (e) { promMsg(e.message || String(e)); }
+    };
+    document.getElementById("btn-clear-prom").onclick = async () => {
+      try {
+        promMsg("");
+        await postOps("/ops/prometheus/url", null, "DELETE");
+        await loadConnectors();
+      } catch (e) { promMsg(e.message || String(e)); }
+    };
+    document.getElementById("btn-test-prom").onclick = async () => {
+      try {
+        promMsg("");
+        const r = await postOps("/ops/prometheus/test", {});
+        showPromTest(r);
+        await loadConnectors();
+      } catch (e) { promMsg(e.message || String(e)); }
     };
 
     loadQueue().catch(() => {});

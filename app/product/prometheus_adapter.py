@@ -6,7 +6,7 @@ import math
 import os
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import urlopen
 
 import pandas as pd
@@ -39,6 +39,30 @@ def step_seconds(hours: float, requested: float) -> int:
     return int(max(requested, math.ceil(hours * 3600 / MAX_POINTS)))
 
 
+def _resolve_prom_url(base_url: str | None = None) -> str:
+    """Explicit arg, then saved ops.json, then PROM_URL env."""
+    if base_url:
+        return str(base_url).rstrip("/")
+    try:
+        from product.ops import get_prom_url
+
+        saved = get_prom_url()
+        if saved:
+            return saved
+    except Exception:  # noqa: BLE001 — ops may be unavailable in unit isolation
+        pass
+    return (os.environ.get("PROM_URL") or "").rstrip("/")
+
+
+def prom_url_host(base_url: str) -> str | None:
+    """Hostname only — never credentials or full URL."""
+    try:
+        parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
+        return parsed.hostname
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def fetch_memory_metrics(
     base_url: str | None = None,
     query: str | None = None,
@@ -49,7 +73,7 @@ def fetch_memory_metrics(
 
     Replicas of one service are summed, so a jump on any replica shows up.
     """
-    base_url = (base_url or os.environ.get("PROM_URL") or "").rstrip("/")
+    base_url = _resolve_prom_url(base_url)
     if not base_url:
         raise ValueError("PROM_URL is not set")
     query = query or os.environ.get("PROM_QUERY") or DEFAULT_QUERY
@@ -93,7 +117,7 @@ def fetch_memory_metrics(
 
 def probe_prometheus(base_url: str | None = None, timeout: float = 2.0) -> dict:
     """Reach Prometheus `/api/v1/status/buildinfo`. Does not return the URL or secrets."""
-    base_url = (base_url or os.environ.get("PROM_URL") or "").rstrip("/")
+    base_url = _resolve_prom_url(base_url)
     if not base_url:
         return {"reachable": False, "error": "PROM_URL is not set"}
     url = f"{base_url}/api/v1/status/buildinfo"
@@ -106,3 +130,79 @@ def probe_prometheus(base_url: str | None = None, timeout: float = 2.0) -> dict:
         return {"reachable": False, "error": "Prometheus status was not success"}
     version = (payload.get("data") or {}).get("version")
     return {"reachable": True, "version": version}
+
+
+def run_prometheus_test(
+    base_url: str | None = None,
+    query: str | None = None,
+    hours: float = 2.0,
+    timeout: float = 5.0,
+) -> dict:
+    """Probe reachability and run a short range query; never return huge payloads.
+
+    Returns ``{ok, series_count, points, error?, url_host, version?}``.
+    """
+    base_url = _resolve_prom_url(base_url)
+    host = prom_url_host(base_url) if base_url else None
+    if not base_url:
+        return {
+            "ok": False,
+            "series_count": 0,
+            "points": 0,
+            "error": "PROM_URL is not set",
+            "url_host": None,
+        }
+    probe = probe_prometheus(base_url, timeout=timeout)
+    if not probe.get("reachable"):
+        return {
+            "ok": False,
+            "series_count": 0,
+            "points": 0,
+            "error": probe.get("error") or "unreachable",
+            "url_host": host,
+        }
+    query = query or os.environ.get("PROM_QUERY") or DEFAULT_QUERY
+    end = datetime.now(timezone.utc)
+    start = end - pd.Timedelta(hours=hours)
+    # Wide step keeps the response tiny (a handful of points per series).
+    step = step_seconds(hours, max(60.0, hours * 3600 / 20))
+    params = urlencode(
+        {
+            "query": query,
+            "start": start.timestamp(),
+            "end": end.timestamp(),
+            "step": step,
+        }
+    )
+    url = f"{base_url}/api/v1/query_range?{params}"
+    try:
+        with urlopen(url, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001 — never echo URL (may hold a password)
+        return {
+            "ok": False,
+            "series_count": 0,
+            "points": 0,
+            "error": type(exc).__name__,
+            "url_host": host,
+            "version": probe.get("version"),
+        }
+    if payload.get("status") != "success":
+        return {
+            "ok": False,
+            "series_count": 0,
+            "points": 0,
+            "error": "Prometheus query was not success",
+            "url_host": host,
+            "version": probe.get("version"),
+        }
+    result = payload.get("data", {}).get("result") or []
+    series_count = len(result)
+    points = sum(len(s.get("values") or []) for s in result)
+    return {
+        "ok": True,
+        "series_count": series_count,
+        "points": points,
+        "url_host": host,
+        "version": probe.get("version"),
+    }

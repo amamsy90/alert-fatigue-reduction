@@ -24,7 +24,7 @@ from product.settings import clear_saved, load_saved, save_saved
 from product import ops as ops_mod
 from product.model_store import load_model
 from product.pipeline import run_job
-from product.prometheus_adapter import probe_prometheus
+from product.prometheus_adapter import probe_prometheus, run_prometheus_test
 from product.store import QueueStore
 
 APP_DIR = Path(__file__).resolve().parent
@@ -156,6 +156,10 @@ class RoutingKeyRequest(BaseModel):
     routing_key: str = Field(..., description="PagerDuty Events API v2 routing key")
 
 
+class PromUrlRequest(BaseModel):
+    url: str = Field(..., description="Prometheus base URL, e.g. http://localhost:9090")
+
+
 class IngestRequest(BaseModel):
     alerts: list[IngestAlert]
     score_now: bool = False
@@ -164,7 +168,8 @@ class IngestRequest(BaseModel):
 
 def _connector_status() -> dict:
     """What is wired. Secrets (keys, passwords) are never returned."""
-    prom = (os.environ.get("PROM_URL") or "").rstrip("/")
+    prom_info = ops_mod.prom_url_status()
+    prom = prom_info.get("url") or ""
     stats = STORE.buffer_stats()
     shadow_info = ops_mod.shadow_status()
     key_info = ops_mod.routing_key_status()
@@ -184,11 +189,15 @@ def _connector_status() -> dict:
             "last_ingest_at": stats["last_ingest_at"],
         },
         "prometheus": {
-            "configured": bool(prom),
+            "configured": prom_info["configured"],
             "url": prom or None,
-            "query_set": bool(os.environ.get("PROM_QUERY")),
-            "service_label": os.environ.get("PROM_SERVICE_LABEL") or None,
+            "url_host": prom_info.get("url_host"),
+            "source": prom_info.get("source"),
+            "query_set": prom_info.get("query_set", False),
+            "service_label": prom_info.get("service_label"),
+            "note": prom_info.get("note"),
             "probe": probe_prometheus(prom or None) if prom else {"reachable": False, "error": "PROM_URL is not set"},
+            "last_test": None,
         },
         "pagerduty": {
             "configured": pd_on,
@@ -269,6 +278,37 @@ def ops_test_page():
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"PagerDuty rejected the test: {exc}") from exc
     return {"sent": 1, "dedup_key": "oncall-queue-test", "note": "Resolve the test incident in PagerDuty."}
+
+
+@app.post("/ops/prometheus/url")
+def ops_set_prom_url(body: PromUrlRequest):
+    """Save Prometheus base URL (like the PagerDuty key). PROM_QUERY stays env-only."""
+    try:
+        return ops_mod.set_prom_url(body.url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/ops/prometheus/url")
+def ops_clear_prom_url():
+    """Clear the saved Prometheus URL (env PROM_URL still applies if set)."""
+    return ops_mod.clear_prom_url()
+
+
+def _prometheus_test() -> dict:
+    """Probe + short query; compact result only (no series payloads)."""
+    return run_prometheus_test()
+
+
+@app.get("/ops/prometheus/test")
+@app.post("/ops/prometheus/test")
+def ops_run_prometheus_test():
+    """Reach Prometheus and run a short memory query. Returns counts only."""
+    result = _prometheus_test()
+    if not ops_mod.get_prom_url() and not result.get("ok"):
+        # Still return 200 with ok=false so the UI can show how to set PROM_URL
+        return result
+    return result
 
 
 @app.post("/jobs/run")
