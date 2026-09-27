@@ -71,6 +71,10 @@ def alert_items(alerts: list[Alert], decisions: list[Decision]) -> list[QueueIte
 
 
 METRIC_KINDS = ("jump", "rule", "leak")
+# At one instant, a jump/leak/rule is decided before a gap, and a gap before an
+# alert. Otherwise an alert that arrives at the confirmation point takes the
+# last slot and the jump it belongs to is dropped.
+_KIND_ORDER = {"jump": 0, "leak": 1, "rule": 2, "gap": 3, "alert": 4}
 
 
 def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
@@ -101,7 +105,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
     for day in all_days:
         today = k + carry
         used = alerts_used = gaps_used = 0
-        for item in sorted(by_day.get(day, []), key=lambda it: (it.shown_at, it.kind)):
+        for item in sorted(by_day.get(day, []), key=lambda it: (it.shown_at, _KIND_ORDER.get(it.kind, 5))):
             if item.kind == "alert":
                 jumps = running.get(item.service, [])
                 if any(j.shown_at <= item.shown_at <= j.end for j in jumps):
