@@ -54,11 +54,18 @@ Why this reframe: on GAIA, log triage alone misses about 82% of faults, and a me
 | 4.5 | CLI `evaluate` and `tune`; saved settings used by the live queue, webhook and `score` | `product/cli.py`, `product/settings.py` |
 | 4.6 | End-user guide | `USE_YOUR_DATA.md` |
 
+## Phase 5 — After the review (done on master)
+
+| # | Change | Where |
+|---|---|---|
+| 5.1 | Paging watermark: only items new since the last ingest job are paged; one job at a time; job / evaluation retention; upload cap; URL credentials redacted | `product/ops.py`, `product/pipeline.py`, `product/app.py` |
+| 5.2 | Slack and Opsgenie paging with the same gate and the same item list as PagerDuty | `product/notifiers.py` |
+| 5.3 | Per-series jump size (the hot-point size) learned on the tuning part for series with 3+ incidents, kept only where it beats the shared size; marks feed it through the faults export | `src/generic.py` |
+| 5.4 | Demo dry-run from a fresh clone | `DEMO_SCRIPT.md` |
+
 ## Still possible after submission
 
-- A hot-point size below the global 0.5 GB rule, learned per series (the confirm gate above is per series now; a 0.25 GB fault is still invisible until the hot-point rule itself is lowered).
-- Other fault types (CPU, disk, code) on another benchmark (RCAEval, TrainTicket-based sets).
-- Slack / Opsgenie paging.
+- Other fault types (CPU, disk, code) on another benchmark (RCAEval, TrainTicket-based sets) — see the benchmark note in `VALIDATION.md`.
 
 ## Per-series confirm gate (done)
 

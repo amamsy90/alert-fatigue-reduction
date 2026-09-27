@@ -218,7 +218,7 @@
       <h2 class="section">Connectors</h2>
       <div id="conn-cards" class="cards"></div>
       <div id="ops-panel" class="card" style="margin-top:0.75rem;max-width:40rem">
-        <h3 style="margin:0 0 0.4rem;color:var(--navy)">PagerDuty ops</h3>
+        <h3 style="margin:0 0 0.4rem;color:var(--navy)">Paging ops — PagerDuty, Slack, Opsgenie</h3>
         <p id="ops-status" class="sub" style="margin:0 0 0.6rem"></p>
         <div class="controls" style="margin-bottom:0.5rem">
           <button type="button" id="btn-shadow" class="secondary">Switch to Shadow</button>
@@ -233,7 +233,25 @@
           <button type="button" id="btn-clear-key" class="secondary" hidden>Clear key</button>
           <button type="button" id="btn-test-page">Send test page</button>
         </div>
-        <p class="sub" style="margin:0">Save a key first, then type <b>LIVE</b> to go Live. Only <b>ingest</b> jobs page. Sample, GAIA and Evaluate never page.</p>
+        <div class="controls" style="margin-bottom:0.5rem">
+          <div>
+            <label for="slack-url">Slack incoming webhook</label><br />
+            <input type="password" id="slack-url" placeholder="https://hooks.slack.com/services/…" autocomplete="off" style="min-width:16rem" />
+          </div>
+          <button type="button" id="btn-save-slack" class="secondary">Save webhook</button>
+          <button type="button" id="btn-clear-slack" class="secondary" hidden>Clear</button>
+          <button type="button" id="btn-test-slack">Send test message</button>
+        </div>
+        <div class="controls" style="margin-bottom:0.5rem">
+          <div>
+            <label for="og-key">Opsgenie API key</label><br />
+            <input type="password" id="og-key" placeholder="API-integration key" autocomplete="off" style="min-width:16rem" />
+          </div>
+          <button type="button" id="btn-save-og" class="secondary">Save key</button>
+          <button type="button" id="btn-clear-og" class="secondary" hidden>Clear</button>
+          <button type="button" id="btn-test-og">Send test alert</button>
+        </div>
+        <p class="sub" style="margin:0">Save at least one channel (PagerDuty, Slack or Opsgenie), then type <b>LIVE</b> to go Live. Every configured channel gets the same items. Only <b>ingest</b> jobs page. Sample, GAIA and Evaluate never page. EU Opsgenie: set <code>OPSGENIE_API_URL=https://api.eu.opsgenie.com</code>.</p>
         <p id="ops-msg" class="err" hidden style="margin-top:0.4rem"></p>
       </div>
       <div id="prom-panel" class="card" style="margin-top:0.75rem;max-width:40rem">
@@ -461,7 +479,7 @@
         : "Routing key not configured.";
       document.getElementById("conn-cards").innerHTML = [
         connCard("Mode: " + modeLabel, c.shadow_mode ? "warn" : true, [
-          c.shadow_mode ? "Shadow — nothing is sent to PagerDuty." : "Live — ingest escalations may page.",
+          c.shadow_mode ? "Shadow — nothing is sent to any channel." : "Live — ingest escalations may page: " + ((c.channels || []).join(", ") || "no channel"),
         ]),
         connCard("Alertmanager / webhook", true, [
           `POST ${c.webhook.path}`,
@@ -488,6 +506,15 @@
                (pd.would_have_paged.alerts ?? 0) + " alerts)")
             : "No would-have-paged summary yet — run sample.",
         ]),
+        connCard("Slack", (c.slack || {}).will_page ? true : (c.slack || {}).configured ? "warn" : false, [
+          (c.slack || {}).configured ? `Webhook configured (…${escapeHtml(c.slack.last4 || "????")}).` : "Not configured.",
+          (c.slack || {}).will_page ? "Will post one message per ingest job." : "Will not post (need Live + webhook).",
+        ]),
+        connCard("Opsgenie", (c.opsgenie || {}).will_page ? true : (c.opsgenie || {}).configured ? "warn" : false, [
+          (c.opsgenie || {}).configured ? `Key configured (…${escapeHtml(c.opsgenie.last4 || "????")}).` : "Not configured.",
+          (c.opsgenie || {}).will_page ? "Will open one alert per item." : "Will not page (need Live + key).",
+          "API: " + escapeHtml((c.opsgenie || {}).api_url || ""),
+        ]),
       ].join("");
       if (pd.would_have_paged) renderWouldHave(pd.would_have_paged, !!c.shadow_mode);
       document.getElementById("ops-status").textContent =
@@ -498,6 +525,10 @@
       document.getElementById("btn-live").disabled = !c.shadow_mode;
       document.getElementById("btn-test-page").disabled = !pd.will_page;
       document.getElementById("btn-clear-key").hidden = !pd.configured;
+      document.getElementById("btn-clear-slack").hidden = !(c.slack || {}).configured;
+      document.getElementById("btn-test-slack").disabled = !(c.slack || {}).will_page;
+      document.getElementById("btn-clear-og").hidden = !(c.opsgenie || {}).configured;
+      document.getElementById("btn-test-og").disabled = !(c.opsgenie || {}).will_page;
       const prom = c.prometheus || {};
       document.getElementById("prom-status").textContent = prom.configured
         ? ("URL: " + (prom.url_host || prom.url || "?") +
@@ -852,6 +883,25 @@
         await loadConnectors();
       } catch (e) { opsMsg(e.message || String(e)); }
     };
+
+    function secretButtons(saveId, clearId, testId, inputId, path, field, confirmText) {
+      document.getElementById(saveId).onclick = async () => {
+        const body = {}; body[field] = document.getElementById(inputId).value;
+        try { await postOps(path, body); document.getElementById(inputId).value = ""; await loadConnectors(); }
+        catch (e) { opsMsg(e.message || String(e)); }
+      };
+      document.getElementById(clearId).onclick = async () => {
+        try { await postOps(path, null, "DELETE"); await loadConnectors(); }
+        catch (e) { opsMsg(e.message || String(e)); }
+      };
+      document.getElementById(testId).onclick = async () => {
+        if (!window.confirm(confirmText)) return;
+        try { const r = await postOps(path.replace(/\/[^/]+$/, "/test"), {}); opsMsg(""); alert(r.note || "Sent."); await loadConnectors(); }
+        catch (e) { opsMsg(e.message || String(e)); }
+      };
+    }
+    secretButtons("btn-save-slack", "btn-clear-slack", "btn-test-slack", "slack-url", "/ops/slack/webhook", "webhook_url", "Post a real test message to Slack now?");
+    secretButtons("btn-save-og", "btn-clear-og", "btn-test-og", "og-key", "/ops/opsgenie/key", "api_key", "Create a real test alert in Opsgenie now?");
 
     function promMsg(msg) {
       const el = document.getElementById("prom-msg");

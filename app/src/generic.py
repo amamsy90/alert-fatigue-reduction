@@ -258,11 +258,15 @@ class DetectorSetting:
     #   delta:  (0, scale)
     #   jump:   (confirm rise,) — episodes below it are not shown; missing series use `z`
     levels: dict | None = None
+    # Jump only: a hot threshold (jump size, robust units) learned per series on
+    # the training part where that series had enough incidents; others use `z`.
+    z_by_series: dict | None = None
 
     def label(self) -> str:
         if self.kind == "static":
             return f"static q={self.z:g}, {self.direction}"
-        return f"{self.kind} window={self.window_points} pts, z={self.z:g}, points={self.min_points}, {self.direction}"
+        per = f", size per series for {len(self.z_by_series)}" if self.z_by_series else ""
+        return f"{self.kind} window={self.window_points} pts, z={self.z:g}, points={self.min_points}, {self.direction}{per}"
 
 
 def _scores(metrics: pd.DataFrame, setting: DetectorSetting, cuts: dict) -> dict[str, tuple[pd.Series, pd.Timedelta]]:
@@ -301,11 +305,13 @@ def _scores(metrics: pd.DataFrame, setting: DetectorSetting, cuts: dict) -> dict
     return out
 
 
-def _episodes_from(scores, threshold: float, min_points: int, kind: str) -> list[Spike]:
+def _episodes_from(scores, threshold: float, min_points: int, kind: str,
+                   z_by_series: dict | None = None) -> list[Spike]:
     cfg = Config(memory_min_points=min_points)
     spikes = []
     for sid, (score, gap) in scores.items():
-        hot = score[score > threshold]
+        thr = float(z_by_series[sid]) if z_by_series and sid in z_by_series and kind != "static" else threshold
+        hot = score[score > thr]
         for ep in _episodes(hot, sid, sid, cfg, gap=gap):
             ep.kind = "jump" if kind == "jump" else "rule"
             spikes.append(ep)
@@ -372,9 +378,50 @@ def tune(metrics: pd.DataFrame, train_faults: list[Fault], cuts: dict, kind: str
                      "train_incidents": len(train_faults), "train_false": false}
 
 
+MIN_INCIDENTS_PER_SERIES = 3
+
+
+def tune_jump_size_by_series(metrics: pd.DataFrame, train_faults: list[Fault], cuts: dict,
+                             setting: DetectorSetting, config: Config,
+                             min_incidents: int = MIN_INCIDENTS_PER_SERIES) -> dict[str, float]:
+    """Per-series jump size (the hot threshold `z`) for the jump rule.
+
+    Window, direction and min_points stay global. A series gets its own size only
+    when it has at least `min_incidents` training incidents and a size on the grid
+    beats the global one on that series alone (same cost: 10 x miss + false).
+    One size does not fit all: on GAIA a 0.25 GB step is invisible at 0.5 GB.
+    """
+    if setting.kind != "jump" or not train_faults:
+        return {}
+    by_series: dict[str, list[Fault]] = {}
+    for f in train_faults:
+        by_series.setdefault(str(f.component), []).append(f)
+    base = DetectorSetting("jump", setting.window_points, 0.0, 1, setting.direction)
+    scores = _scores(metrics, base, cuts)
+    out: dict[str, float] = {}
+    for sid, faults in by_series.items():
+        if len(faults) < min_incidents or sid not in scores:
+            continue
+        sc, gap = scores[sid]
+        train = {sid: (sc[sc.index < cuts.get(sid, sc.index.max())], gap)}
+        def cost_at(z: float) -> tuple:
+            c, caught, false = _cost(_episodes_from(train, z, setting.min_points, "jump"), faults, config)
+            return (c, -caught, false)
+        global_cost = cost_at(setting.z)
+        best_z, best = setting.z, global_cost
+        for z in GRIDS["jump"]["z"]:
+            c = cost_at(float(z))
+            if c < best:
+                best_z, best = float(z), c
+        if best < global_cost:
+            out[sid] = best_z
+    return out
+
+
 def detect(metrics: pd.DataFrame, setting: DetectorSetting, cuts: dict) -> list[Spike]:
     threshold = 0.0 if setting.kind == "static" else setting.z
-    spikes = _episodes_from(_scores(metrics, setting, cuts), threshold, setting.min_points, setting.kind)
+    spikes = _episodes_from(_scores(metrics, setting, cuts), threshold, setting.min_points, setting.kind,
+                            setting.z_by_series)
     # Jump only: `levels` holds a confirm rise learned on the training window
     # (one number per series). Static and delta use `levels` as a scale, not a gate.
     if setting.kind == "jump" and setting.levels:
@@ -450,8 +497,17 @@ def evaluate(
     settings, fits = {}, {}
     for kind in ("jump", "delta", "static"):
         settings[kind], fits[kind] = tune(frame, train_faults, cuts, kind, config)
-    # Per-series confirm gate for the jump rule, fit on training spikes only, then frozen.
+    # Per-series jump size, then a per-series confirm gate, both fit on the training part and frozen.
     if fits["jump"].get("tuned"):
+        z_by = tune_jump_size_by_series(frame, train_faults, cuts, settings["jump"], config)
+        if z_by:
+            settings["jump"].z_by_series = z_by
+            fits["jump"]["z_by_series"] = dict(z_by)
+            notes.append(
+                f"Jump size learned per series on the training part for {len(z_by)} series with "
+                f"{MIN_INCIDENTS_PER_SERIES}+ incidents (kept only where it beats the global size); "
+                "the others use the global size."
+            )
         train_jumps = _spikes_part(detect(frame, settings["jump"], cuts), cuts, "train")
         global_thr, by_series = tune_confirm_thresholds(train_jumps, train_faults, config)
         if by_series:

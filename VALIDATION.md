@@ -93,6 +93,18 @@ Script: `python ../tools/fetch_nab.py && python run_nab.py` → `app/results/nab
 | realTraffic | 11 | 45.5% | 12.7% |
 | realTweets | 11 | 36.4% | 36.0% |
 
+## Second benchmark: other fault types (SMD)
+
+Script: `python ../tools/fetch_smd.py && python run_smd.py` → `app/results/smd_eval.csv`. Server Machine Dataset (OmniAnomaly, KDD 2019): 28 real servers, five weeks of one-minute samples, 38 metrics each (CPU, memory, disk, network, TCP), 196 labelled incidents in the test part with, for each, the metrics that moved. Tuned on the first half of every series, scored on the second half, K items a day **per machine**, same engine as the Evaluate page (22 of 28 machines had incidents to tune on; the rest ran with defaults).
+
+| Budget K per machine | Incidents caught (196) | Metric movements shown (1,536) | Items / day | False / day | Chance (per movement) |
+|---|---|---|---|---|---|
+| 5 | 60 (30.6%) | 10.0% | 4.2 | 3.5 | 11.6% |
+| 10 | 84 (42.9%) | 18.6% | 7.7 | 6.4 | 11.6% |
+| 20 | 106 (54.1%) | 31.9% | 13.3 | 10.8 | 11.6% |
+
+*Incident caught* = any metric that moved during the incident was shown while it lasted. *Metric movements* is the stricter count (each flagged metric on its own). "False" items are shown metrics that no label covers; SMD labels only some of the 38 metrics per incident, so correlated movements on unlabelled metrics count as false here. On 11 of 28 machines the detector picked on the tuning half was also the best on the test half; on the others the static rule usually was. This is a harder benchmark than GAIA (many small, mixed-metric incidents, one machine = 38 series) and the numbers are reported as they are.
+
 ## Older scripts (alerts only)
 
 `run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretch.py`, `run_memory_clf.py` score log alerts only and do not count a jump as a catch. Do not quote them as the system result.
