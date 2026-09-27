@@ -5,7 +5,7 @@ services:
       # Bound to this machine only. Change to "8080:8080" to share it, and set a password first.
       - "127.0.0.1:8080:8080"
     environment:
-      SHADOW_MODE: "1"             # 0 = page PagerDuty for escalations, jumps and gaps
+      SHADOW_MODE: "1"             # 0 = page when Live + a channel; UI override wins once saved
       QUEUE_DB: /app/product/data/queue.db
       APP_USER: ${APP_USER:-oncall}
       APP_PASSWORD: ${APP_PASSWORD:-}
@@ -14,13 +14,23 @@ services:
       JUMP_BYTES: ${JUMP_BYTES:-500000000}
       JUMP_RATIO: ${JUMP_RATIO:-0.3}
       ALERT_SHARE: ${ALERT_SHARE:-0.25}
+      # Private Prometheus (Docker/k8s) needs this; cloud metadata is still always refused.
+      PROM_ALLOW_PRIVATE: ${PROM_ALLOW_PRIVATE:-1}
       # PROM_URL: http://host.docker.internal:9090
       # PROM_SERVICE_LABEL: app
       # PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
+      # SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      # OPSGENIE_API_KEY: ${OPSGENIE_API_KEY:-}
     volumes:
       - queue-data:/app/product/data
       - ./data/gaia_raw:/app/data/gaia_raw:ro
       - ./data/gaia_metrics:/app/data/gaia_metrics:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
 
 volumes:
   queue-data:
