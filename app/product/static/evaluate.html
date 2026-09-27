@@ -213,7 +213,7 @@
     }).join("");
     const mi = rep.misses;
     $("misses").innerHTML = mi && Object.keys(mi).length
-      ? `Why problems were missed (your queue, largest K): <b>${mi.no_data}</b> had no data, <b>${mi.no_detection}</b> were not detected, <b>${mi.budget_full}</b> came on days the budget was already used.` +
+      ? `Why problems were missed (your queue, K=${mi.budget_k ?? "?"}): <b>${mi.no_data}</b> had no data, <b>${mi.no_detection}</b> were not detected, <b>${mi.budget_full}</b> came on days the budget was already used.` +
         (chance !== undefined ? ` A random detector with the same number of items would catch <b>${pct(chance)}</b>.` : "")
       : "Add past problems to see why items are missed.";
     const chosen = rep.settings.chosen;

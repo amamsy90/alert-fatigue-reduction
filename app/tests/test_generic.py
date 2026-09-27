@@ -60,6 +60,35 @@ def test_evaluate_tunes_on_the_early_part_and_beats_chance(tmp_path):
     assert mine["detection_rate"] > 5 * report["checks"]["chance_detection"]
 
 
+def test_miss_causes_match_your_queue_at_the_largest_budget(tmp_path):
+    """The miss paragraph must add up to the largest-K row, not the last budget typed."""
+    metrics, incidents = _shop(tmp_path)
+    report = evaluate(metrics, incidents, budgets=(50, 5), train_fraction=0.4).to_dict()
+    assert report["misses"]["budget_k"] == 50
+    mine = next(r for r in report["table"] if r["queue"] == "your_queue" and r["budget_k"] == 50)
+    missed = mine["faults"] - mine["faults_caught"]
+    causes = report["misses"]
+    assert causes["no_data"] + causes["no_detection"] + causes["budget_full"] == missed
+
+
+def test_an_alert_catch_is_not_called_a_miss(tmp_path):
+    from src.entities import Alert, Fault
+    from src.generic import _miss_causes
+    from src.queue import QueueItem
+
+    t0 = pd.Timestamp("2026-01-02 12:00", tz="UTC")
+    frame = pd.DataFrame({
+        "timestamp": [t0, t0 + pd.Timedelta(minutes=5)],
+        "value": [1.0, 1.0],
+        "series_id": ["eu", "eu"],
+    })
+    fault = Fault("f1", t0, t0 + pd.Timedelta(minutes=10), "eu")
+    alert = Alert("a1", t0 + pd.Timedelta(minutes=1), "eu", "log", "error", "down", "f1")
+    shown = [QueueItem(alert.timestamp, "alert", "eu", alert)]
+    causes = _miss_causes(frame, [fault], [], shown)
+    assert causes == {"no_data": 0, "no_detection": 0, "budget_full": 0}
+
+
 def test_without_incidents_the_report_says_so(tmp_path):
     metrics, _ = _shop(tmp_path)
     report = evaluate(metrics, None, budgets=(3,)).to_dict()

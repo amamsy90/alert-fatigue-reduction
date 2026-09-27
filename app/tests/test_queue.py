@@ -55,6 +55,21 @@ def test_alerts_cannot_crowd_out_the_budget():
     assert sum(item.kind == "jump" for item in shown) == 2
 
 
+def test_a_jump_at_the_same_instant_as_an_alert_keeps_the_slot():
+    """An alert timestamped on the confirmation point must not take the only slot."""
+    cfg = Config(budget_k=1, alert_share=1.0)
+    jump = _jump(10)
+    alert = Alert("a-tie", jump.shown_at, "s1", "log", "error", "during jump", "f1")
+    shown = build_queue(
+        spike_items([jump], cfg) + [QueueItem(alert.timestamp, "alert", "s1", alert)],
+        cfg,
+    )
+    assert [item.kind for item in shown] == ["jump", "alert"]
+    assert shown[1].attached
+    score = score_queue("q", shown, [], 1, cfg)
+    assert score["items_per_day"] == 1
+
+
 def test_alert_inside_a_shown_jump_rides_on_it():
     cfg = Config(budget_k=1, alert_share=1.0)
     jump = _jump(10)

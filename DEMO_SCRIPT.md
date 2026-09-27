@@ -71,7 +71,7 @@ python run_validate.py
 uvicorn product.app:app --port 8080
 ```
 
-Expect: **140 passed**, **VALIDATION OK**.
+Expect: **150 passed**, **VALIDATION OK**.
 
 Also, before the viva, click **Go back to the built-in rule** on the Evaluate page and delete `app/product/data/model.pkl` (if present). Otherwise the queue and any live alert are scored with the detector and classifier learned from the last data you evaluated (e.g. the online shop), and a "critical" sample alert can come out as *hide* — correct for that model, confusing in a demo.
 
