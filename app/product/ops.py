@@ -58,10 +58,11 @@ def set_shadow_mode(*, shadow: bool, confirm: str | None = None) -> dict:
                 "Turning Live on requires confirm='LIVE' (typed exactly). "
                 "Live allows PagerDuty pages on ingest jobs when a routing key is set."
             )
-        if not get_routing_key():
+        if not configured_channels():
             raise ValueError(
-                "Turning Live on requires a routing key first "
-                "(save one via POST /ops/pagerduty/key or set PAGERDUTY_ROUTING_KEY)."
+                "Turning Live on requires a channel first: a PagerDuty routing key, "
+                "a Slack webhook or an Opsgenie key (save one on the Connectors panel "
+                "or set PAGERDUTY_ROUTING_KEY / SLACK_WEBHOOK_URL / OPSGENIE_API_KEY)."
             )
     data = _load()
     data["shadow_mode"] = bool(shadow)
@@ -133,9 +134,102 @@ def routing_key_status() -> dict:
     }
 
 
+# --- Slack and Opsgenie ------------------------------------------------------
+# Same pattern as the PagerDuty key: saved in ops.json first, else the env var.
+
+_SECRETS = {
+    "slack_webhook": "SLACK_WEBHOOK_URL",
+    "opsgenie_api_key": "OPSGENIE_API_KEY",
+}
+
+
+def _get_secret(name: str) -> str:
+    saved = (_load().get(name) or "").strip()
+    return saved or (os.environ.get(_SECRETS[name]) or "").strip()
+
+
+def _set_secret(name: str, value: str) -> dict:
+    value = (value or "").strip()
+    if not value:
+        raise ValueError(f"{name} must be non-empty; use clear to remove it")
+    data = _load()
+    data[name] = value
+    _save(data)
+    return _secret_status(name)
+
+
+def _clear_secret(name: str) -> dict:
+    data = _load()
+    data.pop(name, None)
+    _save(data)
+    return _secret_status(name)
+
+
+def _secret_status(name: str) -> dict:
+    saved = (_load().get(name) or "").strip()
+    env = (os.environ.get(_SECRETS[name]) or "").strip()
+    effective = saved or env
+    return {
+        "configured": bool(effective),
+        "last4": effective[-4:] if len(effective) >= 4 else (effective or None),
+        "source": "ops" if saved else ("env" if env else None),
+    }
+
+
+def get_slack_webhook() -> str:
+    return _get_secret("slack_webhook")
+
+
+def set_slack_webhook(url: str) -> dict:
+    url = (url or "").strip()
+    if url and not url.startswith("https://"):
+        raise ValueError("Slack webhook must be an https:// URL")
+    return _set_secret("slack_webhook", url)
+
+
+def clear_slack_webhook() -> dict:
+    return _clear_secret("slack_webhook")
+
+
+def slack_status() -> dict:
+    return _secret_status("slack_webhook")
+
+
+def get_opsgenie_key() -> str:
+    return _get_secret("opsgenie_api_key")
+
+
+def set_opsgenie_key(key: str) -> dict:
+    return _set_secret("opsgenie_api_key", key)
+
+
+def clear_opsgenie_key() -> dict:
+    return _clear_secret("opsgenie_api_key")
+
+
+def opsgenie_status() -> dict:
+    return {**_secret_status("opsgenie_api_key"), "api_url": opsgenie_api_url()}
+
+
+def opsgenie_api_url() -> str:
+    """OPSGENIE_API_URL for the EU region (https://api.eu.opsgenie.com); US by default."""
+    return (os.environ.get("OPSGENIE_API_URL") or "https://api.opsgenie.com").rstrip("/")
+
+
+def configured_channels() -> list[str]:
+    out = []
+    if get_routing_key():
+        out.append("pagerduty")
+    if get_slack_webhook():
+        out.append("slack")
+    if get_opsgenie_key():
+        out.append("opsgenie")
+    return out
+
+
 def can_page() -> bool:
-    """Live mode and a routing key are both required before any page is sent."""
-    return (not get_shadow_mode()) and bool(get_routing_key())
+    """Live mode and at least one channel (PagerDuty, Slack, Opsgenie) are required."""
+    return (not get_shadow_mode()) and bool(configured_channels())
 
 
 # Modes that may call notify_escalations when Live + key. Sample, GAIA,

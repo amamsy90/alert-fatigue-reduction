@@ -85,6 +85,15 @@ def main() -> None:
         if float(mine.loc["realTweets", "detection_rate"]) > float(mine.loc["realTweets", "chance"]) + 0.05:
             _fail("NAB tweets now beats chance; update the 'no better than chance' sentence")
 
+    smd = ROOT / "smd_eval.csv"
+    if smd.exists():  # only after tools/fetch_smd.py + run_smd.py
+        m = pd.read_csv(smd)
+        yq = m[(m["queue"] == "your_queue") & (m["budget_k"] == 20)]
+        _near(float(yq["faults_caught"].sum() / yq["faults"].sum()), 0.319, 0.01, "SMD metric movements K=20")
+        _near(float(yq["incidents_caught"].sum() / yq["incidents"].sum()), 0.541, 0.01, "SMD incidents K=20")
+        yq5 = m[(m["queue"] == "your_queue") & (m["budget_k"] == 5)]
+        _near(float(yq5["incidents_caught"].sum() / yq5["incidents"].sum()), 0.306, 0.01, "SMD incidents K=5")
+
     print("VALIDATION OK")
     for name in ("logs_severity", "static_p99", "delta_5m", "jumps_tuned", "proposed", "p3_carryover"):
         r = _row(q, name)

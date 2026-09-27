@@ -157,6 +157,14 @@ class RoutingKeyRequest(BaseModel):
     routing_key: str = Field(..., description="PagerDuty Events API v2 routing key")
 
 
+class SlackWebhookRequest(BaseModel):
+    webhook_url: str = Field(..., description="Slack incoming-webhook URL (https://hooks.slack.com/...)")
+
+
+class OpsgenieKeyRequest(BaseModel):
+    api_key: str = Field(..., description="Opsgenie API-integration key")
+
+
 class PromUrlRequest(BaseModel):
     url: str = Field(..., description="Prometheus base URL, e.g. http://localhost:9090")
 
@@ -209,6 +217,9 @@ def _connector_status() -> dict:
             "would_have_paged": (stats["last_job"] or {}).get("would_have_paged"),
             "note": "Only ingest jobs page when Live + key. Sample / GAIA / Evaluate never page.",
         },
+        "slack": {**ops_mod.slack_status(), "will_page": ops_mod.can_page() and bool(ops_mod.get_slack_webhook())},
+        "opsgenie": {**ops_mod.opsgenie_status(), "will_page": ops_mod.can_page() and bool(ops_mod.get_opsgenie_key())},
+        "channels": ops_mod.configured_channels(),
         "last_job": stats["last_job"],
     }
 
@@ -279,6 +290,66 @@ def ops_test_page():
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"PagerDuty rejected the test: {exc}") from exc
     return {"sent": 1, "dedup_key": "oncall-queue-test", "note": "Resolve the test incident in PagerDuty."}
+
+
+@app.post("/ops/slack/webhook")
+def ops_set_slack(body: SlackWebhookRequest):
+    try:
+        return ops_mod.set_slack_webhook(body.webhook_url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/ops/slack/webhook")
+def ops_clear_slack():
+    return ops_mod.clear_slack_webhook()
+
+
+@app.post("/ops/slack/test")
+def ops_test_slack():
+    """Post one test message. Only when Live and a webhook is set."""
+    if ops_mod.get_shadow_mode():
+        raise HTTPException(400, "Test refused: Shadow mode is on. Turn Live on first.")
+    if not ops_mod.get_slack_webhook():
+        raise HTTPException(400, "Test refused: no Slack webhook configured.")
+    from product.notifiers import notify_slack
+
+    item = {"kind": "test", "service": "oncall-queue", "summary": "Test message (safe to ignore)",
+            "dedup_key": "oncall-queue-test", "severity": "info"}
+    r = notify_slack([item], 1)
+    if r.get("failed"):
+        raise HTTPException(502, f"Slack rejected the test: {', '.join(r.get('errors') or [])}")
+    return {"sent": 1, "note": "Check the Slack channel."}
+
+
+@app.post("/ops/opsgenie/key")
+def ops_set_opsgenie(body: OpsgenieKeyRequest):
+    try:
+        return ops_mod.set_opsgenie_key(body.api_key)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/ops/opsgenie/key")
+def ops_clear_opsgenie():
+    return ops_mod.clear_opsgenie_key()
+
+
+@app.post("/ops/opsgenie/test")
+def ops_test_opsgenie():
+    """Create one test alert. Only when Live and a key is set."""
+    if ops_mod.get_shadow_mode():
+        raise HTTPException(400, "Test refused: Shadow mode is on. Turn Live on first.")
+    if not ops_mod.get_opsgenie_key():
+        raise HTTPException(400, "Test refused: no Opsgenie key configured.")
+    from product.notifiers import notify_opsgenie
+
+    item = {"kind": "test", "service": "oncall-queue", "summary": "On-call queue test alert (safe to close)",
+            "dedup_key": "oncall-queue-test", "severity": "info"}
+    r = notify_opsgenie([item])
+    if r.get("failed"):
+        raise HTTPException(502, f"Opsgenie rejected the test: {', '.join(r.get('errors') or [])}")
+    return {"sent": 1, "alias": "oncall-queue-test", "note": "Close the test alert in Opsgenie."}
 
 
 @app.post("/ops/prometheus/url")

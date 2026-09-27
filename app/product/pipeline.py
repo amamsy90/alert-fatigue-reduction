@@ -550,8 +550,9 @@ def _run_job_locked(
     decisions = result.decisions
     # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
     # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
-    from .ops import PAGEABLE_MODES, can_page, get_routing_key, page_cutoff, set_page_watermark
-    from .pagerduty import notify_escalations, would_have_paged
+    from .ops import PAGEABLE_MODES, can_page, configured_channels, page_cutoff, set_page_watermark
+    from .notifiers import notify_opsgenie, notify_slack
+    from .pagerduty import notify_escalations, page_items, would_have_paged
 
     # Ingest jobs re-score the metric history; only items shown since the last
     # ingest job are new. Alerts in an ingest batch are all new (the buffer is
@@ -566,12 +567,25 @@ def _run_job_locked(
         page = {"sent": 0, "failed": 0, "skipped": f"mode={mode} never pages"}
     elif shadow_mode:
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
-    elif not get_routing_key():
-        page = {"sent": 0, "failed": 0, "skipped": "no routing key"}
+    elif not configured_channels():
+        page = {"sent": 0, "failed": 0, "skipped": "no channel configured"}
     elif not can_page():
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     else:
-        page = notify_escalations(result.alerts, decisions, spikes=page_spikes)
+        channels = configured_channels()
+        items = page_items(result.alerts, decisions, spikes=page_spikes)
+        per: dict[str, dict] = {}
+        if "pagerduty" in channels:
+            per["pagerduty"] = notify_escalations(result.alerts, decisions, spikes=page_spikes)
+        if "slack" in channels:
+            per["slack"] = notify_slack(items, len(items))
+        if "opsgenie" in channels:
+            per["opsgenie"] = notify_opsgenie(items)
+        page = {
+            "sent": sum(int(r.get("sent", 0)) for r in per.values()),
+            "failed": sum(int(r.get("failed", 0)) for r in per.values()),
+            "channels": per,
+        }
     whp = would_have_paged(result.alerts, decisions, spikes=page_spikes)
     if mode in PAGEABLE_MODES:
         whp["since"] = cutoff.isoformat()
