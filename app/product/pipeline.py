@@ -436,14 +436,23 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) ->
 # the same buffer twice (double rows, and in Live mode double pages).
 _JOB_LOCK = threading.Lock()
 
+
+class JobBusy(RuntimeError):
+    """Raised when another scoring job already holds the lock (HTTP 409)."""
+
+
 # Jobs kept in the database (each ingest job stores 14 days of jumps). Marks
 # are copied into the feedback table, so pruning old jobs never loses a label.
 DEFAULT_JOB_RETENTION = 200
 
 
 def run_job(*args, **kwargs) -> dict:
-    with _JOB_LOCK:
+    if not _JOB_LOCK.acquire(blocking=False):
+        raise JobBusy("another job is already running; retry shortly")
+    try:
         return _run_job_locked(*args, **kwargs)
+    finally:
+        _JOB_LOCK.release()
 
 
 def _run_job_locked(

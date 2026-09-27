@@ -5,12 +5,25 @@ ops file are never returned in full by the API (configured bool + last4 only).
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 from pathlib import Path
 from urllib.parse import urlparse
 
 DEFAULT_OPS_PATH = Path(__file__).resolve().parent / "data" / "ops.json"
+
+# Cloud metadata / link-local names that must never be reachable via PROM_URL,
+# even when PROM_ALLOW_PRIVATE=1 (SSRF).
+_BLOCKED_PROM_HOSTS = frozenset(
+    {
+        "metadata",
+        "metadata.google.internal",
+        "metadata.goog",
+        "instance-data",
+    }
+)
+_PRIVATE_PROM_HOSTNAMES = frozenset({"localhost", "localhost.localdomain"})
 
 
 def ops_path() -> Path:
@@ -34,6 +47,12 @@ def _save(data: dict) -> dict:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp.replace(path)
+    # Secrets live here (routing keys, Slack webhook, Opsgenie key). Best-effort
+    # owner-only mode on Unix; Windows may ignore or raise — never fail the save.
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
     return data
 
 
@@ -182,8 +201,12 @@ def get_slack_webhook() -> str:
 
 def set_slack_webhook(url: str) -> dict:
     url = (url or "").strip()
-    if url and not url.startswith("https://"):
-        raise ValueError("Slack webhook must be an https:// URL")
+    if url and not url.startswith("https://hooks.slack.com/"):
+        raise ValueError(
+            "Slack webhook must be an https://hooks.slack.com/... URL "
+            "(incoming webhook). Set SLACK_WEBHOOK_URL in the environment "
+            "only if you use a non-Slack gateway."
+        )
     return _set_secret("slack_webhook", url)
 
 
@@ -307,6 +330,53 @@ def get_prom_url() -> str:
     return env_prom_url()
 
 
+def prom_allow_private() -> bool:
+    """Loopback / RFC1918 Prometheus targets need PROM_ALLOW_PRIVATE=1 (pilot default off)."""
+    return os.environ.get("PROM_ALLOW_PRIVATE", "0") == "1"
+
+
+def assert_prom_url_safe(url: str) -> None:
+    """Refuse SSRF-prone Prometheus targets (metadata / link-local; private unless allowed).
+
+    Safe default: block loopback and private IP literals (and localhost). Set
+    PROM_ALLOW_PRIVATE=1 for in-cluster / Docker Compose Prometheus. Cloud
+    metadata hosts and link-local addresses are always refused.
+    """
+    url = (url or "").strip()
+    if not url:
+        raise ValueError("prometheus_url must be non-empty")
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("prometheus_url must be an http(s) URL, e.g. http://localhost:9090")
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise ValueError("prometheus_url must include a host")
+    if host in _BLOCKED_PROM_HOSTS or host.endswith(".metadata.google.internal"):
+        raise ValueError("Prometheus URL host is not allowed (cloud metadata)")
+    # Hostname that clearly means this machine / .local mDNS
+    if host in _PRIVATE_PROM_HOSTNAMES or host.endswith(".local"):
+        if not prom_allow_private():
+            raise ValueError(
+                "Private/loopback Prometheus URLs need PROM_ALLOW_PRIVATE=1 "
+                "(safe default blocks them to reduce SSRF risk)."
+            )
+        return
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        # Non-IP hostname (e.g. prometheus.monitoring.svc): allow; operator DNS.
+        return
+    if ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+        raise ValueError("Prometheus URL must not target link-local, multicast, or unspecified addresses")
+    # Explicit: IPv4/IPv6 link-local already covered; also refuse CGNAT? skip.
+    if ip.is_loopback or ip.is_private:
+        if not prom_allow_private():
+            raise ValueError(
+                "Private/loopback Prometheus URLs need PROM_ALLOW_PRIVATE=1 "
+                "(safe default blocks them to reduce SSRF risk)."
+            )
+
+
 def set_prom_url(url: str) -> dict:
     url = (url or "").strip().rstrip("/")
     if not url:
@@ -317,6 +387,7 @@ def set_prom_url(url: str) -> dict:
         raise ValueError("prometheus_url must be an http(s) URL, e.g. http://localhost:9090")
     if "://" not in url:
         url = f"http://{url}"
+    assert_prom_url_safe(url)
     data = _load()
     data["prometheus_url"] = url.rstrip("/")
     _save(data)
@@ -364,5 +435,7 @@ def prom_url_status() -> dict:
         "source": source,
         "query_set": bool(os.environ.get("PROM_QUERY")),
         "service_label": os.environ.get("PROM_SERVICE_LABEL") or None,
-        "note": "PROM_QUERY and PROM_SERVICE_LABEL are env-only; URL may be saved here or set via PROM_URL.",
+        "allow_private": prom_allow_private(),
+        "note": "PROM_QUERY and PROM_SERVICE_LABEL are env-only; URL may be saved here or set via PROM_URL. "
+        "Private/loopback targets need PROM_ALLOW_PRIVATE=1; cloud metadata is always refused.",
     }

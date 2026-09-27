@@ -37,6 +37,7 @@ def ops_env(tmp_path, monkeypatch):
     monkeypatch.setenv("OPS_PATH", str(tmp_path / "ops.json"))
     monkeypatch.setenv("SHADOW_MODE", "1")
     monkeypatch.delenv("PROM_URL", raising=False)
+    monkeypatch.setenv("PROM_ALLOW_PRIVATE", "1")
     monkeypatch.delenv("PROM_QUERY", raising=False)
     monkeypatch.delenv("PAGERDUTY_ROUTING_KEY", raising=False)
     monkeypatch.setenv("QUEUE_DB", str(tmp_path / "queue.db"))

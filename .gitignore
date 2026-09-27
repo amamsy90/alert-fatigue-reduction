@@ -10,6 +10,7 @@ app/product/data/
 .env
 .env.*
 !.env.example
+!app/.env.example
 
 # Python
 __pycache__/

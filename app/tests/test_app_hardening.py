@@ -76,6 +76,7 @@ def test_jobs_run_one_at_a_time(monkeypatch):
     import product.pipeline as pipeline
 
     active = {"now": 0, "max": 0}
+    outcomes = {"ok": 0, "busy": 0}
 
     def slow(*args, **kwargs):
         active["now"] += 1
@@ -84,13 +85,22 @@ def test_jobs_run_one_at_a_time(monkeypatch):
         active["now"] -= 1
         return {}
 
+    def attempt():
+        try:
+            pipeline.run_job()
+            outcomes["ok"] += 1
+        except pipeline.JobBusy:
+            outcomes["busy"] += 1
+
     monkeypatch.setattr(pipeline, "_run_job_locked", slow)
-    threads = [threading.Thread(target=pipeline.run_job) for _ in range(4)]
+    threads = [threading.Thread(target=attempt) for _ in range(4)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     assert active["max"] == 1
+    assert outcomes["ok"] == 1
+    assert outcomes["busy"] == 3
 
 
 def test_old_evaluations_are_pruned(client, tmp_path):
