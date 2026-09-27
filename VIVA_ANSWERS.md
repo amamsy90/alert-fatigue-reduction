@@ -54,7 +54,7 @@ GPT is a chat box. This is an on-call tool.
 - There is a hard daily budget K. At most K items, first come first served. Log alerts may use at most a quarter of the slots, and gap items at most a quarter, so a noisy log cannot push out a jump that arrives later. You cannot get that guarantee by pasting a day's logs into a chat.
 - Decisions are causal. A jump is shown at the point that confirms it, using only the rise known by then. The code does not rank the day by the final peak. A chat answer that has already seen the whole day is look-ahead.
 - The numbers are reproducible. The same scripts write `app/results/`, and `run_validate.py` fails if the report and the CSVs drift. You can walk forward, re-learn only from the past, and compare with a Prometheus-style `delta()` rule and a static threshold. A chat reply is not that experiment.
-- Private ops telemetry should not go into a chat box. This app runs on your side, in shadow mode by default, and only pages PagerDuty if you turn shadow mode off and set a routing key.
+- Private ops telemetry should not go into a chat box. This app runs on your side, in shadow mode by default, and only pages (PagerDuty, Slack, or Opsgenie) if you turn Live on, type LIVE to confirm, and configure at least one channel.
 
 Use GPT to explain the code or draft slides. Do not use it as the detector.
 

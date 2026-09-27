@@ -1,8 +1,8 @@
 # Connectors — Phase 2
 
-Shadow mode is **on by default** (`SHADOW_MODE=1`, overridable from the UI into `ops.json`). Decisions are stored and shown in the UI. Nothing is sent to PagerDuty until you turn **Live** on **and** configure a routing key — and only **ingest** jobs page (sample / GAIA / Evaluate never do).
+Shadow mode is **on by default** (`SHADOW_MODE=1`, overridable from the UI into `ops.json`). Decisions are stored and shown in the UI. Nothing is sent to PagerDuty, Slack, or Opsgenie until you turn **Live** on **and** configure at least one channel - and only **ingest** jobs page (sample / GAIA / Evaluate never do).
 
-Open http://127.0.0.1:8080 — the **Connectors** cards show Shadow vs Live, whether a routing key is configured (last4 only; full key never shown), and last-job PagerDuty meta. `GET /connectors` is the same status as JSON. Use the ops controls to switch mode, save/clear a key, send a test page, or **Test Prometheus**. **Score buffer** runs a job from webhook batches already received.
+Open http://127.0.0.1:8080 - the **Connectors** cards show Shadow vs Live, whether each channel is configured (last4 only; secrets never shown in full), and last-job page meta. `GET /connectors` is the same status as JSON. Use the ops controls to switch mode, save/clear a key, send a test page, or **Test Prometheus**. **Score buffer** runs a job from webhook batches already received.
 
 ## Webhook alerts
 
@@ -84,7 +84,7 @@ Escalations are sent only when **all** are true:
 
 Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start). Only metric items confirmed **since the last ingest job** are paged (the first job looks back `PAGE_LOOKBACK_MINUTES`, default 60), so turning Live on never pages the 14 days of history the job re-scores. The mark advances in Shadow too, and is kept if a send fails so the next job retries. Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
 
-Every scored job also stores `meta.would_have_paged` — the same set Live *would* have opened (`count`, `spikes`, `alerts`, short `items` list). In Shadow the UI shows: “In Live mode this run would have opened N PagerDuty incidents.” Sample never pages, but would-have still counts (useful for demos).
+Every scored job also stores `meta.would_have_paged` — the same set Live *would* have opened (`count`, `spikes`, `alerts`, short `items` list). In Shadow the UI shows how many pages that set would open across configured channels. Sample never pages, but would-have still counts (useful for demos).
 
 ### API
 

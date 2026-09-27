@@ -446,8 +446,8 @@
       if (!whp || typeof whp.count !== "number") { el.hidden = true; el.innerHTML = ""; return; }
       const n = whp.count;
       const title = shadow
-        ? `In Live mode this run would have opened <strong>${n}</strong> PagerDuty incident${n === 1 ? "" : "s"}`
-        : `This run would have opened <strong>${n}</strong> PagerDuty incident${n === 1 ? "" : "s"} (same set Live sends on ingest)`;
+        ? `In Live mode this run would have opened <strong>${n}</strong> page${n === 1 ? "" : "s"}`
+        : `This run would have opened <strong>${n}</strong> page${n === 1 ? "" : "s"} (same set Live sends on ingest)`;
       const br = `Breakdown: ${whp.spikes ?? 0} spike(s) · ${whp.alerts ?? 0} escalated alert(s)`;
       const items = (whp.items || []).slice(0, 8).map(it => {
         const label = escapeHtml(it.kind || "?") + " · " + escapeHtml(it.service || "");
