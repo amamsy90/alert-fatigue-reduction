@@ -82,7 +82,7 @@ Escalations are sent only when **all** are true:
 
 **Hard safety:** `mode=sample`, GAIA, Evaluate-my-data / upload paths **never** call `notify_escalations`, even if Live is on. Only ingest jobs page.
 
-Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
+Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start). Only metric items confirmed **since the last ingest job** are paged (the first job looks back `PAGE_LOOKBACK_MINUTES`, default 60), so turning Live on never pages the 14 days of history the job re-scores. The mark advances in Shadow too, and is kept if a send fails so the next job retries. Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
 
 Every scored job also stores `meta.would_have_paged` — the same set Live *would* have opened (`count`, `spikes`, `alerts`, short `items` list). In Shadow the UI shows: “In Live mode this run would have opened N PagerDuty incidents.” Sample never pages, but would-have still counts (useful for demos).
 
