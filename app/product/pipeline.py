@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from dataclasses import dataclass, replace
+import threading
 from pathlib import Path
 
 import pandas as pd
@@ -431,7 +432,21 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) ->
     }
 
 
-def run_job(
+# One job at a time: an Alertmanager retry and a click on "Run" must not score
+# the same buffer twice (double rows, and in Live mode double pages).
+_JOB_LOCK = threading.Lock()
+
+# Jobs kept in the database (each ingest job stores 14 days of jumps). Marks
+# are copied into the feedback table, so pruning old jobs never loses a label.
+DEFAULT_JOB_RETENTION = 200
+
+
+def run_job(*args, **kwargs) -> dict:
+    with _JOB_LOCK:
+        return _run_job_locked(*args, **kwargs)
+
+
+def _run_job_locked(
     store: QueueStore,
     *,
     mode: str = "sample",
@@ -598,6 +613,12 @@ def run_job(
             **feedback_stats,
         },
     )
+    try:
+        keep = int(os.environ.get("JOB_RETENTION", DEFAULT_JOB_RETENTION))
+    except ValueError:
+        keep = DEFAULT_JOB_RETENTION
+    if keep > 0:
+        store.prune_jobs(keep=keep)
     return {
         "job_id": job_id,
         "source": source,

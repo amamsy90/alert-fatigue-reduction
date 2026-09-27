@@ -385,6 +385,23 @@ class QueueStore:
             ).fetchall()
         return {(str(r["service"]), pd.Timestamp(r["start"]).value) for r in rows}
 
+    def prune_jobs(self, keep: int) -> int:
+        """Delete all but the newest `keep` jobs and their rows. Marks survive:
+        the feedback table carries its own copy of service and time window."""
+        with self._connect() as conn:
+            old = [
+                r["job_id"]
+                for r in conn.execute(
+                    "SELECT job_id FROM jobs ORDER BY created_at DESC LIMIT -1 OFFSET ?",
+                    (max(int(keep), 0),),
+                )
+            ]
+            for job_id in old:
+                conn.execute("DELETE FROM decisions WHERE job_id = ?", (job_id,))
+                conn.execute("DELETE FROM jumps WHERE job_id = ?", (job_id,))
+                conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
+        return len(old)
+
     def job_meta(self, job_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()

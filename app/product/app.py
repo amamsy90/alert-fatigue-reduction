@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -310,6 +311,7 @@ def ops_run_prometheus_test():
 
 @app.post("/jobs/run")
 def jobs_run(body: RunRequest):
+    _budget(body.budget_k)
     try:
         if body.mode == "ingest":
             rows, last_id = STORE.peek_buffer()
@@ -400,11 +402,36 @@ def feedback_faults():
     )
 
 
+def _max_upload_bytes() -> int:
+    try:
+        return int(float(os.environ.get("MAX_UPLOAD_MB", "200")) * 1024 * 1024)
+    except ValueError:
+        return 200 * 1024 * 1024
+
+
 async def _save_upload(upload: UploadFile | None, path: Path) -> Path | None:
+    """Write an upload in chunks; refuse files above MAX_UPLOAD_MB (default 200)."""
     if upload is None or not upload.filename:
         return None
-    path.write_bytes(await upload.read())
+    limit = _max_upload_bytes()
+    written = 0
+    with path.open("wb") as out:
+        while chunk := await upload.read(1024 * 1024):
+            written += len(chunk)
+            if written > limit:
+                raise HTTPException(413, f"{upload.filename} is larger than {limit // (1024 * 1024)} MB")
+            out.write(chunk)
     return path
+
+
+def _budget(value) -> int:
+    try:
+        k = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, f"budget_k must be a whole number, got {value!r}") from exc
+    if not 1 <= k <= 10_000:
+        raise HTTPException(400, "budget_k must be between 1 and 10000")
+    return k
 
 
 @app.post("/jobs/upload")
@@ -421,15 +448,18 @@ async def jobs_upload(
         metrics_path = await _save_upload(metrics_file, tmp_path / "metrics.csv")
         faults_path = await _save_upload(faults_file, tmp_path / "faults.csv")
         try:
-            result = run_job(
+            result = await run_in_threadpool(
+                run_job,
                 STORE,
                 mode="upload",
-                budget_k=budget_k,
+                budget_k=_budget(budget_k),
                 shadow_mode=shadow_mode,
                 alerts_csv=alerts_path,
                 metrics_path=metrics_path,
                 faults_path=faults_path,
             )
+        except HTTPException:
+            raise
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(400, str(exc)) from exc
     return result
@@ -452,21 +482,18 @@ async def ingest_alerts(request: Request):
     budget_k = 20
     if isinstance(payload, dict) and not looks_like_alertmanager(payload):
         score_now = bool(payload.get("score_now"))
-        budget_k = int(payload.get("budget_k") or 20)
+        budget_k = _budget(payload.get("budget_k") or 20)
     if request.query_params.get("score_now") in ("1", "true", "yes"):
         score_now = True
     if request.query_params.get("budget_k"):
-        budget_k = int(request.query_params["budget_k"])
+        budget_k = _budget(request.query_params["budget_k"])
     buffered = STORE.buffer_alerts(rows)
     response: dict = {"buffered_batches": buffered, "received": len(rows)}
     if score_now:
         rows_now, last_id = STORE.peek_buffer()
         try:
-            result = run_job(
-                STORE,
-                mode="ingest",
-                budget_k=budget_k,
-                alert_rows=rows_now,
+            result = await run_in_threadpool(
+                run_job, STORE, mode="ingest", budget_k=budget_k, alert_rows=rows_now
             )
         except Exception as exc:  # noqa: BLE001 — rows stay buffered for the next try
             raise HTTPException(400, f"{exc} (alerts kept in the buffer)") from exc
@@ -554,20 +581,40 @@ async def evaluate_data(
         paths = {role: folder / f"{role}.csv" for role in ("metrics", "incidents", "events")}
         paths = {role: p if p.exists() else None for role, p in paths.items()}
         try:
-            k_list = tuple(int(x) for x in budgets.replace(" ", "").split(",") if x)
-            report = evaluate(paths["metrics"], paths["incidents"], paths["events"], budgets=k_list or (5, 10, 20),
-                              train_fraction=min(max(train_fraction, 0.05), 0.9),
-                              default_incident_minutes=incident_minutes, day_offset_hours=day_offset_hours)
+            k_list = tuple(_budget(x) for x in budgets.replace(" ", "").split(",") if x)
+        except HTTPException as exc:
+            raise HTTPException(400, f"budgets must be whole numbers like 5,10,20 ({exc.detail})") from exc
+        try:
+            report = await run_in_threadpool(
+                evaluate, paths["metrics"], paths["incidents"], paths["events"], budgets=k_list or (5, 10, 20),
+                train_fraction=min(max(train_fraction, 0.05), 0.9),
+                default_incident_minutes=incident_minutes, day_offset_hours=day_offset_hours)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         data = report.to_dict()
         suggested = live_setting(paths["metrics"], report)
         (folder / "report.json").write_text(json.dumps({"report": data, "suggested": suggested,
                                                         "dataset": dataset}, default=str), encoding="utf-8")
+        _prune_evals(keep=eval_id)
         return {"eval_id": eval_id, "dataset": dataset, "report": data, "suggested": suggested}
     except HTTPException:
         shutil.rmtree(folder, ignore_errors=True)
         raise
+
+
+def _prune_evals(keep: str, limit: int | None = None) -> None:
+    """Keep the newest EVAL_RETENTION (default 30) evaluation folders; uploads add up."""
+    if limit is None:
+        try:
+            limit = int(os.environ.get("EVAL_RETENTION", "30"))
+        except ValueError:
+            limit = 30
+    if limit <= 0 or not EVAL_DIR.exists():
+        return
+    folders = sorted((f for f in EVAL_DIR.iterdir() if f.is_dir()), key=lambda f: f.stat().st_mtime, reverse=True)
+    for folder in folders[limit:]:
+        if folder.name != keep:
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 @app.get("/settings")
@@ -597,7 +644,7 @@ def reset_settings():
 def score_evaluated(eval_id: str, body: dict | None = None):
     """Run the live queue on the evaluated files (every day, all items), for the Queue page."""
     folder = _eval_folder(eval_id)
-    budget_k = int((body or {}).get("budget_k") or 20)
+    budget_k = _budget((body or {}).get("budget_k") or 20)
     events = folder / "events.csv"
     incidents = folder / "incidents.csv"
     try:
