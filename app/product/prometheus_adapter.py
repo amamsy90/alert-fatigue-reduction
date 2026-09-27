@@ -40,18 +40,26 @@ def step_seconds(hours: float, requested: float) -> int:
 
 
 def _resolve_prom_url(base_url: str | None = None) -> str:
-    """Explicit arg, then saved ops.json, then PROM_URL env."""
+    """Explicit arg, then saved ops.json, then PROM_URL env. SSRF-checked."""
+    resolved = ""
     if base_url:
-        return str(base_url).rstrip("/")
-    try:
-        from product.ops import get_prom_url
+        resolved = str(base_url).rstrip("/")
+    else:
+        try:
+            from product.ops import get_prom_url
 
-        saved = get_prom_url()
-        if saved:
-            return saved
-    except Exception:  # noqa: BLE001 — ops may be unavailable in unit isolation
-        pass
-    return (os.environ.get("PROM_URL") or "").rstrip("/")
+            saved = get_prom_url()
+            if saved:
+                resolved = saved
+        except Exception:  # noqa: BLE001 — ops may be unavailable in unit isolation
+            pass
+        if not resolved:
+            resolved = (os.environ.get("PROM_URL") or "").rstrip("/")
+    if resolved:
+        from product.ops import assert_prom_url_safe
+
+        assert_prom_url_safe(resolved)
+    return resolved
 
 
 def prom_url_host(base_url: str) -> str | None:
@@ -117,7 +125,10 @@ def fetch_memory_metrics(
 
 def probe_prometheus(base_url: str | None = None, timeout: float = 2.0) -> dict:
     """Reach Prometheus `/api/v1/status/buildinfo`. Does not return the URL or secrets."""
-    base_url = _resolve_prom_url(base_url)
+    try:
+        base_url = _resolve_prom_url(base_url)
+    except ValueError as exc:
+        return {"reachable": False, "error": str(exc)}
     if not base_url:
         return {"reachable": False, "error": "PROM_URL is not set"}
     url = f"{base_url}/api/v1/status/buildinfo"
@@ -142,7 +153,17 @@ def run_prometheus_test(
 
     Returns ``{ok, series_count, points, error?, url_host, version?}``.
     """
-    base_url = _resolve_prom_url(base_url)
+    try:
+        base_url = _resolve_prom_url(base_url)
+    except ValueError as exc:
+        raw = (base_url or "").strip() if base_url else ""
+        return {
+            "ok": False,
+            "series_count": 0,
+            "points": 0,
+            "error": str(exc),
+            "url_host": prom_url_host(raw) if raw else None,
+        }
     host = prom_url_host(base_url) if base_url else None
     if not base_url:
         return {

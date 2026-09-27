@@ -24,7 +24,7 @@ from product.alertmanager import looks_like_alertmanager, normalize_ingest
 from product.settings import clear_saved, load_saved, save_saved
 from product import ops as ops_mod
 from product.model_store import load_model
-from product.pipeline import run_job
+from product.pipeline import JobBusy, run_job
 from product.prometheus_adapter import probe_prometheus, run_prometheus_test
 from product.store import QueueStore
 
@@ -226,12 +226,23 @@ def _connector_status() -> dict:
 
 @app.get("/health")
 def health():
-    status = _connector_status()
+    """Liveness/readiness without probing Prometheus or loading connector secrets.
+
+    A Prometheus probe on /health made orchestrator checks hang whenever Prom
+    was down; keep this endpoint cheap and dependency-light.
+    """
+    db_ok = True
+    try:
+        STORE.latest_job_id()
+    except Exception:  # noqa: BLE001 — degraded, not a crash
+        db_ok = False
     return {
-        "status": "ok",
-        "shadow_mode": status["shadow_mode"],
-        "login_required": status["login_required"],
-        "pagerduty_configured": status["pagerduty"]["configured"],
+        "status": "ok" if db_ok else "degraded",
+        "db_ok": db_ok,
+        "shadow_mode": ops_mod.get_shadow_mode(),
+        "login_required": _auth_settings() is not None,
+        "pagerduty_configured": ops_mod.routing_key_status()["configured"],
+        "channels": ops_mod.configured_channels(),
     }
 
 
@@ -380,6 +391,9 @@ def ops_run_prometheus_test():
     return _prometheus_test()
 
 
+
+
+
 @app.post("/jobs/run")
 def jobs_run(body: RunRequest):
     _budget(body.budget_k)
@@ -406,6 +420,8 @@ def jobs_run(body: RunRequest):
         return result
     except HTTPException:
         raise
+    except JobBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     except ValueError as exc:
@@ -531,6 +547,8 @@ async def jobs_upload(
             )
         except HTTPException:
             raise
+        except JobBusy as exc:
+            raise HTTPException(409, str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(400, str(exc)) from exc
     return result
@@ -566,6 +584,8 @@ async def ingest_alerts(request: Request):
             result = await run_in_threadpool(
                 run_job, STORE, mode="ingest", budget_k=budget_k, alert_rows=rows_now
             )
+        except JobBusy as exc:
+            raise HTTPException(409, f"{exc} (alerts kept in the buffer)") from exc
         except Exception as exc:  # noqa: BLE001 — rows stay buffered for the next try
             raise HTTPException(400, f"{exc} (alerts kept in the buffer)") from exc
         STORE.ack_buffer(last_id)
@@ -727,6 +747,8 @@ def score_evaluated(eval_id: str, body: dict | None = None):
             metrics_path=folder / "metrics.csv",
             faults_path=incidents if incidents.exists() else None,
         )
+    except JobBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 

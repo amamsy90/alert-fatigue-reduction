@@ -99,7 +99,7 @@ def test_live_needs_any_channel(env):
     assert ops.configured_channels() == ["slack"]
     ops.set_shadow_mode(shadow=False, confirm="LIVE")
     assert ops.can_page()
-    with pytest.raises(ValueError, match="https"):
+    with pytest.raises(ValueError, match="hooks.slack.com"):
         ops.set_slack_webhook("http://plain")
 
 
