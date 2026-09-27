@@ -56,7 +56,7 @@ uvicorn product.app:app --port 8080
 
 Open http://127.0.0.1:8080 → **Run sample**, or upload your CSVs. **Run sample** builds one synthetic day (a memory jump, a monitoring gap, a slow leak, and a few log lines) and scores it with the built-in rules, so the queue is not alerts-only. Mark items **Real / Noise**; the next run that has enough labels trains on the marks. **Download confirmed faults** exports them as `faults.csv`. A short script for an instructor demo is [../VIVA_ANSWERS.md](../VIVA_ANSWERS.md).
 
-Docker (bound to localhost; set `APP_PASSWORD` before sharing):
+Docker (bound to localhost; set `APP_PASSWORD` before sharing — behind a reverse proxy every request looks local, so the private-network guard alone does not protect it):
 
 ```bash
 docker compose up --build
@@ -91,6 +91,8 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `LEAK_WINDOW_MINUTES` / `LEAK_BYTES` | `180` / `5e8` | Slow-leak rule (byte metrics only); `0` = off |
 | `GROUP_MINUTES` | `0` | Metric items this close on other services share one slot |
 | `CARRY_OVER_MAX` | `0` | Unused slots carried to the next day (e.g. `10`) |
+| `MAX_UPLOAD_MB` | `200` | Largest CSV the upload and Evaluate pages accept |
+| `JOB_RETENTION` / `EVAL_RETENTION` | `200` / `30` | Jobs and evaluations kept on disk; older ones are deleted (Real / Noise marks are kept) |
 | `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
 | `SETTINGS_PATH` | `product/data/settings.json` | Settings saved from **Evaluate my data** / `cli tune` (replace the built-in rule) |
 | `OPS_PATH` | `product/data/ops.json` | Persisted Shadow/Live override + saved PagerDuty routing key |
@@ -143,4 +145,4 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 122 tests (`python -m pytest -q`) |
+| `tests/` | 130 tests (`python -m pytest -q`) |
