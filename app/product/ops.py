@@ -147,6 +147,59 @@ def may_page_for_mode(mode: str) -> bool:
     return mode in PAGEABLE_MODES and can_page()
 
 
+# --- Paging watermark -------------------------------------------------------
+# An ingest job re-scores up to 14 days of metrics. Without a watermark, the
+# first Live run would page every jump shown in that history. Only metric items
+# confirmed after the last ingest job (or, the first time, within the last
+# PAGE_LOOKBACK_MINUTES) are paged or counted as would-have-paged.
+
+DEFAULT_PAGE_LOOKBACK_MINUTES = 60.0
+
+
+def page_lookback_minutes() -> float:
+    try:
+        return max(0.0, float(os.environ.get("PAGE_LOOKBACK_MINUTES", DEFAULT_PAGE_LOOKBACK_MINUTES)))
+    except ValueError:
+        return DEFAULT_PAGE_LOOKBACK_MINUTES
+
+
+def get_page_watermark():
+    """UTC time up to which metric items were already considered for paging."""
+    import pandas as pd
+
+    raw = _load().get("paged_through")
+    if not raw:
+        return None
+    try:
+        ts = pd.Timestamp(raw)
+    except (ValueError, TypeError):
+        return None
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
+def page_cutoff(now=None):
+    """Metric items shown at or before this time are never paged again."""
+    import pandas as pd
+
+    now = now if now is not None else pd.Timestamp.now(tz="UTC")
+    mark = get_page_watermark()
+    if mark is not None:
+        return mark
+    return now - pd.Timedelta(minutes=page_lookback_minutes())
+
+
+def set_page_watermark(ts) -> None:
+    data = _load()
+    data["paged_through"] = ts.isoformat()
+    _save(data)
+
+
+def clear_page_watermark() -> None:
+    data = _load()
+    data.pop("paged_through", None)
+    _save(data)
+
+
 def env_prom_url() -> str:
     return (os.environ.get("PROM_URL") or "").strip().rstrip("/")
 
@@ -184,6 +237,19 @@ def clear_prom_url() -> dict:
     return prom_url_status()
 
 
+def redact_url(url: str) -> str:
+    """Drop any user:password@ part so a URL is safe to show or return."""
+    if not url:
+        return url
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    if not (parsed.username or parsed.password):
+        return url
+    netloc = parsed.hostname or ""
+    if parsed.port:
+        netloc += f":{parsed.port}"
+    return parsed._replace(netloc=f"***@{netloc}").geturl()
+
+
 def prom_url_status() -> dict:
     data = _load()
     saved = (data.get("prometheus_url") or "").strip().rstrip("/")
@@ -199,7 +265,7 @@ def prom_url_status() -> dict:
             host = None
     return {
         "configured": bool(effective),
-        "url": effective or None,
+        "url": redact_url(effective) or None,
         "url_host": host,
         "source": source,
         "query_set": bool(os.environ.get("PROM_QUERY")),

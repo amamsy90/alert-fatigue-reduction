@@ -76,6 +76,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `PAGE_LOOKBACK_MINUTES` | `60` | First ingest job only: how far back metric items may be paged (later jobs page only what is new since the last one) |
 | `SHADOW_MODE` | `1` | Bootstrap default; UI Live override is saved in `ops.json`. `0` = Live |
 | `APP_PASSWORD` / `APP_USER` | none / `oncall` | Basic-auth login for everything except `/health` |
 | `INGEST_TOKEN` | none | Bearer token for `/ingest/*` |
@@ -142,4 +143,4 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 85 tests (`python -m pytest -q`) |
+| `tests/` | 122 tests (`python -m pytest -q`) |
