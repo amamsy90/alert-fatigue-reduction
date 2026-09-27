@@ -9,8 +9,10 @@ from product.prometheus_adapter import (
     MAX_POINTS,
     fetch_memory_metrics,
     probe_prometheus,
+    prom_url_host,
     service_from_labels,
     step_seconds,
+    run_prometheus_test,
 )
 
 
@@ -88,3 +90,59 @@ def test_probe_does_not_echo_url_on_failure():
     out = probe_prometheus("http://user:secret@127.0.0.1:1")
     assert out["reachable"] is False
     assert "secret" not in str(out)
+
+
+def test_prom_url_host_strips_credentials():
+    assert prom_url_host("http://user:secret@prom.internal:9090") == "prom.internal"
+    assert "secret" not in str(prom_url_host("http://user:secret@prom.internal:9090"))
+
+
+def test_run_prometheus_test_ok_with_mocked_http(monkeypatch):
+    monkeypatch.setenv("PROM_URL", "http://prom.test:9090")
+    build = {"status": "success", "data": {"version": "2.54.0"}}
+    query = _payload(
+        [
+            {"metric": {"service": "web"}, "values": [[1609459200, "1"], [1609459260, "2"]]},
+            {"metric": {"service": "api"}, "values": [[1609459200, "3"]]},
+        ]
+    )
+    calls = []
+
+    def fake_urlopen(url, timeout=None):
+        calls.append(url)
+        if "buildinfo" in url:
+            return _Resp(build)
+        return _Resp(query)
+
+    with patch("product.prometheus_adapter.urlopen", side_effect=fake_urlopen):
+        out = run_prometheus_test()
+    assert out["ok"] is True
+    assert out["series_count"] == 2
+    assert out["points"] == 3
+    assert out["url_host"] == "prom.test"
+    assert out["version"] == "2.54.0"
+    assert "secret" not in str(out)
+    assert any("query_range" in u for u in calls)
+
+
+def test_run_prometheus_test_unreachable(monkeypatch):
+    monkeypatch.setenv("PROM_URL", "http://prom.test:9090")
+
+    def boom(url, timeout=None):
+        raise ConnectionError("nope")
+
+    with patch("product.prometheus_adapter.urlopen", side_effect=boom):
+        out = run_prometheus_test()
+    assert out["ok"] is False
+    assert out["series_count"] == 0
+    assert out["points"] == 0
+    assert out["url_host"] == "prom.test"
+    assert out["error"] == "ConnectionError"
+
+
+def test_run_prometheus_test_missing_url(monkeypatch):
+    monkeypatch.delenv("PROM_URL", raising=False)
+    out = run_prometheus_test()
+    assert out["ok"] is False
+    assert out["error"] == "PROM_URL is not set"
+    assert out["url_host"] is None

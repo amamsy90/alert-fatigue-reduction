@@ -1,4 +1,4 @@
-"""Persisted ops overrides: shadow/live mode and PagerDuty routing key.
+"""Persisted ops overrides: shadow/live mode, PagerDuty routing key, Prometheus URL.
 
 Env vars are the bootstrap default when no override is saved. Secrets in the
 ops file are never returned in full by the API (configured bool + last4 only).
@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_OPS_PATH = Path(__file__).resolve().parent / "data" / "ops.json"
 
@@ -144,3 +145,64 @@ PAGEABLE_MODES = frozenset({"ingest"})
 
 def may_page_for_mode(mode: str) -> bool:
     return mode in PAGEABLE_MODES and can_page()
+
+
+def env_prom_url() -> str:
+    return (os.environ.get("PROM_URL") or "").strip().rstrip("/")
+
+
+def get_prom_url() -> str:
+    """Effective Prometheus base URL: saved ops first, else PROM_URL env."""
+    data = _load()
+    saved = (data.get("prometheus_url") or "").strip().rstrip("/")
+    if saved:
+        return saved
+    return env_prom_url()
+
+
+def set_prom_url(url: str) -> dict:
+    url = (url or "").strip().rstrip("/")
+    if not url:
+        raise ValueError("prometheus_url must be non-empty; use clear to remove it")
+    # Light validation — must look like an HTTP(S) base, no query string required
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("prometheus_url must be an http(s) URL, e.g. http://localhost:9090")
+    if "://" not in url:
+        url = f"http://{url}"
+    data = _load()
+    data["prometheus_url"] = url.rstrip("/")
+    _save(data)
+    return prom_url_status()
+
+
+def clear_prom_url() -> dict:
+    """Remove the saved Prometheus URL (env PROM_URL still applies if set)."""
+    data = _load()
+    data.pop("prometheus_url", None)
+    _save(data)
+    return prom_url_status()
+
+
+def prom_url_status() -> dict:
+    data = _load()
+    saved = (data.get("prometheus_url") or "").strip().rstrip("/")
+    env = env_prom_url()
+    effective = saved or env
+    source = "ops" if saved else ("env" if env else None)
+    host = None
+    if effective:
+        try:
+            parsed = urlparse(effective if "://" in effective else f"http://{effective}")
+            host = parsed.hostname
+        except Exception:  # noqa: BLE001
+            host = None
+    return {
+        "configured": bool(effective),
+        "url": effective or None,
+        "url_host": host,
+        "source": source,
+        "query_set": bool(os.environ.get("PROM_QUERY")),
+        "service_label": os.environ.get("PROM_SERVICE_LABEL") or None,
+        "note": "PROM_QUERY and PROM_SERVICE_LABEL are env-only; URL may be saved here or set via PROM_URL.",
+    }

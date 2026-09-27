@@ -62,7 +62,7 @@
       Secrets are never shown (routing key: configured yes/no and last4 only).
       Green = live / will page. Gold = configured but not sending.
       Grey = not set. Only <b>ingest</b> jobs page when Live + key; sample, GAIA and Evaluate never page.
-      Use the main queue Connectors panel to switch Shadow/Live, save a key, or send a test page.
+      Use the main queue Connectors panel to switch Shadow/Live, save a key, send a test page, or Test Prometheus.
     </p>
     <h2 style="color:var(--navy);font-family:Arial,sans-serif;font-size:1rem">Alertmanager receiver</h2>
     <pre>receivers:
@@ -98,11 +98,15 @@
           c.webhook.last_ingest_at ? "Last ingest " + esc(c.webhook.last_ingest_at) : "No webhook yet",
         ]),
         card("Prometheus", (c.prometheus.probe && c.prometheus.probe.reachable) ? true : c.prometheus.configured ? "warn" : false, [
-          c.prometheus.configured ? esc(c.prometheus.url) : "Set PROM_URL to pull memory.",
+          c.prometheus.configured
+            ? esc(c.prometheus.url_host || c.prometheus.url || "?") +
+              (c.prometheus.source ? " (" + esc(c.prometheus.source) + ")" : "")
+            : "Not set — save URL on the queue page or set PROM_URL.",
           c.prometheus.probe && c.prometheus.probe.reachable
             ? "Reachable" + (c.prometheus.probe.version ? " (Prometheus " + esc(c.prometheus.probe.version) + ")" : "")
             : (c.prometheus.probe && c.prometheus.probe.error ? "Unreachable: " + esc(c.prometheus.probe.error) : "Not probed"),
           c.prometheus.service_label ? "Service label " + esc(c.prometheus.service_label) : "Default service labels",
+          "Test from the main queue Connectors panel (short query; counts only).",
         ]),
         card("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [
           pd.configured
