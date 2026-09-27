@@ -443,7 +443,9 @@ def run_job(
     faults_path: str | Path | None = None,
 ) -> dict:
     if shadow_mode is None:
-        shadow_mode = os.environ.get("SHADOW_MODE", "1") != "0"
+        from .ops import get_shadow_mode
+
+        shadow_mode = get_shadow_mode()
 
     paths = _default_paths()
     metrics: pd.DataFrame | None = None
@@ -529,10 +531,20 @@ def run_job(
         )
         save_model(saved)
     decisions = result.decisions
-    page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
-    if not shadow_mode:
-        from .pagerduty import notify_escalations
+    # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
+    # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
+    from .ops import PAGEABLE_MODES, can_page, get_routing_key
+    from .pagerduty import notify_escalations
 
+    if mode not in PAGEABLE_MODES:
+        page = {"sent": 0, "failed": 0, "skipped": f"mode={mode} never pages"}
+    elif shadow_mode:
+        page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
+    elif not get_routing_key():
+        page = {"sent": 0, "failed": 0, "skipped": "no routing key"}
+    elif not can_page():
+        page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
+    else:
         page = notify_escalations(result.alerts, decisions, spikes=result.shown_spikes)
     job_id = store.save_job(
         source=source,

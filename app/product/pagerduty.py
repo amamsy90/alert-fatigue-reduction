@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from urllib.request import Request, urlopen
 
 from src.entities import Action, Alert, Decision
@@ -19,7 +18,10 @@ _SEVERITY = {
 
 
 def routing_key() -> str:
-    return (os.environ.get("PAGERDUTY_ROUTING_KEY") or "").strip()
+    """Saved ops key first, else PAGERDUTY_ROUTING_KEY env."""
+    from .ops import get_routing_key
+
+    return get_routing_key()
 
 
 def spike_event(spike: Spike, key: str) -> dict:

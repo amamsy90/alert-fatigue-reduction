@@ -187,6 +187,25 @@
     <section id="connectors">
       <h2 class="section">Connectors</h2>
       <div id="conn-cards" class="cards"></div>
+      <div id="ops-panel" class="card" style="margin-top:0.75rem;max-width:40rem">
+        <h3 style="margin:0 0 0.4rem;color:var(--navy)">PagerDuty ops</h3>
+        <p id="ops-status" class="sub" style="margin:0 0 0.6rem"></p>
+        <div class="controls" style="margin-bottom:0.5rem">
+          <button type="button" id="btn-shadow" class="secondary">Switch to Shadow</button>
+          <button type="button" id="btn-live">Switch to Live…</button>
+        </div>
+        <div class="controls" style="margin-bottom:0.5rem">
+          <div>
+            <label for="pd-key">Routing key</label><br />
+            <input type="password" id="pd-key" placeholder="Events API v2 key" autocomplete="off" style="min-width:16rem" />
+          </div>
+          <button type="button" id="btn-save-key" class="secondary">Save key</button>
+          <button type="button" id="btn-clear-key" class="secondary">Clear saved key</button>
+          <button type="button" id="btn-test-page">Send test page</button>
+        </div>
+        <p class="sub" style="margin:0">Save a key first, then type <b>LIVE</b> to go Live. Only <b>ingest</b> jobs page. Sample, GAIA and Evaluate never page.</p>
+        <p id="ops-msg" class="err" hidden style="margin-top:0.4rem"></p>
+      </div>
     </section>
     <div id="shadow" class="shadow" hidden>
       Shadow mode is on — decisions are logged only; nothing is sent to a pager.
@@ -350,6 +369,13 @@
       return `<article class="card"><h3><span class="dot ${cls}"></span>${title}</h3>${body}</article>`;
     }
 
+    function opsMsg(msg) {
+      const el = document.getElementById("ops-msg");
+      if (!msg) { el.hidden = true; el.textContent = ""; return; }
+      el.hidden = false;
+      el.textContent = msg;
+    }
+
     async function loadConnectors() {
       const res = await fetch("/connectors");
       if (!res.ok) {
@@ -363,9 +389,13 @@
       const pageLine = last
         ? `Last job: sent ${last.sent ?? 0}, failed ${last.failed ?? 0}${last.skipped ? " (" + last.skipped + ")" : ""}`
         : "No page attempt yet";
+      const modeLabel = c.shadow_mode ? "Shadow" : "Live";
+      const keyLine = pd.configured
+        ? `Routing key configured (…${escapeHtml(pd.last4 || "????")}; full key never shown).`
+        : "Routing key not configured.";
       document.getElementById("conn-cards").innerHTML = [
-        connCard("Shadow mode", c.shadow_mode ? "warn" : true, [
-          c.shadow_mode ? "On — nothing is sent to PagerDuty." : "Off — escalations may page.",
+        connCard("Mode: " + modeLabel, c.shadow_mode ? "warn" : true, [
+          c.shadow_mode ? "Shadow — nothing is sent to PagerDuty." : "Live — ingest escalations may page.",
         ]),
         connCard("Alertmanager / webhook", true, [
           `POST ${c.webhook.path}`,
@@ -379,11 +409,31 @@
             : (c.prometheus.probe && c.prometheus.probe.error ? "Unreachable: " + escapeHtml(c.prometheus.probe.error) : "Not probed"),
         ]),
         connCard("PagerDuty", pd.will_page ? true : pd.configured ? "warn" : false, [
-          pd.configured ? "Routing key is set (not shown)." : "PAGERDUTY_ROUTING_KEY is not set",
-          pd.will_page ? "Will page escalations." : "Will not page (need key + shadow off).",
+          keyLine,
+          pd.will_page ? "Will page ingest escalations." : "Will not page (need Live + key; demos never page).",
           pageLine,
         ]),
       ].join("");
+      document.getElementById("ops-status").textContent =
+        `Status: ${modeLabel}` +
+        (pd.configured ? ` · key …${pd.last4 || "????"}` : " · no key") +
+        (pd.will_page ? " · will page ingest jobs" : " · will not page");
+      document.getElementById("btn-shadow").disabled = !!c.shadow_mode;
+      document.getElementById("btn-live").disabled = !c.shadow_mode;
+      document.getElementById("btn-test-page").disabled = !pd.will_page;
+    }
+
+    async function postOps(url, body, method) {
+      opsMsg("");
+      const res = await fetch(url, {
+        method: method || "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      let data = {};
+      try { data = await res.json(); } catch (_) {}
+      if (!res.ok) throw new Error(data.detail || JSON.stringify(data) || res.statusText);
+      return data;
     }
 
     function fillDays(days) {
@@ -675,6 +725,44 @@
       } finally {
         setBusy(false);
       }
+    };
+
+    document.getElementById("btn-shadow").onclick = async () => {
+      try {
+        await postOps("/ops/shadow", { shadow_mode: true });
+        await loadConnectors();
+      } catch (e) { opsMsg(e.message || String(e)); }
+    };
+    document.getElementById("btn-live").onclick = async () => {
+      const typed = window.prompt("Type LIVE to enable Live paging (ingest jobs only):", "");
+      if (typed === null) return;
+      try {
+        await postOps("/ops/shadow", { shadow_mode: false, confirm: typed });
+        await loadConnectors();
+      } catch (e) { opsMsg(e.message || String(e)); }
+    };
+    document.getElementById("btn-save-key").onclick = async () => {
+      const key = document.getElementById("pd-key").value;
+      try {
+        await postOps("/ops/pagerduty/key", { routing_key: key });
+        document.getElementById("pd-key").value = "";
+        await loadConnectors();
+      } catch (e) { opsMsg(e.message || String(e)); }
+    };
+    document.getElementById("btn-clear-key").onclick = async () => {
+      try {
+        await postOps("/ops/pagerduty/key", null, "DELETE");
+        await loadConnectors();
+      } catch (e) { opsMsg(e.message || String(e)); }
+    };
+    document.getElementById("btn-test-page").onclick = async () => {
+      if (!window.confirm("Send a real test page to PagerDuty now?")) return;
+      try {
+        const r = await postOps("/ops/pagerduty/test", {});
+        opsMsg("");
+        alert(r.note || "Test page sent.");
+        await loadConnectors();
+      } catch (e) { opsMsg(e.message || String(e)); }
     };
 
     loadQueue().catch(() => {});
