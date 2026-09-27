@@ -146,6 +146,25 @@
     .dot.on { background: #2d6a4f; }
     .dot.off { background: #adb5bd; }
     .dot.warn { background: var(--gold); }
+    .buyer-path {
+      display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+      margin: 0 0 1rem; padding: 0.55rem 0.75rem;
+      border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+      font-size: 0.85rem;
+    }
+    .buyer-path .label { color: var(--navy); font-weight: 700; margin-right: 0.25rem; }
+    .buyer-path a, .buyer-path button.linkish {
+      color: var(--navy); text-decoration: none; border: 1px solid var(--line);
+      background: #fff; padding: 0.25rem 0.55rem; border-radius: 4px; cursor: pointer; font: inherit;
+    }
+    .buyer-path .sep { color: var(--muted); }
+    .would-have {
+      border: 1px solid var(--navy); background: #eef3f8; color: var(--navy);
+      padding: 0.65rem 0.85rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;
+    }
+    .would-have h3 { margin: 0 0 0.35rem; font-size: 0.95rem; font-family: Arial, sans-serif; }
+    .would-have ul { margin: 0.35rem 0 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.85rem; }
+    .would-have .breakdown { color: var(--muted); font-size: 0.85rem; }
   </style>
 </head>
 <body>
@@ -184,6 +203,17 @@
     </div>
   </header>
   <main>
+    <nav id="buyer-path" class="buyer-path" aria-label="Demo path">
+      <span class="label">Demo path:</span>
+      <button type="button" class="linkish" id="guide-sample">1. Run sample</button>
+      <span class="sep">→</span>
+      <a href="/evaluate">2. Evaluate shop / my data</a>
+      <span class="sep">→</span>
+      <a href="#would-have">3. Review queue + would-have-paged</a>
+      <span class="sep">→</span>
+      <a href="#connectors">4. Connectors: key + stay Shadow</a>
+    </nav>
+    <div id="would-have" class="would-have" hidden></div>
     <section id="connectors">
       <h2 class="section">Connectors</h2>
       <div id="conn-cards" class="cards"></div>
@@ -376,6 +406,26 @@
       el.textContent = msg;
     }
 
+
+    function renderWouldHave(whp, shadow) {
+      const el = document.getElementById("would-have");
+      if (!whp || typeof whp.count !== "number") { el.hidden = true; el.innerHTML = ""; return; }
+      const n = whp.count;
+      const title = shadow
+        ? `In Live mode this run would have opened <strong>${n}</strong> PagerDuty incident${n === 1 ? "" : "s"}`
+        : `This run would have opened <strong>${n}</strong> PagerDuty incident${n === 1 ? "" : "s"} (same set Live sends on ingest)`;
+      const br = `Breakdown: ${whp.spikes ?? 0} spike(s) · ${whp.alerts ?? 0} escalated alert(s)`;
+      const items = (whp.items || []).slice(0, 8).map(it => {
+        const label = escapeHtml(it.kind || "?") + " · " + escapeHtml(it.service || "");
+        const sum = it.summary ? " — " + escapeHtml(String(it.summary).slice(0, 120)) : "";
+        return `<li>${label}${sum}</li>`;
+      }).join("");
+      const more = (whp.items || []).length < n ? `<li>…and ${n - (whp.items || []).length} more</li>` : "";
+      el.innerHTML = `<h3>${title}</h3><p class="breakdown">${br}</p>` +
+        (items ? `<ul>${items}${more}</ul>` : "");
+      el.hidden = false;
+    }
+
     async function loadConnectors() {
       const res = await fetch("/connectors");
       if (!res.ok) {
@@ -412,8 +462,14 @@
           keyLine,
           pd.will_page ? "Will page ingest escalations." : "Will not page (need Live + key; demos never page).",
           pageLine,
+          (pd.would_have_paged && typeof pd.would_have_paged.count === "number")
+            ? ("Last run would have paged " + pd.would_have_paged.count +
+               " (" + (pd.would_have_paged.spikes ?? 0) + " spikes · " +
+               (pd.would_have_paged.alerts ?? 0) + " alerts)")
+            : "No would-have-paged summary yet — run sample.",
         ]),
       ].join("");
+      if (pd.would_have_paged) renderWouldHave(pd.would_have_paged, !!c.shadow_mode);
       document.getElementById("ops-status").textContent =
         `Status: ${modeLabel}` +
         (pd.configured ? ` · key …${pd.last4 || "????"}` : " · no key") +
@@ -465,6 +521,7 @@
       fillDays(data.days || []);
       document.getElementById("shadow").hidden = !data.job.shadow_mode;
       const m = data.job.meta || {};
+      renderWouldHave(m.would_have_paged, !!data.job.shadow_mode);
       document.getElementById("weak").hidden = !(m.model_used === "rules_only" || m.label_source === "weak_severity");
       document.getElementById("meta").innerHTML = [
         `Job <strong>${data.job.job_id}</strong>`,
@@ -685,6 +742,7 @@
     }
 
     document.getElementById("btn-sample").onclick = () => runJob("sample");
+    document.getElementById("guide-sample").onclick = () => runJob("sample");
     document.getElementById("btn-gaia").onclick = () => runJob("gaia");
     document.getElementById("btn-refresh").onclick = () => {
       loadQueue().catch(e => showErr(e.message));

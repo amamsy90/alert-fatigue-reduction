@@ -534,7 +534,7 @@ def run_job(
     # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
     # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
     from .ops import PAGEABLE_MODES, can_page, get_routing_key
-    from .pagerduty import notify_escalations
+    from .pagerduty import notify_escalations, would_have_paged
 
     if mode not in PAGEABLE_MODES:
         page = {"sent": 0, "failed": 0, "skipped": f"mode={mode} never pages"}
@@ -546,6 +546,7 @@ def run_job(
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     else:
         page = notify_escalations(result.alerts, decisions, spikes=result.shown_spikes)
+    whp = would_have_paged(result.alerts, decisions, spikes=result.shown_spikes)
     job_id = store.save_job(
         source=source,
         budget_k=budget_k,
@@ -576,6 +577,7 @@ def run_job(
             "model": saved.status(real_marks) if saved else None,
             "training": result.training,
             "pagerduty": page,
+            "would_have_paged": whp,
             **feedback_stats,
         },
     )

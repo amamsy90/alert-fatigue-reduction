@@ -84,6 +84,8 @@ Escalations are sent only when **all** are true:
 
 Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
 
+Every scored job also stores `meta.would_have_paged` — the same set Live *would* have opened (`count`, `spikes`, `alerts`, short `items` list). In Shadow the UI shows: “In Live mode this run would have opened N PagerDuty incidents.” Sample never pages, but would-have still counts (useful for demos).
+
 ### API
 
 | Method | Path | Purpose |

@@ -196,6 +196,7 @@ def _connector_status() -> dict:
             "key_source": key_info["source"],
             "will_page": ops_mod.can_page(),
             "last": (stats["last_job"] or {}).get("pagerduty"),
+            "would_have_paged": (stats["last_job"] or {}).get("would_have_paged"),
             "note": "Only ingest jobs page when Live + key. Sample / GAIA / Evaluate never page.",
         },
         "last_job": stats["last_job"],
