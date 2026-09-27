@@ -104,6 +104,17 @@ PAGERDUTY_ROUTING_KEY=your-events-api-integration-key
 
 Leave Shadow on until you have checked a week of queues against Real / Noise marks.
 
+## Slack and Opsgenie
+
+Same gate as PagerDuty: Live mode, ingest jobs only, only items new since the last job, and every configured channel gets the same list (shown jumps / leaks / gaps, then escalated alerts). Live can be turned on with any one channel.
+
+| Channel | Configure | What is sent |
+|---|---|---|
+| Slack | Save an incoming-webhook URL on the Connectors panel (`POST /ops/slack/webhook`, `{"webhook_url": ...}`) or set `SLACK_WEBHOOK_URL`. Must be `https://`. | **One message per job** listing up to 20 items ("… and N more"). Nothing is posted when there is nothing new. |
+| Opsgenie | Save an API-integration key (`POST /ops/opsgenie/key`, `{"api_key": ...}`) or set `OPSGENIE_API_KEY`. EU region: `OPSGENIE_API_URL=https://api.eu.opsgenie.com`. | **One alert per item**, `alias` = the same dedup key as PagerDuty (kind + service + start, or the alert id), priority P1 critical / P2 error / P3 warning / P5 info, tags `oncall-queue`, `<kind>`. |
+
+`DELETE` the same paths to clear a saved secret; `POST /ops/slack/test` and `/ops/opsgenie/test` send one test item (Live only). Secrets are never returned in full (last 4 characters only) and never appear in error messages. Per-channel results are on the job under `meta.pagerduty.channels`.
+
 ## Prometheus memory
 
 ### Configure

@@ -68,6 +68,7 @@ docker compose up --build
 |---|---|
 | Alertmanager | Webhook receiver → `POST /ingest/alertmanager`. Set `INGEST_TOKEN` and use `http_config.authorization.credentials`. |
 | Prometheus | `PROM_URL=http://prometheus:9090` (default query `container_memory_working_set_bytes`; override with `PROM_QUERY`, map services with `PROM_SERVICE_LABEL`). |
+| Slack / Opsgenie | Save a webhook URL or API key on the same panel (or `SLACK_WEBHOOK_URL`, `OPSGENIE_API_KEY`). Same gate and the same items as PagerDuty; Slack gets one message per job, Opsgenie one alert per item. |
 | PagerDuty | Save a routing key and switch to **Live** on the Connectors panel (type `LIVE`; key required). Only **ingest** jobs page; sample / GAIA / Evaluate never page. Env `PAGERDUTY_ROUTING_KEY` + `SHADOW_MODE=0` are bootstrap defaults. |
 
 Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
@@ -120,6 +121,7 @@ python run_walkforward.py     # 8 later weeks, everything re-learned each week
 python run_stats.py           # intervals, sign tests, signals, chance overlap, confirm time
 python run_robustness.py      # synthetic 0.25-2 GB steps, spikes, ramps, leaks on the real series
 python ../tools/fetch_nab.py && python run_nab.py   # other domains (NAB)
+python ../tools/fetch_smd.py && python run_smd.py   # other fault types: 28 real servers, CPU/memory/disk/network (SMD)
 python make_figures.py        # redraw ../figures/*.svg from the csv files
 python run_validate.py        # fails if the docs and the csv files disagree
 ```
@@ -145,4 +147,4 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 130 tests (`python -m pytest -q`) |
+| `tests/` | 140 tests (`python -m pytest -q`) |

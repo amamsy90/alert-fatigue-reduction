@@ -128,6 +128,41 @@ def notify_escalations(
 MAX_WOULD_HAVE_ITEMS = 20
 
 
+def page_items(
+    alerts: list[Alert],
+    decisions: list[Decision],
+    *,
+    spikes: list[Spike] | None = None,
+) -> list[dict]:
+    """Every item a Live run would send, in queue order: shown jumps / leaks / gaps,
+    then escalated alerts. Shared by PagerDuty, Slack, Opsgenie and the shadow view."""
+    items: list[dict] = []
+    for spike in spikes or []:
+        ev = spike_event(spike, "")
+        items.append(
+            {
+                "kind": spike.kind,
+                "service": spike.service,
+                "summary": ev["payload"]["summary"],
+                "dedup_key": ev["dedup_key"],
+                "severity": ev["payload"]["severity"],
+            }
+        )
+    for alert, decision in zip(alerts, decisions):
+        if decision.action is not Action.ESCALATE:
+            continue
+        items.append(
+            {
+                "kind": "alert",
+                "service": alert.source,
+                "summary": (alert.message or alert.alert_type)[:200],
+                "dedup_key": alert.alert_id[:255],
+                "severity": _SEVERITY.get(alert.severity, "warning"),
+            }
+        )
+    return items
+
+
 def would_have_paged(
     alerts: list[Alert],
     decisions: list[Decision],
@@ -139,37 +174,11 @@ def would_have_paged(
     Used for shadow demos: show what Live *would* have opened without sending.
     `items` is capped at MAX_WOULD_HAVE_ITEMS; `count` is the full total.
     """
-    items: list[dict] = []
-    spike_n = 0
-    for spike in spikes or []:
-        spike_n += 1
-        if len(items) < MAX_WOULD_HAVE_ITEMS:
-            ev = spike_event(spike, "")
-            items.append(
-                {
-                    "kind": spike.kind,
-                    "service": spike.service,
-                    "summary": ev["payload"]["summary"],
-                    "dedup_key": ev["dedup_key"],
-                }
-            )
-    alert_n = 0
-    for alert, decision in zip(alerts, decisions):
-        if decision.action is not Action.ESCALATE:
-            continue
-        alert_n += 1
-        if len(items) < MAX_WOULD_HAVE_ITEMS:
-            items.append(
-                {
-                    "kind": "alert",
-                    "service": alert.source,
-                    "summary": (alert.message or alert.alert_type)[:200],
-                    "dedup_key": alert.alert_id[:255],
-                }
-            )
+    items = page_items(alerts, decisions, spikes=spikes)
+    spike_n = sum(1 for it in items if it["kind"] != "alert")
     return {
-        "count": spike_n + alert_n,
+        "count": len(items),
         "spikes": spike_n,
-        "alerts": alert_n,
-        "items": items,
+        "alerts": len(items) - spike_n,
+        "items": items[:MAX_WOULD_HAVE_ITEMS],
     }

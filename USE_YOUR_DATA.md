@@ -70,6 +70,8 @@ The app uses the **first 30%** of each series to tune (change it on the page) an
 - **Jump rule** — "far from its own recent level", in robust units, so it works for any metric;
 - **Your queue** — the detector that did best on the tuning part, plus monitoring-gap items and your alerts.
 
+Two things are learned **per series** on the tuning part and then frozen: the *jump size* (how far above its own recent level a series must go to count — only for series with 3 or more tuning incidents, and only where it beats the shared size) and the *confirm level*. A series with small, clean problems gets a small size; a jittery series a large one. Marks you make in the queue (**Download confirmed faults**) can be uploaded here as past problems, so the sizes learn from what on-call confirmed.
+
 Check two numbers before you trust it:
 
 1. **The grey line (random chance).** If your problems are long compared with the gaps between items, even random items overlap them. A result is only good if it is well above that line.
