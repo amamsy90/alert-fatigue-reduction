@@ -498,10 +498,12 @@ def run_job(
         alerts = load_alerts_from_dicts(alert_rows)
         if metrics_path:
             metrics = load_metrics_csv(metrics_path)
-        elif os.environ.get("PROM_URL"):
+        else:
+            from .ops import get_prom_url
             from .prometheus_adapter import fetch_memory_metrics
 
-            metrics = fetch_memory_metrics()
+            if get_prom_url():
+                metrics = fetch_memory_metrics()
         source = "ingest"
     else:
         raise ValueError(f"Unknown mode: {mode}")

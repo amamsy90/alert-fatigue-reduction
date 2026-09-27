@@ -2,7 +2,7 @@
 
 Shadow mode is **on by default** (`SHADOW_MODE=1`, overridable from the UI into `ops.json`). Decisions are stored and shown in the UI. Nothing is sent to PagerDuty until you turn **Live** on **and** configure a routing key — and only **ingest** jobs page (sample / GAIA / Evaluate never do).
 
-Open http://127.0.0.1:8080 — the **Connectors** cards show Shadow vs Live, whether a routing key is configured (last4 only; full key never shown), and last-job PagerDuty meta. `GET /connectors` is the same status as JSON. Use the ops controls to switch mode, save/clear a key, or send a test page. **Score buffer** runs a job from webhook batches already received.
+Open http://127.0.0.1:8080 — the **Connectors** cards show Shadow vs Live, whether a routing key is configured (last4 only; full key never shown), and last-job PagerDuty meta. `GET /connectors` is the same status as JSON. Use the ops controls to switch mode, save/clear a key, send a test page, or **Test Prometheus**. **Score buffer** runs a job from webhook batches already received.
 
 ## Webhook alerts
 
@@ -106,7 +106,9 @@ Leave Shadow on until you have checked a week of queues against Real / Noise mar
 
 ## Prometheus memory
 
-Set:
+### Configure
+
+Set `PROM_URL` in the environment, **or** save it from the Connectors panel (stored in `ops.json` like the PagerDuty key — UI override wins once saved):
 
 ```text
 PROM_URL=http://localhost:9090
@@ -116,7 +118,25 @@ PROM_QUERY=container_memory_working_set_bytes{namespace="prod", container!=""}
 PROM_SERVICE_LABEL=app
 ```
 
-When scoring `ingest` mode with `PROM_URL` set, the app pulls 14 days of memory and feeds the same memory-jump detector used for GAIA CSVs. A jump is a rise of more than 0.5 GB over the median of the previous 15 minutes, for at least 2 points.
+`PROM_QUERY` and `PROM_SERVICE_LABEL` are **env-only** (not saved in ops.json).
+
+### Test pull (Connectors UI)
+
+On the main queue **Connectors** panel: **Test Prometheus** (enabled when a URL is configured). That calls `GET`/`POST /ops/prometheus/test`, which probes `/api/v1/status/buildinfo` and runs a short ~2h range query. Response is compact only:
+
+```json
+{"ok": true, "series_count": 3, "points": 12, "url_host": "localhost", "version": "2.54.0"}
+```
+
+Never dumps series payloads. On failure: `{ok: false, series_count: 0, points: 0, error, url_host}`.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/ops/prometheus/url` | `{"url": "http://…"}` — save URL |
+| `DELETE` | `/ops/prometheus/url` | Clear saved URL (env still applies) |
+| `GET`/`POST` | `/ops/prometheus/test` | Probe + short query; counts only |
+
+When scoring `ingest` mode with a Prometheus URL configured (ops or env), the app pulls 14 days of memory and feeds the same memory-jump detector used for GAIA CSVs. A jump is a rise of more than 0.5 GB over the median of the previous 15 minutes, for at least 2 points.
 
 - Use one memory metric only, in bytes. Mixing `usage_bytes` and `working_set_bytes` double-counts.
 - The step is widened automatically so each series stays under Prometheus's 11,000-point limit (14 days gives a 121 s step).
