@@ -147,4 +147,4 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 140 tests (`python -m pytest -q`) |
+| `tests/` | 150 tests (`python -m pytest -q`) |

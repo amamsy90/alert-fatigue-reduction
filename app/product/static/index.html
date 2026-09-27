@@ -955,7 +955,7 @@
       } catch (e) { promMsg(e.message || String(e)); }
     };
 
-    loadQueue().catch(() => {});
+    loadQueue().catch(e => showErr(e.message || "No queue yet. Click Run sample."));
     loadConnectors().catch(() => {});
   </script>
 </body>

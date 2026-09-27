@@ -566,9 +566,18 @@ def evaluate(
     misses = {}
     checks = {}
     if test_faults:
-        k = 20 if 20 in budgets else budgets[-1]
-        cfg = replace(config, budget_k=int(k))
-        misses = _miss_causes(frame, test_faults, detected[chosen], build_queue(spike_items(detected[chosen], cfg), cfg))
+        # The paragraph on the Evaluate page is about the largest budget in the
+        # table, and about your_queue (detector + gaps + alerts), not the detector alone.
+        k = max(int(x) for x in budgets)
+        cfg = replace(config, budget_k=k)
+        alert_part = (
+            alert_items(test_alerts, baseline_decisions(test_alerts, cfg)) if test_alerts else []
+        )
+        your_shown = build_queue(
+            spike_items(detected[chosen], cfg) + spike_items(gaps, cfg) + alert_part, cfg
+        )
+        misses = _miss_causes(frame, test_faults, detected[chosen], your_shown)
+        misses["budget_k"] = k
         spans = {sid: (cuts[sid], p["timestamp"].max()) for sid, p in frame.groupby("series_id")}
         checks["chance_detection"] = round(_chance(detected[chosen], test_faults, spans), 4)
         caught_uncapped = _cost(detected[chosen], test_faults, config)[1]
@@ -620,7 +629,17 @@ def _miss_causes(frame, faults, jumps, shown) -> dict:
     by_service: dict[str, list[Fault]] = {}
     for f in faults:
         by_service.setdefault(f.component, []).append(f)
-    caught = {f.fault_id for it in shown if it.kind != "gap" for f in spike_hits(it.payload, by_service)}
+    known = {f.fault_id for f in faults}
+    caught: set[str] = set()
+    for it in shown:
+        if it.kind == "gap":
+            continue
+        if it.kind == "alert":
+            fid = getattr(it.payload, "fault_id", None)
+            if fid in known:
+                caught.add(fid)
+            continue
+        caught.update(f.fault_id for f in spike_hits(it.payload, by_service))
     overlapped = {f.fault_id for j in jumps for f in spike_hits(j, by_service)}
     counts = {"no_data": 0, "no_detection": 0, "budget_full": 0}
     for f in faults:
