@@ -56,7 +56,7 @@ def set_shadow_mode(*, shadow: bool, confirm: str | None = None) -> dict:
         if (confirm or "").strip() != "LIVE":
             raise ValueError(
                 "Turning Live on requires confirm='LIVE' (typed exactly). "
-                "Live allows PagerDuty pages on ingest jobs when a routing key is set."
+                "Live allows pages on ingest jobs when at least one channel is set."
             )
         if not configured_channels():
             raise ValueError(
