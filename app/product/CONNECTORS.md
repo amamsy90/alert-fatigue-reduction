@@ -1,8 +1,8 @@
 # Connectors — Phase 2
 
-Shadow mode is **on by default** (`SHADOW_MODE=1`). Decisions are stored and shown in the UI. Nothing is sent to PagerDuty until you turn shadow mode off **and** set `PAGERDUTY_ROUTING_KEY`.
+Shadow mode is **on by default** (`SHADOW_MODE=1`, overridable from the UI into `ops.json`). Decisions are stored and shown in the UI. Nothing is sent to PagerDuty until you turn **Live** on **and** configure a routing key — and only **ingest** jobs page (sample / GAIA / Evaluate never do).
 
-Open http://127.0.0.1:8080 — the **Connectors** cards show whether Prometheus, Alertmanager, and PagerDuty are wired. The routing key is never shown. `GET /connectors` is the same status as JSON. **Score buffer** runs a job from webhook batches already received.
+Open http://127.0.0.1:8080 — the **Connectors** cards show Shadow vs Live, whether a routing key is configured (last4 only; full key never shown), and last-job PagerDuty meta. `GET /connectors` is the same status as JSON. Use the ops controls to switch mode, save/clear a key, or send a test page. **Score buffer** runs a job from webhook batches already received.
 
 ## Webhook alerts
 
@@ -59,19 +59,48 @@ To score as soon as a webhook arrives, add `?score_now=1` (needs a saved model, 
 
 ## PagerDuty
 
-Escalations are sent only when **both** are true:
+Shadow mode is **on by default**. Demos must never page.
 
-1. `SHADOW_MODE=0` (or the job is run with `"shadow_mode": false`)
-2. `PAGERDUTY_ROUTING_KEY` is set (Events API v2 integration key)
+### Safe UI path (recommended)
 
-Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start, so re-scoring the same history does not open a second incident). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
+On the main queue **Connectors** panel:
+
+1. **Save routing key** (Events API v2 integration key). The API and UI never show the full key — only `configured` and `last4`.
+2. **Switch to Live** — type `LIVE` to confirm. Live ON is refused if no key is configured (saved or `PAGERDUTY_ROUTING_KEY` env).
+3. Optional: **Send test page** (only when Live + key).
+4. Switch back to **Shadow** any time.
+
+Overrides persist in `product/data/ops.json` (or `OPS_PATH`). Env `SHADOW_MODE` / `PAGERDUTY_ROUTING_KEY` are the bootstrap defaults when no override is saved.
+
+### When a page is actually sent
+
+Escalations are sent only when **all** are true:
+
+1. Effective mode is **Live** (ops override or `SHADOW_MODE=0`)
+2. A routing key is configured (ops file or `PAGERDUTY_ROUTING_KEY`)
+3. The job mode is **`ingest`** (live webhook / buffer score)
+
+**Hard safety:** `mode=sample`, GAIA, Evaluate-my-data / upload paths **never** call `notify_escalations`, even if Live is on. Only ingest jobs page.
+
+Each escalated alert becomes one `trigger` event (dedup key = alert id). Each **shown metric jump, slow leak or monitoring gap** also becomes one event (dedup key = kind + service + start). Failures are stored on the job (`meta.pagerduty`) and do not stop scoring. "Ask" and "hide" are never paged.
+
+### API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/connectors` | Status: Shadow/Live, key configured + last4, last job `pagerduty` meta |
+| `POST` | `/ops/shadow` | `{"shadow_mode": false, "confirm": "LIVE"}` or `{"shadow_mode": true}` |
+| `POST` | `/ops/pagerduty/key` | `{"routing_key": "…"}` — save key |
+| `DELETE` | `/ops/pagerduty/key` | Clear saved key (env key still applies if set) |
+| `POST` | `/ops/pagerduty/test` | One test trigger; Live + key required |
 
 ```text
-SHADOW_MODE=0
+# Optional env bootstrap (UI override wins once saved)
+SHADOW_MODE=1
 PAGERDUTY_ROUTING_KEY=your-events-api-integration-key
 ```
 
-Leave shadow mode on until you have checked a week of queues against Real / Noise marks.
+Leave Shadow on until you have checked a week of queues against Real / Noise marks.
 
 ## Prometheus memory
 

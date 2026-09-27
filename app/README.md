@@ -7,7 +7,7 @@ Your services raise more alerts than one person can read. This tool gives on-cal
 3. **Monitoring gaps** — a service stopped sending metrics for 10 minutes. You are blind there; that is worth knowing.
 4. **Log alerts** — ranked by severity (no labels needed) or by a model trained on your Real / Noise marks. They may use at most a quarter of the slots, and an alert inside a shown jump rides on it instead of taking a slot.
 
-It runs in **shadow mode** by default: nothing is paged until you turn it on.
+It runs in **shadow mode** by default: nothing is paged until you turn **Live** on from Connectors (with a routing key). Demos (sample / GAIA / Evaluate) never page.
 
 On the public GAIA benchmark it catches **70–73%** of injected faults at 20 items a day (the best possible is 85%; 98% of the rest are metric outages or a full budget), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with fewer false items. On synthetic faults added to real series it catches 0.5–2 GB steps and spikes 98–100% of the time and slow leaks 73–99%. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
 
@@ -67,7 +67,7 @@ docker compose up --build
 |---|---|
 | Alertmanager | Webhook receiver → `POST /ingest/alertmanager`. Set `INGEST_TOKEN` and use `http_config.authorization.credentials`. |
 | Prometheus | `PROM_URL=http://prometheus:9090` (default query `container_memory_working_set_bytes`; override with `PROM_QUERY`, map services with `PROM_SERVICE_LABEL`). |
-| PagerDuty | `PAGERDUTY_ROUTING_KEY=…` and `SHADOW_MODE=0`. Escalated alerts, shown jumps and gaps are paged with stable dedup keys. |
+| PagerDuty | Save a routing key and switch to **Live** on the Connectors panel (type `LIVE`; key required). Only **ingest** jobs page; sample / GAIA / Evaluate never page. Env `PAGERDUTY_ROUTING_KEY` + `SHADOW_MODE=0` are bootstrap defaults. |
 
 Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 
@@ -75,7 +75,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SHADOW_MODE` | `1` | `0` = page PagerDuty |
+| `SHADOW_MODE` | `1` | Bootstrap default; UI Live override is saved in `ops.json`. `0` = Live |
 | `APP_PASSWORD` / `APP_USER` | none / `oncall` | Basic-auth login for everything except `/health` |
 | `INGEST_TOKEN` | none | Bearer token for `/ingest/*` |
 | `JUMP_MODE` | `absolute` | `relative` for metrics that are not bytes |
@@ -91,6 +91,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `CARRY_OVER_MAX` | `0` | Unused slots carried to the next day (e.g. `10`) |
 | `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
 | `SETTINGS_PATH` | `product/data/settings.json` | Settings saved from **Evaluate my data** / `cli tune` (replace the built-in rule) |
+| `OPS_PATH` | `product/data/ops.json` | Persisted Shadow/Live override + saved PagerDuty routing key |
 | `QUEUE_DB`, `MODEL_PATH` | `product/data/…` | Where state is kept (the model gets a `.sha256` file; a changed file is refused) |
 
 ## How it decides

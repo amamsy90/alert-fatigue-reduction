@@ -21,6 +21,7 @@ import uuid
 from product import datasets as example_data
 from product.alertmanager import looks_like_alertmanager, normalize_ingest
 from product.settings import clear_saved, load_saved, save_saved
+from product import ops as ops_mod
 from product.model_store import load_model
 from product.pipeline import run_job
 from product.prometheus_adapter import probe_prometheus
@@ -144,6 +145,17 @@ class FeedbackRequest(BaseModel):
     verdict: str | None = Field(None, description="real | noise | null to clear")
 
 
+class ShadowModeRequest(BaseModel):
+    shadow_mode: bool = Field(..., description="true = Shadow (safe); false = Live")
+    confirm: str | None = Field(
+        None, description="Must be exactly LIVE when turning Live on (shadow_mode=false)"
+    )
+
+
+class RoutingKeyRequest(BaseModel):
+    routing_key: str = Field(..., description="PagerDuty Events API v2 routing key")
+
+
 class IngestRequest(BaseModel):
     alerts: list[IngestAlert]
     score_now: bool = False
@@ -154,10 +166,14 @@ def _connector_status() -> dict:
     """What is wired. Secrets (keys, passwords) are never returned."""
     prom = (os.environ.get("PROM_URL") or "").rstrip("/")
     stats = STORE.buffer_stats()
-    shadow = os.environ.get("SHADOW_MODE", "1") != "0"
-    pd_on = bool(os.environ.get("PAGERDUTY_ROUTING_KEY"))
+    shadow_info = ops_mod.shadow_status()
+    key_info = ops_mod.routing_key_status()
+    shadow = shadow_info["shadow_mode"]
+    pd_on = key_info["configured"]
     return {
         "shadow_mode": shadow,
+        "live": not shadow,
+        "shadow": shadow_info,
         "login_required": _auth_settings() is not None,
         "ingest_token_required": bool(os.environ.get("INGEST_TOKEN")),
         "webhook": {
@@ -176,8 +192,11 @@ def _connector_status() -> dict:
         },
         "pagerduty": {
             "configured": pd_on,
-            "will_page": pd_on and not shadow,
+            "last4": key_info["last4"],
+            "key_source": key_info["source"],
+            "will_page": ops_mod.can_page(),
             "last": (stats["last_job"] or {}).get("pagerduty"),
+            "note": "Only ingest jobs page when Live + key. Sample / GAIA / Evaluate never page.",
         },
         "last_job": stats["last_job"],
     }
@@ -197,6 +216,58 @@ def health():
 @app.get("/connectors")
 def connectors():
     return _connector_status()
+
+
+@app.post("/ops/shadow")
+def ops_set_shadow(body: ShadowModeRequest):
+    """Switch Shadow vs Live. Live ON requires confirm='LIVE'."""
+    try:
+        return ops_mod.set_shadow_mode(shadow=body.shadow_mode, confirm=body.confirm)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/ops/pagerduty/key")
+def ops_set_routing_key(body: RoutingKeyRequest):
+    """Save a routing key (never returned in full on GET)."""
+    try:
+        return ops_mod.set_routing_key(body.routing_key)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/ops/pagerduty/key")
+def ops_clear_routing_key():
+    """Clear the saved routing key (env key still applies if set)."""
+    return ops_mod.clear_routing_key()
+
+
+@app.post("/ops/pagerduty/test")
+def ops_test_page():
+    """Send one test trigger. Only when Live + key are both set."""
+    if ops_mod.get_shadow_mode():
+        raise HTTPException(400, "Test page refused: Shadow mode is on. Turn Live on first.")
+    key = ops_mod.get_routing_key()
+    if not key:
+        raise HTTPException(400, "Test page refused: no routing key configured.")
+    from product.pagerduty import _post
+
+    body = {
+        "routing_key": key,
+        "event_action": "trigger",
+        "dedup_key": "oncall-queue-test",
+        "payload": {
+            "summary": "On-call queue test page (safe to resolve)",
+            "severity": "info",
+            "source": "oncall-queue",
+            "custom_details": {"kind": "test"},
+        },
+    }
+    try:
+        _post(body)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"PagerDuty rejected the test: {exc}") from exc
+    return {"sent": 1, "dedup_key": "oncall-queue-test", "note": "Resolve the test incident in PagerDuty."}
 
 
 @app.post("/jobs/run")
