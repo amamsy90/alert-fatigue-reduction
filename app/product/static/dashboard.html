@@ -113,6 +113,11 @@
             ? "Last job: sent " + (last.sent ?? 0) + ", failed " + (last.failed ?? 0) +
               (last.skipped ? " (" + last.skipped + ")" : "")
             : "No page attempt yet",
+          (pd.would_have_paged && typeof pd.would_have_paged.count === "number")
+            ? ("Would have paged " + pd.would_have_paged.count +
+               " (" + (pd.would_have_paged.spikes ?? 0) + " spikes · " +
+               (pd.would_have_paged.alerts ?? 0) + " alerts)")
+            : "No would-have-paged on last job yet",
         ]),
         card("Last job", job ? true : false, [
           job ? job.source + " · " + job.job_id : "No job yet",

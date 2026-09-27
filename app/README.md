@@ -7,7 +7,8 @@ Your services raise more alerts than one person can read. This tool gives on-cal
 3. **Monitoring gaps** — a service stopped sending metrics for 10 minutes. You are blind there; that is worth knowing.
 4. **Log alerts** — ranked by severity (no labels needed) or by a model trained on your Real / Noise marks. They may use at most a quarter of the slots, and an alert inside a shown jump rides on it instead of taking a slot.
 
-It runs in **shadow mode** by default: nothing is paged until you turn **Live** on from Connectors (with a routing key). Demos (sample / GAIA / Evaluate) never page.
+It runs in **shadow mode** by default: nothing is paged until you turn **Live** on from Connectors (with a routing key). Demos (sample / GAIA / Evaluate) never page. After any run the UI shows a **would-have-paged** card (what Live would have opened) so a sales demo can show PagerDuty value without sending.
+Buyer path on the main page: Run sample → Evaluate shop/my data → Review queue + would-have → Connectors (key, stay Shadow until pilot agrees).
 
 On the public GAIA benchmark it catches **70–73%** of injected faults at 20 items a day (the best possible is 85%; 98% of the rest are metric outages or a full budget), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with fewer false items. On synthetic faults added to real series it catches 0.5–2 GB steps and spikes 98–100% of the time and slow leaks 73–99%. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
 

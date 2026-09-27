@@ -123,3 +123,53 @@ def notify_escalations(
             failed += 1
             errors.append(f"{alert.alert_id}: {exc}")
     return {"sent": sent, "failed": failed, "errors": errors[:5]}
+
+
+MAX_WOULD_HAVE_ITEMS = 20
+
+
+def would_have_paged(
+    alerts: list[Alert],
+    decisions: list[Decision],
+    *,
+    spikes: list[Spike] | None = None,
+) -> dict:
+    """Same items notify_escalations would trigger — no network, no key needed.
+
+    Used for shadow demos: show what Live *would* have opened without sending.
+    `items` is capped at MAX_WOULD_HAVE_ITEMS; `count` is the full total.
+    """
+    items: list[dict] = []
+    spike_n = 0
+    for spike in spikes or []:
+        spike_n += 1
+        if len(items) < MAX_WOULD_HAVE_ITEMS:
+            ev = spike_event(spike, "")
+            items.append(
+                {
+                    "kind": spike.kind,
+                    "service": spike.service,
+                    "summary": ev["payload"]["summary"],
+                    "dedup_key": ev["dedup_key"],
+                }
+            )
+    alert_n = 0
+    for alert, decision in zip(alerts, decisions):
+        if decision.action is not Action.ESCALATE:
+            continue
+        alert_n += 1
+        if len(items) < MAX_WOULD_HAVE_ITEMS:
+            items.append(
+                {
+                    "kind": "alert",
+                    "service": alert.source,
+                    "summary": (alert.message or alert.alert_type)[:200],
+                    "dedup_key": alert.alert_id[:255],
+                }
+            )
+    return {
+        "count": spike_n + alert_n,
+        "spikes": spike_n,
+        "alerts": alert_n,
+        "items": items,
+    }
