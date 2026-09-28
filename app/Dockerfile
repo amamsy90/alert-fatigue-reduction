@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Exact versions with hashes, exported from uv.lock (`uv export --no-dev`); CI checks it is current.
+COPY requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY src ./src
 COPY product ./product
@@ -16,8 +17,9 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
 ENV PYTHONPATH=/app
 ENV SHADOW_MODE=1
 ENV QUEUE_DB=/app/product/data/queue.db
-# In-cluster / Compose Prometheus is almost always private; override to 0 to refuse.
-ENV PROM_ALLOW_PRIVATE=1
+# Private Prometheus (in-cluster / Compose) is refused by default (SSRF). Set 1 only when
+# the app sits on a trusted network; cloud metadata is always refused.
+ENV PROM_ALLOW_PRIVATE=0
 
 USER appuser
 

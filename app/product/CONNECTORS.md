@@ -41,9 +41,20 @@ Or, without a login for the whole app, set `INGEST_TOKEN` and send it as a beare
             credentials_file: /etc/alertmanager/oncall_ingest_token
 ```
 
-If scoring a `score_now` batch fails, the alerts stay in the buffer for the next run.
+The token is read only from the `Authorization` header; a `?token=` query is refused, because URLs end up in proxy and access logs.
 
-Without `APP_PASSWORD` the app answers only this machine and private networks (loopback, 10/8, 172.16/12, 192.168/16 — Docker's bridge included). Requests from public addresses get 403 until you set a password (or `ALLOW_OPEN_ACCESS=1`).
+If scoring a `score_now` batch fails, the alerts stay in the buffer for the next run. Re-sending the same alerts (a retry after a 409, or Alertmanager repeating a firing alert) does not buffer them twice: an alert with the same content seen in the last `INGEST_DEDUP_HOURS` (default 24) is counted in `duplicates` and skipped.
+
+Without `APP_PASSWORD` the app answers only this machine and private networks (loopback, 10/8, 172.16/12, 192.168/16 — Docker's bridge included). Requests from public addresses get 403 until you set a password (or `ALLOW_OPEN_ACCESS=1`). Two more rules apply without a password:
+
+- **Behind a reverse proxy** every client looks private, so a request that carries `X-Forwarded-For`, `Forwarded` or `X-Real-IP` also gets 403. Set `APP_PASSWORD` before putting the app behind nginx, Caddy or an ingress.
+- **From this machine** the `Host` header must be `localhost`, `127.0.0.1` or `[::1]` (add names with `ALLOWED_HOSTS`), so a web page cannot reach the app through DNS rebinding.
+
+**Live mode needs a password.** Turning Live on is refused until `APP_PASSWORD` is set: without one, anyone who can open the app could page people. Browser requests that change state from another site (a different `Origin` or `Referer`) are refused with 403.
+
+**Audit log.** Every change to Live mode, keys, the Prometheus URL or settings is logged (`oncall.audit`: method, path, status, login user, client). Refused attempts are logged too. Request bodies are never logged, because they hold secrets.
+
+**Prometheus URL.** The host is resolved and every address it maps to is checked: private and loopback addresses need `PROM_ALLOW_PRIVATE=1` (off by default, also in the Docker image), and link-local / cloud-metadata addresses are always refused. Redirects are not followed. The check runs again before every fetch.
 
 Point Alertmanager at the same URL. The app accepts Alertmanager's own webhook (version 4) as well as the `{alerts: [...]}` list. Firing alerts become queue rows; resolved alerts are ignored. Service comes from labels `service`, then `app`, `container`, `job`, `instance`.
 

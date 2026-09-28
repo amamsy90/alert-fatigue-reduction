@@ -103,7 +103,7 @@ class JumpRanker:
         self.pipe: Pipeline | None = None
         self.threshold: float = 0.0
 
-    def fit(self, spikes: list[Spike], alerts: list[Alert], faults: list[Fault]) -> "JumpRanker":
+    def fit(self, spikes: list[Spike], alerts: list[Alert], faults: list[Fault]) -> JumpRanker:
         spikes = [s for s in spikes if s.kind in ("jump", "leak")]
         y, hits = _labels(spikes, faults)
         if len(set(y.tolist())) < 2:

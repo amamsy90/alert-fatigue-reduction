@@ -21,7 +21,6 @@ from __future__ import annotations
 import io
 import itertools
 from dataclasses import asdict, dataclass, field, replace
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -29,7 +28,7 @@ import pandas as pd
 from .baseline import baseline_decisions
 from .config import Config, day_of
 from .entities import Alert, Fault
-from .memory_spikes import Spike, _episodes, _gap_for, detect_gaps, jump_scores, median_step
+from .memory_spikes import Spike, _episodes, detect_gaps, jump_scores, median_step
 from .queue import (
     alert_items,
     build_queue,
@@ -404,7 +403,7 @@ def tune_jump_size_by_series(metrics: pd.DataFrame, train_faults: list[Fault], c
             continue
         sc, gap = scores[sid]
         train = {sid: (sc[sc.index < cuts.get(sid, sc.index.max())], gap)}
-        def cost_at(z: float) -> tuple:
+        def cost_at(z: float, train=train, faults=faults) -> tuple:
             c, caught, false = _cost(_episodes_from(train, z, setting.min_points, "jump"), faults, config)
             return (c, -caught, false)
         global_cost = cost_at(setting.z)
@@ -673,7 +672,7 @@ def learned_levels(metrics: pd.DataFrame, setting: DetectorSetting, cuts: dict) 
     return levels
 
 
-def live_setting(metrics_obj, report: "Report | dict", train_fraction: float | None = None) -> dict:
+def live_setting(metrics_obj, report: Report | dict, train_fraction: float | None = None) -> dict:
     """The chosen detector as a JSON-able dict the web app saves and scores with."""
     data = report.to_dict() if isinstance(report, Report) else report
     chosen = data["settings"]["chosen"]

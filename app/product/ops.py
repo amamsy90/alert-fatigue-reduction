@@ -8,6 +8,12 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
+import socket
+import tempfile
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -44,9 +50,16 @@ def _load() -> dict:
 def _save(data: dict) -> dict:
     path = ops_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    # A unique temp name per write, so two writers never share one file.
+    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(json.dumps(data, indent=2))
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     # Secrets live here (routing keys, Slack webhook, Opsgenie key). Best-effort
     # owner-only mode on Unix; Windows may ignore or raise — never fail the save.
     try:
@@ -54,6 +67,20 @@ def _save(data: dict) -> dict:
     except OSError:
         pass
     return data
+
+
+_LOCK = threading.RLock()
+
+
+@contextmanager
+def _edit() -> Iterator[dict]:
+    """Read, change and write ops.json as one step. The UI (a key or the Live
+    switch) and a scoring job (the page watermark) write from different threads;
+    without the lock one of them could overwrite the other's change."""
+    with _LOCK:
+        data = _load()
+        yield data
+        _save(data)
 
 
 def env_shadow_mode() -> bool:
@@ -83,17 +110,15 @@ def set_shadow_mode(*, shadow: bool, confirm: str | None = None) -> dict:
                 "a Slack webhook or an Opsgenie key (save one on the Connectors panel "
                 "or set PAGERDUTY_ROUTING_KEY / SLACK_WEBHOOK_URL / OPSGENIE_API_KEY)."
             )
-    data = _load()
-    data["shadow_mode"] = bool(shadow)
-    _save(data)
+    with _edit() as data:
+        data["shadow_mode"] = bool(shadow)
     return shadow_status()
 
 
 def clear_shadow_override() -> dict:
     """Drop the override so SHADOW_MODE env is used again."""
-    data = _load()
-    data.pop("shadow_mode", None)
-    _save(data)
+    with _edit() as data:
+        data.pop("shadow_mode", None)
     return shadow_status()
 
 
@@ -126,17 +151,15 @@ def set_routing_key(key: str) -> dict:
     key = (key or "").strip()
     if not key:
         raise ValueError("routing_key must be non-empty; use clear to remove it")
-    data = _load()
-    data["pagerduty_routing_key"] = key
-    _save(data)
+    with _edit() as data:
+        data["pagerduty_routing_key"] = key
     return routing_key_status()
 
 
 def clear_routing_key() -> dict:
     """Remove the saved key (env key still applies if set)."""
-    data = _load()
-    data.pop("pagerduty_routing_key", None)
-    _save(data)
+    with _edit() as data:
+        data.pop("pagerduty_routing_key", None)
     return routing_key_status()
 
 
@@ -171,16 +194,14 @@ def _set_secret(name: str, value: str) -> dict:
     value = (value or "").strip()
     if not value:
         raise ValueError(f"{name} must be non-empty; use clear to remove it")
-    data = _load()
-    data[name] = value
-    _save(data)
+    with _edit() as data:
+        data[name] = value
     return _secret_status(name)
 
 
 def _clear_secret(name: str) -> dict:
-    data = _load()
-    data.pop(name, None)
-    _save(data)
+    with _edit() as data:
+        data.pop(name, None)
     return _secret_status(name)
 
 
@@ -250,9 +271,16 @@ def configured_channels() -> list[str]:
     return out
 
 
+def login_configured() -> bool:
+    """A login password is set (APP_PASSWORD)."""
+    return bool(os.environ.get("APP_PASSWORD"))
+
+
 def can_page() -> bool:
-    """Live mode and at least one channel (PagerDuty, Slack, Opsgenie) are required."""
-    return (not get_shadow_mode()) and bool(configured_channels())
+    """Live mode, at least one channel (PagerDuty, Slack, Opsgenie) and a login
+    password are all required. The password check is here as well as on the
+    Live switch, so SHADOW_MODE=0 in the environment cannot bypass it."""
+    return (not get_shadow_mode()) and bool(configured_channels()) and login_configured()
 
 
 # Modes that may call notify_escalations when Live + key. Sample, GAIA,
@@ -306,15 +334,38 @@ def page_cutoff(now=None):
 
 
 def set_page_watermark(ts) -> None:
-    data = _load()
-    data["paged_through"] = ts.isoformat()
-    _save(data)
+    with _edit() as data:
+        data["paged_through"] = ts.isoformat()
 
 
 def clear_page_watermark() -> None:
-    data = _load()
-    data.pop("paged_through", None)
-    _save(data)
+    with _edit() as data:
+        data.pop("paged_through", None)
+        data.pop("paged_through_by_channel", None)
+
+
+def channel_cutoff(channel: str, now=None):
+    """Like page_cutoff, but a channel that already delivered past the shared
+    mark (while another channel failed) keeps its own, later mark, so the retry
+    pages only the channel that failed."""
+    import pandas as pd
+
+    cutoff = page_cutoff(now)
+    raw = (_load().get("paged_through_by_channel") or {}).get(channel)
+    if raw:
+        try:
+            ts = pd.Timestamp(raw)
+            ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+            cutoff = max(cutoff, ts)
+        except (ValueError, TypeError):
+            pass
+    return cutoff
+
+
+def set_channel_watermark(channel: str, ts) -> None:
+    with _edit() as data:
+        marks = data.setdefault("paged_through_by_channel", {})
+        marks[channel] = ts.isoformat()
 
 
 def env_prom_url() -> str:
@@ -335,12 +386,55 @@ def prom_allow_private() -> bool:
     return os.environ.get("PROM_ALLOW_PRIVATE", "0") == "1"
 
 
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+
+def _host_addresses(host: str) -> list[IPAddress]:
+    """Every address a Prometheus host means: IP literals (including legacy forms
+    such as 127.1, 2130706433 or 0x7f000001) and whatever DNS returns.
+
+    An empty list means the name does not resolve here; the request itself would
+    then fail on DNS, so there is nothing to reach.
+    """
+    try:
+        return [ipaddress.ip_address(host)]
+    except ValueError:
+        pass
+    if re.fullmatch(r"[0-9a-fx.]+", host):
+        try:
+            return [ipaddress.ip_address(socket.inet_aton(host))]
+        except OSError:
+            pass
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (OSError, UnicodeError):
+        return []
+    out: list[IPAddress] = []
+    for info in infos:
+        addr = str(info[4][0]).split("%", 1)[0]  # drop an IPv6 zone id
+        try:
+            out.append(ipaddress.ip_address(addr))
+        except ValueError:
+            continue
+    return out
+
+
+def _private_refused() -> ValueError:
+    return ValueError(
+        "Private/loopback Prometheus URLs need PROM_ALLOW_PRIVATE=1 "
+        "(safe default blocks them to reduce SSRF risk)."
+    )
+
+
 def assert_prom_url_safe(url: str) -> None:
     """Refuse SSRF-prone Prometheus targets (metadata / link-local; private unless allowed).
 
-    Safe default: block loopback and private IP literals (and localhost). Set
-    PROM_ALLOW_PRIVATE=1 for in-cluster / Docker Compose Prometheus. Cloud
-    metadata hosts and link-local addresses are always refused.
+    The host is resolved and every address it maps to is checked, so numeric
+    tricks (127.1, 2130706433), a trailing dot, or a public name that points at
+    a private or metadata address are refused too. Set PROM_ALLOW_PRIVATE=1 for
+    in-cluster / Docker Compose Prometheus. Cloud metadata hosts and link-local
+    addresses are always refused. The fetch itself refuses redirects
+    (prometheus_adapter.urlopen), and this check runs again before every fetch.
     """
     url = (url or "").strip()
     if not url:
@@ -348,33 +442,28 @@ def assert_prom_url_safe(url: str) -> None:
     parsed = urlparse(url if "://" in url else f"http://{url}")
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("prometheus_url must be an http(s) URL, e.g. http://localhost:9090")
-    host = (parsed.hostname or "").strip().lower()
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
     if not host:
         raise ValueError("prometheus_url must include a host")
     if host in _BLOCKED_PROM_HOSTS or host.endswith(".metadata.google.internal"):
         raise ValueError("Prometheus URL host is not allowed (cloud metadata)")
-    # Hostname that clearly means this machine / .local mDNS
-    if host in _PRIVATE_PROM_HOSTNAMES or host.endswith(".local"):
+    if host in _PRIVATE_PROM_HOSTNAMES or host.endswith((".localhost", ".local")):
         if not prom_allow_private():
+            raise _private_refused()
+    for ip in _host_addresses(host):
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped is not None:
+            ip = mapped
+        if ip.is_loopback:
+            if not prom_allow_private():
+                raise _private_refused()
+            continue
+        if ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved:
             raise ValueError(
-                "Private/loopback Prometheus URLs need PROM_ALLOW_PRIVATE=1 "
-                "(safe default blocks them to reduce SSRF risk)."
+                "Prometheus URL must not target link-local, multicast, reserved or unspecified addresses"
             )
-        return
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        # Non-IP hostname (e.g. prometheus.monitoring.svc): allow; operator DNS.
-        return
-    if ip.is_link_local or ip.is_multicast or ip.is_unspecified:
-        raise ValueError("Prometheus URL must not target link-local, multicast, or unspecified addresses")
-    # Explicit: IPv4/IPv6 link-local already covered; also refuse CGNAT? skip.
-    if ip.is_loopback or ip.is_private:
-        if not prom_allow_private():
-            raise ValueError(
-                "Private/loopback Prometheus URLs need PROM_ALLOW_PRIVATE=1 "
-                "(safe default blocks them to reduce SSRF risk)."
-            )
+        if (ip.is_private or not ip.is_global) and not prom_allow_private():
+            raise _private_refused()
 
 
 def set_prom_url(url: str) -> dict:
@@ -388,17 +477,15 @@ def set_prom_url(url: str) -> dict:
     if "://" not in url:
         url = f"http://{url}"
     assert_prom_url_safe(url)
-    data = _load()
-    data["prometheus_url"] = url.rstrip("/")
-    _save(data)
+    with _edit() as data:
+        data["prometheus_url"] = url.rstrip("/")
     return prom_url_status()
 
 
 def clear_prom_url() -> dict:
     """Remove the saved Prometheus URL (env PROM_URL still applies if set)."""
-    data = _load()
-    data.pop("prometheus_url", None)
-    _save(data)
+    with _edit() as data:
+        data.pop("prometheus_url", None)
     return prom_url_status()
 
 

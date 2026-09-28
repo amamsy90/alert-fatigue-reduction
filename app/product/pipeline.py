@@ -8,9 +8,9 @@ alert classifier takes over the alert share of the budget.
 from __future__ import annotations
 
 import os
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, replace
-import threading
 from pathlib import Path
 
 import pandas as pd
@@ -249,8 +249,12 @@ def score_alerts(
     config: Config | None = None,
     faults: list[Fault] | None = None,
     use_saved_detector: bool = True,
+    now: pd.Timestamp | None = None,
 ) -> ScoredQueue:
     """Score EVERY alert in the batch and build the day-by-day causal queue.
+
+    `now` (live jobs): a series silent since before `now - gap_minutes` is shown
+    as a gap even if no series sent data since (a dead feed).
 
     Alert scores come from, in order of preference: a model trained on this
     batch's labels (fit on the early window, reported on the later one), the
@@ -277,7 +281,7 @@ def score_alerts(
             jump.kind = "jump"
     else:
         jumps = detect_jumps(metrics, config) if has_metrics else []
-    gaps = detect_gaps(metrics, config) if has_metrics else []
+    gaps = detect_gaps(metrics, config, now=now) if has_metrics else []
     # Leaks only make sense for byte metrics (the rise is absolute) and the built-in rule.
     leaks = (
         detect_leaks(metrics, config)
@@ -477,6 +481,7 @@ def _run_job_locked(
     source = mode
 
     sample_config = None
+    live_metrics = False  # pulled from Prometheus just now: silence up to now is real
     if mode == "sample":
         generate_demo_day(paths["sample_dir"])
         alerts = load_alerts(paths["sample_dir"] / "alerts.csv")
@@ -528,6 +533,7 @@ def _run_job_locked(
 
             if get_prom_url():
                 metrics = fetch_memory_metrics()
+                live_metrics = True
         source = "ingest"
     else:
         raise ValueError(f"Unknown mode: {mode}")
@@ -543,6 +549,7 @@ def _run_job_locked(
         faults=faults,
         config=sample_config,
         use_saved_detector=mode != "sample",
+        now=pd.Timestamp.now(tz="UTC") if live_metrics else None,
     )
     real_marks = store.feedback_summary()["real"]
     if result.model is not None:
@@ -559,8 +566,17 @@ def _run_job_locked(
     decisions = result.decisions
     # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
     # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
-    from .ops import PAGEABLE_MODES, can_page, configured_channels, page_cutoff, set_page_watermark
     from .notifiers import notify_opsgenie, notify_slack
+    from .ops import (
+        PAGEABLE_MODES,
+        can_page,
+        channel_cutoff,
+        configured_channels,
+        login_configured,
+        page_cutoff,
+        set_channel_watermark,
+        set_page_watermark,
+    )
     from .pagerduty import notify_escalations, page_items, would_have_paged
 
     # Ingest jobs re-score the metric history; only items shown since the last
@@ -578,18 +594,29 @@ def _run_job_locked(
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     elif not configured_channels():
         page = {"sent": 0, "failed": 0, "skipped": "no channel configured"}
+    elif not login_configured():
+        page = {"sent": 0, "failed": 0, "skipped": "no login password (APP_PASSWORD)"}
     elif not can_page():
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     else:
         channels = configured_channels()
-        items = page_items(result.alerts, decisions, spikes=page_spikes)
         per: dict[str, dict] = {}
+
+        def _for(channel: str) -> list:
+            # Skip metric items this channel already delivered on an earlier try.
+            mark = channel_cutoff(channel, run_at)
+            return [s for s in page_spikes if s.shown_at > mark]
+
         if "pagerduty" in channels:
-            per["pagerduty"] = notify_escalations(result.alerts, decisions, spikes=page_spikes)
+            per["pagerduty"] = notify_escalations(result.alerts, decisions, spikes=_for("pagerduty"))
         if "slack" in channels:
+            items = page_items(result.alerts, decisions, spikes=_for("slack"))
             per["slack"] = notify_slack(items, len(items))
         if "opsgenie" in channels:
-            per["opsgenie"] = notify_opsgenie(items)
+            per["opsgenie"] = notify_opsgenie(page_items(result.alerts, decisions, spikes=_for("opsgenie")))
+        for channel, outcome in per.items():
+            if not outcome.get("failed"):
+                set_channel_watermark(channel, run_at)
         page = {
             "sent": sum(int(r.get("sent", 0)) for r in per.values()),
             "failed": sum(int(r.get("failed", 0)) for r in per.values()),
