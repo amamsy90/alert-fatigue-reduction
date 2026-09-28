@@ -96,7 +96,7 @@ Time-based: **first week = train, remaining 55 days = test**. No random shuffle.
 
 On the test period this rule overlaps **86.1%** of faults and **99.6%** of the faults that have metric data (1,053 / 1,057). Shifting jumps by a random 1–6 h leaves 2.6% overlap. Mean + 3σ: **54.2%**.
 
-A **slow-leak** rule runs beside it: the same test against a **3-hour** median, 20 hot points (10 minutes). It catches 99% of 30-minute ramps and 73% of 3-hour leaks that the 15-minute rule misses (`run_robustness.py`), for 0.3 extra items a day on GAIA. Leaks overlapping a fast jump are dropped.
+A **slow-leak** rule runs beside it: the same test against a **3-hour** median, 20 hot points (10 minutes). It catches 99% of 30-minute ramps and 73% of 3-hour leaks that the 15-minute rule misses (`run_robustness.py`), for 0.3 extra items a day on GAIA. A leak is dropped when a fast jump on the same series was already shown by the time the leak is confirmed.
 
 ### 4.5 Decision policy
 
