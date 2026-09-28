@@ -49,7 +49,7 @@ This document states what the system must do (functional requirements, FR), how 
 | **NFR-4** | Reliability | One scoring job and one evaluation at a time (409 otherwise); no lost settings writes; database connections closed, WAL on; alerts stay buffered when scoring fails; a retry never pages the same item twice on a channel that already delivered it. | Reliability tests |
 | **NFR-5** | Performance | Median time from fault start to the confirming point ≤ 1 minute at 30 s sampling; `/health` answers without calling Prometheus; the full GAIA pipeline runs on a laptop in under an hour. | `stats.confirm_minutes_median` = 0.72 min; health test |
 | **NFR-6** | Auditability | Every decision stores a reason; every change to Live mode, keys, the Prometheus URL or settings is logged with user and outcome. | Queue rows; audit test |
-| **NFR-7** | Maintainability | CI gates every change: lint clean, mypy error count never above the budget, line coverage ≥ 85%. | `.github/workflows/ci.yml` |
+| **NFR-7** | Maintainability | CI gates every change: lint clean, no mypy errors (budget 0), line coverage ≥ 85%. | `.github/workflows/ci.yml` |
 | **NFR-8** | Portability | Runs on Python 3.10–3.12 and as a Docker image built from hash-pinned dependencies. | CI matrix and Docker job |
 | **NFR-9** | Data retention | Old jobs and evaluations are pruned (`JOB_RETENTION`, `EVAL_RETENTION`); Real / Noise marks are kept. | Retention tests |
 | **NFR-10** | Effectiveness | On GAIA at K = 20 the jump detector beats a Prometheus rate rule in every walk-forward week, with fewer false items a day. | `walkforward.jumps_tuned.wins` = 8; results |
@@ -122,8 +122,8 @@ This document states what the system must do (functional requirements, FR), how 
 | FR-13 | `test_evaluate_tunes_on_the_early_part_and_beats_chance`, `test_miss_causes_match_your_queue_at_the_largest_budget`, `test_saved_setting_scores_new_data_the_same_way`, `test_app_evaluate_apply_and_score`, `test_each_series_gets_the_size_it_needs` | NAB and SMD rows in results |
 | FR-14 | `test_cli_scores_an_export_without_labels`, `test_cli_evaluate_and_tune` | |
 | FR-15 | `test_connectors_dashboard_hides_secrets`, `test_routing_key_never_returned_full_on_get`, `test_api_saves_and_reports_without_the_secret`, `test_connectors_dashboard_hides_secrets_with_ops`, `test_redact_url_hides_credentials` | |
-| FR-16 | `test_rounding_matches_what_the_report_prints`, `test_report_table_is_parsed`, `test_report_without_the_table_fails` | `run_validate.py` in CI |
-| NFR-1 | all of `test_causality.py`, `test_counts_use_only_earlier_alerts`, `test_jump_features_look_only_backwards`, `test_test_window_cannot_move_a_series_threshold` | |
+| FR-16 | `test_rounding_matches_what_the_report_prints`, `test_report_table_is_parsed`, `test_report_without_the_table_fails`, all of `test_experiment.py` | `run_validate.py` in CI |
+| NFR-1 | all of `test_causality.py`, `test_later_data_does_not_change_the_window`, `test_counts_use_only_earlier_alerts`, `test_jump_features_look_only_backwards`, `test_test_window_cannot_move_a_series_threshold` | |
 | NFR-2 | all of `test_security.py`, `test_login_guards_everything_but_health`, `test_no_password_means_private_networks_only`, `test_ingest_token`, `test_metadata_prometheus_url_always_refused`, `test_private_prometheus_needs_env_override`, `test_fetch_respects_ssrf_gate`, `test_slack_webhook_must_be_hooks_slack`, `test_failures_never_echo_the_secret`, `test_tampered_model_file_is_refused`, `test_oversized_ingest_body_is_refused`, `test_upload_above_limit_is_refused` | `docs/threat_model.md` |
 | NFR-3 | `test_api_live_requires_a_password`, `test_enable_live_without_confirm_fails`, `test_enable_live_without_key_fails`, `test_live_needs_any_channel`, `test_sample_never_pages_even_when_live`, `test_pageable_modes_only_ingest` | |
 | NFR-4 | `test_jobs_run_one_at_a_time`, `test_busy_job_returns_409`, `test_concurrent_ops_writes_keep_every_change`, `test_store_closes_connections_and_uses_wal`, `test_failed_scoring_keeps_the_ingest_buffer`, `test_resent_alerts_are_buffered_once` | |
@@ -136,7 +136,6 @@ This document states what the system must do (functional requirements, FR), how 
 
 ### Known gaps in verification
 
-- `src/experiment.py`, which produces every GAIA number, has no unit test of its own (0% line coverage); it is exercised only by running the experiment scripts. Planned for Phase 2.
 - `product/datasets.py` (NAB download) is excluded from coverage because it needs the network.
 - NFR-5's "under an hour" is measured by hand (about 20 minutes without SMD on the author's laptop), not in CI.
 - The residual risks in `docs/threat_model.md` (for example DNS rebinding between the Prometheus check and the fetch) have no test because the fix is not in place.

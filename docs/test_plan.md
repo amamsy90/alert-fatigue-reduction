@@ -13,12 +13,12 @@
 
 | Level | What it covers | Where | Examples |
 |---|---|---|---|
-| Unit | One function or rule, synthetic data | `test_memory_spikes.py`, `test_queue.py`, `test_policy.py`, `test_features.py`, `test_metrics.py`, `test_eval_stats.py` | first come beats biggest first; a jump is confirmed at its second point |
+| Unit | One function or rule, synthetic data | `test_memory_spikes.py`, `test_queue.py`, `test_policy.py`, `test_scoring.py`, `test_settings.py`, `test_features.py`, `test_metrics.py`, `test_eval_stats.py` | first come beats biggest first; a jump is confirmed at its second point |
 | Causality | Adding later data never changes an earlier decision | `test_causality.py`, `test_series_threshold.py`, `test_phase3.py` | early alerts keep their slots when severe ones arrive later |
 | Integration (API) | HTTP routes with the real pipeline and a temporary SQLite database, outbound calls mocked | `test_product_api.py`, `test_ops_*.py`, `test_notifiers.py`, `test_page_watermark.py`, `test_would_have_paged.py`, `test_app_hardening.py` | webhook → buffer → job → queue; Live fans out to every channel |
 | Security | Access rules, SSRF, secrets, limits | `test_security.py`, `test_production_ready.py` | loopback tricks refused; forwarded request needs a password |
 | Reliability | Concurrency and persistence | `test_reliability.py`, `test_app_hardening.py` | concurrent `ops.json` writes keep every change |
-| System (experiments) | The whole pipeline on GAIA, NAB, SMD | `run_*.py` scripts → `app/results/` | walk-forward over 8 weeks |
+| System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
 | Acceptance of results | Report matches results | `run_validate.py` | 51 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
 
@@ -29,7 +29,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 186 tests, coverage report
+uv run pytest -q --cov           # 200 tests, coverage report
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -43,30 +43,28 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 |---|---|---|
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
-| Types | mypy error count ≤ `MYPY_BUDGET` | 39 of 39 |
-| Tests | all pass on Python 3.10 and 3.12 | 186 pass |
-| Coverage | line coverage ≥ `COVERAGE_MIN` | 86% (min 85%) |
+| Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
+| Tests | all pass on Python 3.10 and 3.12 | 200 pass |
+| Coverage | line coverage ≥ `COVERAGE_MIN` | 89% (min 85%) |
 | Results | `run_validate.py` passes | 51 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
-**Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). CI fails if the count rises. Any change that removes errors lowers `MYPY_BUDGET` in the same commit, so the number can only go down.
+**Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
-## 5. Coverage by module (line coverage, 186 tests)
+## 5. Coverage by module (line coverage, 200 tests)
 
 | Module | Coverage | Note |
 |---|---:|---|
-| `product/cli.py`, `model_store.py`, `settings.py` | 95–98% | |
-| `product/pipeline.py`, `store.py`, `ops.py` | 90–92% | |
-| `product/app.py` | 84% | untested branches are mostly error paths of Evaluate and dataset fetch |
-| `src/queue.py`, `policy.py`, `jump_ranker.py`, `classifier.py`, `ingestion.py` | 91–98% | |
-| `src/generic.py`, `memory_spikes.py`, `baselines_metric.py` | 86–88% | |
-| `src/metrics.py`, `eval_stats.py`, `gaia_loader.py` | 62–75% | GAIA-only paths |
-| `src/experiment.py` | 0% | exercised only by the experiment scripts — Phase 2 adds a unit test |
-| **Total** | **86%** | |
+| `product/app.py`, `pipeline.py`, `paging.py`, `cli.py`, `model_store.py`, `settings.py` | 95–98% | |
+| `product/labels.py`, `store.py`, `ops.py`, `web/security.py`, `web/uploads.py` | 90–93% | |
+| `product/inputs.py`, `web/evaluate_routes.py`, `web/job_routes.py`, `web/ops_routes.py` | 76–84% | untested branches are mostly error paths (GAIA folder missing, channel test pages, dataset download) |
+| `src/queue.py`, `experiment.py`, `policy.py`, `jump_ranker.py`, `classifier.py`, `ingestion.py`, `baselines_metric.py`, `scoring.py` | 93–100% | |
+| `src/generic.py`, `memory_spikes.py` | 87% | |
+| `src/metrics.py`, `eval_stats.py`, `gaia_loader.py` | 62–75% | GAIA-only paths and alerts-only metrics |
+| **Total** | **89%** | |
 
 ## 6. Known gaps
 
-- `src/experiment.py` (every GAIA number) has no unit test.
 - No load test: ingest throughput and latency are not measured.
 - No browser (UI) tests; the static pages are checked only for the controls they must contain.
 - Residual risks R1–R8 in `docs/threat_model.md` have no tests because they are not fixed.

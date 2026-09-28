@@ -31,6 +31,7 @@ from .queue import (
     spike_items,
     tune_confirm_thresholds,
 )
+from .scoring import faults_by_service, spike_hits
 
 # Order is the order of rows in the result tables.
 SYSTEMS = (
@@ -207,11 +208,7 @@ def miss_causes(run: WindowRun, data: GaiaData, config: Config, name: str = "pro
     below_threshold  a jump overlapped, but its rise at confirmation was under the threshold
     budget_full      a qualifying jump existed, but the day's K slots were already used
     """
-    from .queue import spike_hits
-
-    by_service: dict[str, list[Fault]] = {}
-    for fault in run.test_faults:
-        by_service.setdefault(fault.component, []).append(fault)
+    by_service = faults_by_service(run.test_faults)
     shown = run.shown[name]
     caught: set[str] = set()
     for item in shown:
