@@ -3,9 +3,12 @@
 This is the reference approach the project must beat (design spec 4.6).
 Escalate an alert if its severity passes the threshold and an identical
 alert (same source, type and message) has not been escalated before.
-When the daily budget forces a choice, the most severe alerts win.
+The daily budget is spent first come, first served: alerts are read in time
+order and an alert is never dropped because of one that arrives later.
 """
 from __future__ import annotations
+
+from collections import defaultdict
 
 import pandas as pd
 
@@ -13,53 +16,32 @@ from .config import Config, day_of
 from .entities import Action, Alert, Decision
 
 
+def time_order(alerts: list[Alert]) -> list[int]:
+    """Indices in arrival order (ties keep input order): how a live system reads them."""
+    return sorted(range(len(alerts)), key=lambda i: (alerts[i].timestamp, i))
+
+
 def baseline_decisions(alerts: list[Alert], config: Config) -> list[Decision]:
-    decisions: list[Decision] = []
+    decisions: list[Decision | None] = [None] * len(alerts)
     seen_exact: set[tuple[str, str, str]] = set()
-    # Per-day list of escalation candidates: (severity rank, timestamp, index)
-    candidates_by_day: dict[pd.Timestamp, list[tuple[int, pd.Timestamp, int]]] = {}
+    used: dict[pd.Timestamp, int] = defaultdict(int)
 
-    for idx, alert in enumerate(alerts):
+    for idx in time_order(alerts):
+        alert = alerts[idx]
         key = (alert.source, alert.alert_type, alert.message)
-        is_dup = key in seen_exact
-        passes_threshold = alert.severity in config.escalate_severities
-
-        if is_dup:
-            decisions.append(
-                Decision(alert.alert_id, Action.SUPPRESS, 1.0, "exact duplicate")
+        if key in seen_exact:
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, 1.0, "exact duplicate")
+            continue
+        if alert.severity not in config.escalate_severities:
+            decisions[idx] = Decision(
+                alert.alert_id, Action.SUPPRESS, 1.0, f"severity '{alert.severity}' below threshold"
             )
             continue
-        if not passes_threshold:
-            decisions.append(
-                Decision(
-                    alert.alert_id,
-                    Action.SUPPRESS,
-                    1.0,
-                    f"severity '{alert.severity}' below threshold",
-                )
-            )
-            continue
-
         seen_exact.add(key)
         day = day_of(alert.timestamp, config)
-        rank = config.severity_rank.get(alert.severity, 0)
-        candidates_by_day.setdefault(day, []).append((rank, alert.timestamp, idx))
-        decisions.append(
-            Decision(alert.alert_id, Action.ESCALATE, 1.0, "severity threshold")
-        )
-
-    # Apply the daily budget: keep top-K per day by (severity rank, earliest)
-    for day, cands in candidates_by_day.items():
-        if len(cands) <= config.budget_k:
+        if used[day] >= config.budget_k:
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, 1.0, "daily budget exhausted")
             continue
-        cands.sort(key=lambda c: (-c[0], c[1]))
-        overflow = {idx for _, _, idx in cands[config.budget_k:]}
-        for idx in overflow:
-            d = decisions[idx]
-            decisions[idx] = Decision(
-                d.alert_id,
-                Action.SUPPRESS,
-                d.confidence,
-                "daily budget exhausted",
-            )
-    return decisions
+        used[day] += 1
+        decisions[idx] = Decision(alert.alert_id, Action.ESCALATE, 1.0, "severity threshold")
+    return decisions  # type: ignore[return-value]

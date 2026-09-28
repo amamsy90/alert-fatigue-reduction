@@ -17,10 +17,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .config import Config
 from .entities import Fault
+
+# Points a series needs before robust mode scores it (the spread floor needs history).
+ROBUST_WARMUP_POINTS = 10
 
 SERVICES = (
     "dbservice1",
@@ -51,11 +55,26 @@ class Spike:
     kind: str = "jump"  # "jump" | "gap" | "rule" | "leak"
     # Recent median at the confirming point (the "normal" level the rise is measured from).
     level_at_confirm: float = 0.0
+    # Largest spacing between hot points of this episode (see _gap_for).
+    grace: pd.Timedelta | None = None
 
     @property
     def shown_at(self) -> pd.Timestamp:
         """When a live queue can show this item."""
         return self.confirm if self.confirm is not None else self.start
+
+    def open_at(self, t: pd.Timestamp) -> bool:
+        """Does a live system at time `t` see this episode as shown and still open?
+
+        Open means its last hot point up to `t` is within `grace` of `t`, so
+        the episode has not closed yet. That uses only points up to `t`: hot
+        points are at most `grace` apart, so `end >= t - grace` holds exactly
+        when some hot point lies in [t - grace, t].
+        """
+        if t < self.shown_at:
+            return False
+        grace = self.grace if self.grace is not None else pd.Timedelta(0)
+        return self.end >= t - grace
 
 
 def service_in_name(name: str) -> str | None:
@@ -170,8 +189,12 @@ def jump_scores(series: pd.Series, config: Config) -> tuple[pd.Series, pd.Series
     if mode != "robust":
         raise ValueError(f"memory_jump_mode must be absolute, relative or robust, not {mode!r}")
     iqr = (roll.quantile(0.75) - roll.quantile(0.25)) / 1.349
-    floor = max(float(series.std(ddof=0)) * 0.05, 1e-9)
-    scale = iqr.clip(lower=floor).fillna(floor)
+    # Floor for flat windows: 5% of the spread seen so far (earlier points only,
+    # so a later outlier cannot change an earlier score). NaN during warm-up,
+    # which leaves the first points unscored instead of hot.
+    floor = (series.expanding(min_periods=ROBUST_WARMUP_POINTS).std(ddof=0).shift(1) * 0.05).clip(lower=1e-9)
+    scale = pd.Series(np.fmax(iqr.to_numpy(), floor.to_numpy()), index=series.index)
+    scale[floor.isna()] = np.nan
     if config.jump_direction == "up":
         signed = rise
     elif config.jump_direction == "down":
@@ -234,7 +257,7 @@ def detect_leaks(
 ) -> list[Spike]:
     """Slow rises: the jump rule with a long median window (`leak_window_minutes`)
     and a longer run of hot points (`leak_min_points`). Episodes that overlap a
-    fast jump on the same series are dropped (the jump already covers them).
+    fast jump already shown on the same series are dropped (the jump covers them).
     Returns [] when `leak_window_minutes` is None."""
     config = config or Config()
     if not config.leak_window_minutes:
@@ -252,7 +275,15 @@ def detect_leaks(
     leaks = detect_jumps(metrics, slow, detect_from=detect_from, detect_until=detect_until)
     out = []
     for leak in leaks:
-        if any(j.series_id == leak.series_id and j.start <= leak.end and j.end >= leak.start for j in fast):
+        # Drop the leak only if a fast jump on the same series was already shown
+        # by the leak's confirmation and overlapped it up to then. A jump that
+        # arrives later cannot un-show a leak a live queue already showed.
+        if any(
+            j.series_id == leak.series_id
+            and j.shown_at <= leak.shown_at
+            and j.end >= leak.start
+            for j in fast
+        ):
             continue
         leak.kind = "leak"
         out.append(leak)
@@ -286,6 +317,7 @@ def _episodes(
                     max(h for _, h in run),
                     confirm=run[need - 1][0],
                     rise_at_confirm=max(h for _, h in run[:need]),
+                    grace=gap,
                 )
             )
 
@@ -305,30 +337,47 @@ def detect_gaps(
     config: Config | None = None,
     detect_from: pd.Timestamp | None = None,
     detect_until: pd.Timestamp | None = None,
+    now: pd.Timestamp | None = None,
 ) -> list[Spike]:
     """One item per silence of `gap_minutes` or more; silences that start close
     together on several services are merged into one item (service "a,b,c").
 
     The item is shown `gap_minutes` after the last point (that is when a live
-    system knows data stopped). `end` is when data came back.
+    system knows data stopped). `end` is when data came back. A silence still
+    going at `now` (default: the last point of any series, or `detect_until`)
+    is reported with `end = now`: a dead feed must not wait for data to return.
+
+    Merging is causal: a later silence within `gap_group_minutes` is attached
+    to the item already shown instead of taking a new slot. `end` and the
+    merged service list are reporting fields, filled in afterwards.
     """
     config = config or Config()
     limit = pd.Timedelta(minutes=config.gap_minutes)
+    if now is None:
+        now = detect_until if detect_until is not None else (
+            metrics["timestamp"].max() if not metrics.empty else None
+        )
     raw: list[tuple[pd.Timestamp, pd.Timestamp, str]] = []
+
+    def _keep(last_seen: pd.Timestamp) -> bool:
+        shown = last_seen + limit
+        if detect_from is not None and shown < detect_from:
+            return False
+        return detect_until is None or shown < detect_until
+
     for _, part in metrics.groupby("series_id"):
         times = part["timestamp"].sort_values().reset_index(drop=True)
-        if len(times) < 2:
+        if times.empty:
             continue
         step = times.diff()
         service = str(part["service"].iloc[0])
         for i in step.index[step > limit]:
             last_seen, back = times[i - 1], times[i]
-            shown = last_seen + limit
-            if detect_from is not None and shown < detect_from:
-                continue
-            if detect_until is not None and shown >= detect_until:
-                continue
-            raw.append((last_seen, back, service))
+            if _keep(last_seen):
+                raw.append((last_seen, back, service))
+        last_seen = times.iloc[-1]
+        if now is not None and now - last_seen > limit and _keep(last_seen):
+            raw.append((last_seen, now, service))
     raw.sort()
     merged: list[Spike] = []
     window = pd.Timedelta(minutes=config.gap_group_minutes)

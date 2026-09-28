@@ -9,8 +9,9 @@ Every item is shown at the moment a live system could know about it:
 
 Each day holds at most `budget_k` items, first come first served. Log alerts
 may use at most `alert_share` of the budget, so a noisy log stream cannot push
-out a metric jump that arrives later. Nothing here looks at a later point,
-`Spike.end` or `Spike.peak_rise`.
+out a metric jump that arrives later. Nothing here looks at a later point or
+`Spike.peak_rise`. An alert rides on a jump only while `Spike.open_at` says a
+live system still sees that jump open, which needs points up to the alert only.
 """
 from __future__ import annotations
 
@@ -108,7 +109,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
         for item in sorted(by_day.get(day, []), key=lambda it: (it.shown_at, _KIND_ORDER.get(it.kind, 5))):
             if item.kind == "alert":
                 jumps = running.get(item.service, [])
-                if any(j.shown_at <= item.shown_at <= j.end for j in jumps):
+                if any(j.open_at(item.shown_at) for j in jumps):
                     item.attached = True
                     shown.append(item)
                     continue
