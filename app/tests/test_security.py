@@ -77,7 +77,9 @@ def test_docker_defaults_refuse_private_prometheus():
 
     root = Path(__file__).resolve().parents[1]
     assert "PROM_ALLOW_PRIVATE=0" in (root / "Dockerfile").read_text(encoding="utf-8")
-    assert "${PROM_ALLOW_PRIVATE:-0}" in (root / "docker-compose.yml").read_text(encoding="utf-8")
+    for env in ("test.env", "prod.env.example"):
+        assert "PROM_ALLOW_PRIVATE=0" in (root / "deploy" / env).read_text(encoding="utf-8")
+    assert "SHADOW_MODE=1" in (root / "deploy" / "prod.env.example").read_text(encoding="utf-8")
 
 
 @pytest.fixture()

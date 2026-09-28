@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from product.monitoring import metrics_middleware
 from product.store import QueueStore
 from product.web import context, evaluate_routes, job_routes, ops_routes
 from product.web.security import BodyLimit, _is_private, audit_changes, require_login  # noqa: F401
@@ -24,6 +25,7 @@ app = FastAPI(
 app.middleware("http")(require_login)
 app.add_middleware(BodyLimit)
 app.middleware("http")(audit_changes)
+app.middleware("http")(metrics_middleware)  # outermost: times everything, refusals included
 
 context.STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(context.STATIC_DIR)), name="static")

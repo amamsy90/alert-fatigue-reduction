@@ -26,6 +26,7 @@ from src.eval_stats import (
 from src.experiment import faults_with_metric_data, load_gaia
 from src.memory_spikes import detect_gaps, detect_jumps, faults_in_gaps
 from src.queue import oracle_ceiling
+from src.tracking import GAIA_INPUTS, record_run
 
 
 def _fold_rates(walk: pd.DataFrame, queue: str) -> list[float]:
@@ -138,6 +139,9 @@ def main() -> None:
     pd.DataFrame([headline]).to_csv(out / "stats_gaia.csv", index=False)
     pd.DataFrame(rows).to_csv(out / "stats_by_service.csv", index=False)
     print(f"Wrote {out / 'stats_gaia.csv'} and {out / 'stats_by_service.csv'}")
+    record_run("stats_gaia", data=GAIA_INPUTS, outputs=[out / "stats_gaia.csv", out / "stats_by_service.csv"],
+               metrics={k: headline[k] for k in ("mean", "tuned_mean", "delta_mean", "wins_vs_delta",
+                                                 "tuned_wins_vs_delta", "confirm_minutes_median") if k in headline})
 
 
 if __name__ == "__main__":
