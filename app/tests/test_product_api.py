@@ -180,11 +180,39 @@ def test_small_live_batch_is_scored_with_the_saved_model(client):
     status = client.get("/model").json()
     assert status["saved"] and status["label_source"] == "real" and not status["retrain_due"]
 
-    res = client.post("/ingest/alerts", json={"alerts": few, "score_now": True})
+    later = [dict(row, timestamp=row["timestamp"].replace("T10:", "T11:")) for row in few]
+    res = client.post("/ingest/alerts", json={"alerts": later, "score_now": True})
     assert res.status_code == 200, res.text
     meta = res.json()["job"]["meta"]
     assert meta["model_used"] == "saved"
     assert meta["alert_count"] == 2
+
+
+def test_resent_alerts_are_buffered_once(client):
+    """A retry after 409, or Alertmanager re-sending, must not page twice."""
+    row = {"timestamp": "2026-02-01T10:00:00Z", "source": "web-01", "severity": "error", "message": "x"}
+    first = client.post("/ingest/alerts", json={"alerts": [row]}).json()
+    assert first["duplicates"] == 0 and first["buffered_batches"] == 1
+    again = client.post("/ingest/alerts", json={"alerts": [dict(reversed(list(row.items())))]}).json()
+    assert again["duplicates"] == 1 and again["buffered_batches"] == 1
+    other = client.post("/ingest/alerts", json={"alerts": [dict(row, message="y")]}).json()
+    assert other["duplicates"] == 0 and other["buffered_batches"] == 2
+
+
+def test_oversized_ingest_body_is_refused(client, monkeypatch):
+    monkeypatch.setenv("MAX_INGEST_MB", "0.001")  # about 1 KB
+    big = [{"timestamp": "2026-02-01T10:00:00Z", "source": "s", "message": "x" * 2000}]
+    res = client.post("/ingest/alerts", json={"alerts": big})
+    assert res.status_code == 413
+
+    def chunks():  # no Content-Length: counted as it streams
+        yield b'{"alerts": ['
+        for _ in range(50):
+            yield b'{"timestamp": "2026-02-01T10:00:00Z", "source": "s", "message": "xxxxxxxxxx"},'
+        yield b"{}]}"
+
+    streamed = client.post("/ingest/alerts", content=chunks(), headers={"content-type": "application/json"})
+    assert streamed.status_code == 413
 
 
 def test_marks_label_the_next_run_and_trigger_a_retrain_reminder(client):
