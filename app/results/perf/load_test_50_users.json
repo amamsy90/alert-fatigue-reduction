@@ -1,0 +1,43 @@
+{
+  "users": 50,
+  "requests": 2000,
+  "seconds": 8.777,
+  "throughput_rps": 227.9,
+  "error_rate": 0.0,
+  "p50_seconds": 0.2087,
+  "p95_seconds": 0.3164,
+  "max_seconds": 0.4234,
+  "routes": {
+    "connectors": {
+      "p50": 0.1991,
+      "p95": 0.2812,
+      "n": 400
+    },
+    "health": {
+      "p50": 0.1957,
+      "p95": 0.2724,
+      "n": 400
+    },
+    "ingest": {
+      "p50": 0.2026,
+      "p95": 0.2703,
+      "n": 400
+    },
+    "metrics": {
+      "p50": 0.2154,
+      "p95": 0.2966,
+      "n": 400
+    },
+    "queue": {
+      "p50": 0.263,
+      "p95": 0.3537,
+      "n": 400
+    }
+  },
+  "criteria": {
+    "p95_seconds": 1.0,
+    "error_rate": 0.01,
+    "throughput_rps_min": 20.0
+  },
+  "passed": true
+}
