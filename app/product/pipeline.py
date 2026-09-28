@@ -7,6 +7,7 @@ alert classifier takes over the alert share of the budget.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import threading
 from collections import defaultdict
@@ -34,7 +35,7 @@ from .inputs import (  # noqa: F401 — re-exported for callers of product.pipel
     load_metrics_csv,
 )
 from .labels import FEEDBACK_PREFIX, apply_feedback, label_source  # noqa: F401
-from .model_store import SavedModel, load_model, save_model
+from .model_store import SavedModel, held_out_cost, load_model, register_model
 from .paging import page_job
 from .settings import config_from_env, live_detector
 from .store import QueueStore
@@ -108,6 +109,7 @@ class ScoredQueue:
     model: AlertClassifier | None = None
     train_alerts: int = 0
     training: dict | None = None
+    data_fingerprint: str | None = None
     # Jumps and gaps the queue showed (what PagerDuty would page).
     shown_spikes: list | None = None
     config: Config | None = None
@@ -204,7 +206,7 @@ def score_alerts(
         else []
     )
 
-    trained = _train(alerts, metrics if has_metrics else None, config)
+    trained = _train(alerts, metrics if has_metrics else None, config, incumbent=saved)
     prefer_saved = saved is not None and saved.label_source != "weak_severity" and trained is None
     if trained is not None:
         model = trained["model"]
@@ -306,6 +308,7 @@ def score_alerts(
         model=model if model_used == "trained" else None,
         train_alerts=train_count,
         training=training,
+        data_fingerprint=trained["data_fingerprint"] if trained is not None else None,
         shown_spikes=[item.payload for item in shown if item.kind != "alert"],
         config=config,
         rise_unit=rise_unit,
@@ -314,7 +317,8 @@ def score_alerts(
     )
 
 
-def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) -> dict | None:
+def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config,
+           incumbent: SavedModel | None = None) -> dict | None:
     """Fit on the early window of this batch, or None without two label classes.
 
     No severity stand-in labels: a model that only copies severity adds nothing
@@ -331,6 +335,12 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) ->
     train_proba = model.predict_proba(train_alerts, train_spikes)
     escalate_threshold = tune_threshold(train_alerts, train_proba, config)
     test_proba: Any = model.predict_proba(test_alerts, test_spikes) if test_alerts else []
+    # The active model, scored on the same held-out window, is what the new one
+    # must beat to be promoted (see product/model_store.register_model).
+    incumbent_test = None
+    if incumbent is not None and incumbent.model is not None and test_alerts:
+        incumbent_proba = incumbent.model.predict_proba(test_alerts, test_spikes)
+        incumbent_test = _class_report(test_alerts, incumbent_proba, incumbent.escalate_threshold)
     return {
         "model": model,
         "escalate_threshold": escalate_threshold,
@@ -347,8 +357,18 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) ->
             "threshold": round(float(escalate_threshold), 4),
             "train": _class_report(train_alerts, train_proba, escalate_threshold),
             "test": _class_report(test_alerts, test_proba, escalate_threshold) if test_alerts else None,
+            "incumbent_test": incumbent_test,
         },
+        "data_fingerprint": _fingerprint(train_alerts),
     }
+
+
+def _fingerprint(alerts: list[Alert]) -> str:
+    """Short hash of the training alerts and their labels (which data made the model)."""
+    digest = hashlib.sha256()
+    for a in alerts:
+        digest.update(f"{a.timestamp.isoformat()}|{a.source}|{a.severity}|{a.message}|{a.fault_id}\n".encode())
+    return digest.hexdigest()[:16]
 
 
 # One job at a time: an Alertmanager retry and a click on "Run" must not score
@@ -374,8 +394,28 @@ def run_job(*args, **kwargs) -> dict:
         _JOB_LOCK.release()
 
 
+def promotion_decision(training: dict | None, has_incumbent: bool, config: Config) -> tuple[bool, str]:
+    """Should a newly trained model replace the active one?
+
+    Yes when there is no active model, or when its cost on this batch's held-out
+    window is no higher than the active model's cost on the same alerts.
+    Without a held-out window there is no honest test, so an active model stays.
+    """
+    if not has_incumbent:
+        return True, "no active model yet"
+    training = training or {}
+    new = held_out_cost(training.get("test"), config.miss_cost, config.false_alarm_cost)
+    old = held_out_cost(training.get("incumbent_test"), config.miss_cost, config.false_alarm_cost)
+    if new is None or old is None:
+        return False, "no held-out window to compare on; the active model stays"
+    if new <= old:
+        return True, f"held-out cost {new:g} <= active model's {old:g}"
+    return False, f"held-out cost {new:g} > active model's {old:g}; kept as a candidate"
+
+
 def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel | None) -> SavedModel | None:
-    """Save the model fitted on this batch; otherwise keep the one that was loaded."""
+    """Register the model fitted on this batch as a new version; it becomes the
+    active model only if it passes the promotion gate. Returns the active model."""
     if result.model is None:
         return loaded
     saved = SavedModel(
@@ -387,8 +427,20 @@ def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel
         train_alerts=result.train_alerts,
         feedback_real=real_marks,
     )
-    save_model(saved)
-    return saved
+    config = result.config or Config()
+    promote, reason = promotion_decision(result.training, loaded is not None, config)
+    training = result.training or {}
+    entry = register_model(saved, {
+        "data_fingerprint": result.data_fingerprint,
+        "held_out": training.get("test"),
+        "active_model_held_out": training.get("incumbent_test"),
+        "gate": reason,
+    }, promote)
+    if result.training is not None:
+        result.training["model_version"] = entry["version"]
+        result.training["promoted"] = promote
+        result.training["gate"] = reason
+    return saved if promote else loaded
 
 
 def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, real_marks: int,

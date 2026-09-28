@@ -241,7 +241,7 @@ if not AUDIT.handlers:  # uvicorn configures only its own loggers
     _audit_handler.setFormatter(logging.Formatter("%(asctime)s audit %(message)s"))
     AUDIT.addHandler(_audit_handler)
     AUDIT.setLevel(logging.INFO)
-AUDITED_PREFIXES = ("/ops/", "/settings")
+AUDITED_PREFIXES = ("/ops/", "/settings", "/models")
 
 
 def _login_user(header: str | None) -> str | None:
