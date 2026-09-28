@@ -299,6 +299,13 @@ Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` 
 | Item | Where |
 |---|---|
 | Design | `design_specification.md` |
+| Requirements and traceability | `docs/requirements.md` |
+| Architecture diagrams | `docs/architecture.md` |
+| Design decisions | `docs/adr/` |
+| Threat model | `docs/threat_model.md` |
+| Test plan and CI gates | `docs/test_plan.md`, `.github/workflows/ci.yml` |
+| Retrospective | `docs/retrospective.md` |
+| Change history | `CHANGELOG.md` |
 | Plan / roadmap | `project_plan.md`, `ROADMAP.md` |
 | Validation record | `VALIDATION.md` |
 | Review of the earlier version | `CODE_REVIEW.md` |
