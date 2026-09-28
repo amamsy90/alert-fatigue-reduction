@@ -7,13 +7,29 @@ import os
 import re
 from datetime import datetime, timezone
 from urllib.parse import urlencode, urlparse
-from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.request import HTTPRedirectHandler, build_opener
 
 import pandas as pd
 
 DEFAULT_QUERY = 'container_memory_working_set_bytes{container!="", container!="POD"}'
 MAX_POINTS = 10_000
 _POD_SUFFIX_RE = re.compile(r"-[a-z0-9]{8,10}-[a-z0-9]{5}$|-[a-z0-9]{5}$")
+
+
+class _RefuseRedirect(HTTPRedirectHandler):
+    """A checked Prometheus URL must not bounce the request somewhere unchecked."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise HTTPError(req.full_url, code, "Prometheus redirects are refused (SSRF)", headers, fp)
+
+
+_OPENER = build_opener(_RefuseRedirect)
+
+
+def urlopen(url: str, timeout: float | None = None):
+    """Open a Prometheus URL without following redirects."""
+    return _OPENER.open(url, timeout=timeout)
 
 
 def service_from_labels(metric: dict[str, str], label: str | None = None) -> str:

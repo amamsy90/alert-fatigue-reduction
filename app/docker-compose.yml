@@ -14,8 +14,8 @@ services:
       JUMP_BYTES: ${JUMP_BYTES:-500000000}
       JUMP_RATIO: ${JUMP_RATIO:-0.3}
       ALERT_SHARE: ${ALERT_SHARE:-0.25}
-      # Private Prometheus (Docker/k8s) needs this; cloud metadata is still always refused.
-      PROM_ALLOW_PRIVATE: ${PROM_ALLOW_PRIVATE:-1}
+      # Set 1 for a private Prometheus (Docker/k8s) on a trusted network; metadata is always refused.
+      PROM_ALLOW_PRIVATE: ${PROM_ALLOW_PRIVATE:-0}
       # PROM_URL: http://host.docker.internal:9090
       # PROM_SERVICE_LABEL: app
       # PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}

@@ -4,10 +4,13 @@ from __future__ import annotations
 import base64
 import binascii
 import ipaddress
+import logging
 import os
 import secrets
 import tempfile
+import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -63,14 +66,48 @@ def _credentials_ok(header: str | None, user: str, password: str) -> bool:
 
 
 def _ingest_token_ok(request: Request) -> bool | None:
-    """None when INGEST_TOKEN is unset. Accepts `Authorization: Bearer <token>`
-    (Alertmanager `http_config.authorization`) or `?token=<token>`."""
+    """None when INGEST_TOKEN is unset. Accepts only `Authorization: Bearer <token>`
+    (Alertmanager `http_config.authorization`). A `?token=` query is refused
+    because URLs end up in proxy and access logs."""
     token = os.environ.get("INGEST_TOKEN")
     if not token:
         return None
     header = request.headers.get("authorization") or ""
-    given = header[7:].strip() if header.lower().startswith("bearer ") else request.query_params.get("token", "")
+    given = header[7:].strip() if header.lower().startswith("bearer ") else ""
     return secrets.compare_digest(given.encode(), token.encode())
+
+
+PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip")
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "[::1]", "::1"}
+
+
+def _host_name(value: str | None) -> str:
+    """Host header or URL netloc without the port, lower case."""
+    value = (value or "").strip().lower()
+    if value.startswith("["):
+        return value.split("]", 1)[0] + "]"
+    return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+
+
+def _allowed_hosts() -> set[str]:
+    extra = {h.strip().lower() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()}
+    return LOCAL_HOSTNAMES | extra
+
+
+def _cross_site(request: Request) -> bool:
+    """A browser form or fetch from another site (CSRF). Browsers send Origin on
+    cross-site POSTs; Basic-auth credentials would be attached automatically."""
+    origin = request.headers.get("origin")
+    if not origin:
+        referer = request.headers.get("referer")
+        if not referer:
+            return False  # curl, Alertmanager, test client: not a browser
+        origin = referer
+    if origin == "null":
+        return True
+    netloc = urlparse(origin).netloc
+    return _host_name(netloc) != _host_name(request.headers.get("host"))
 
 
 def _is_private(host: str | None) -> bool:
@@ -85,8 +122,17 @@ def _is_private(host: str | None) -> bool:
     return ip.is_loopback or ip.is_private or ip.is_link_local
 
 
+def _is_loopback(host: str | None) -> bool:
+    try:
+        return ipaddress.ip_address(host or "").is_loopback
+    except ValueError:
+        return False
+
+
 @app.middleware("http")
 async def require_login(request: Request, call_next):
+    if request.method in UNSAFE_METHODS and _cross_site(request):
+        return Response("Cross-site request refused", status_code=403)
     if request.url.path in INGEST_PATHS:
         ok = _ingest_token_ok(request)
         if ok is False:
@@ -97,16 +143,20 @@ async def require_login(request: Request, call_next):
     if settings is None:
         # No password: serve this machine and private networks only, unless the
         # operator says otherwise. A public address must never reach an open queue.
+        # Behind a reverse proxy every client looks private, so a forwarded
+        # request needs a password too. A loopback client must use a local Host
+        # name, so a web page cannot reach the app through DNS rebinding.
         client = request.client.host if request.client else None
-        if (
-            request.url.path not in OPEN_PATHS
-            and not _is_private(client)
-            and os.environ.get("ALLOW_OPEN_ACCESS") != "1"
-        ):
-            return Response(
-                "Set APP_PASSWORD before exposing this app (or ALLOW_OPEN_ACCESS=1).",
-                status_code=403,
-            )
+        open_access = os.environ.get("ALLOW_OPEN_ACCESS") == "1"
+        if request.url.path not in OPEN_PATHS and not open_access:
+            forwarded = any(request.headers.get(h) for h in PROXY_HEADERS)
+            if forwarded or not _is_private(client):
+                return Response(
+                    "Set APP_PASSWORD before exposing this app (or ALLOW_OPEN_ACCESS=1).",
+                    status_code=403,
+                )
+            if _is_loopback(client) and _host_name(request.headers.get("host")) not in _allowed_hosts():
+                return Response("Unknown Host header (set ALLOWED_HOSTS)", status_code=403)
         return await call_next(request)
     if request.url.path in OPEN_PATHS:
         return await call_next(request)
@@ -117,6 +167,129 @@ async def require_login(request: Request, call_next):
             headers={"WWW-Authenticate": 'Basic realm="On-call alert queue"'},
         )
     return await call_next(request)
+
+
+MULTIPART_PATHS = {"/jobs/upload", "/evaluate"}
+UPLOAD_FILES = 3  # alerts + metrics + faults, each capped by _save_upload
+
+
+class BodyTooLarge(HTTPException):
+    def __init__(self, limit: int):
+        super().__init__(413, f"Request body is larger than {limit // (1024 * 1024)} MB")
+
+
+def _max_ingest_bytes() -> int:
+    try:
+        return int(float(os.environ.get("MAX_INGEST_MB", "10")) * 1024 * 1024)
+    except ValueError:
+        return 10 * 1024 * 1024
+
+
+def _body_limit(path: str) -> int:
+    if path in MULTIPART_PATHS:
+        return UPLOAD_FILES * _max_upload_bytes() + 1024 * 1024  # form fields
+    return _max_ingest_bytes()
+
+
+class BodyLimit:
+    """Stop a request body while it streams in, so a huge upload or ingest never
+    reaches memory or temp disk in full. Content-Length is checked first; a
+    chunked body is counted as it arrives."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        limit = _body_limit(scope["path"])
+        length = dict(scope.get("headers") or []).get(b"content-length", b"")
+        if length.isdigit() and int(length) > limit:
+            await self._refuse(send, limit)
+            return
+        seen = 0
+        exceeded = False
+        responded = False
+
+        async def counted():
+            nonlocal seen, exceeded
+            if exceeded:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > limit:
+                    # Stop reading here. The app sees a disconnect; whatever it
+                    # answers is replaced by a 413 below.
+                    exceeded = True
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded(message):
+            nonlocal responded
+            if exceeded:
+                if message["type"] == "http.response.start" and not responded:
+                    responded = True
+                    await self._refuse(send, limit)
+                return
+            if message["type"] == "http.response.start":
+                responded = True
+            await send(message)
+
+        try:
+            await self.app(scope, counted, guarded)
+        except Exception:
+            if not exceeded:
+                raise
+        if exceeded and not responded:
+            await self._refuse(send, limit)
+
+    @staticmethod
+    async def _refuse(send, limit: int) -> None:
+        body = json.dumps({"detail": BodyTooLarge(limit).detail}).encode()
+        await send({"type": "http.response.start", "status": 413,
+                    "headers": [(b"content-type", b"application/json"),
+                                (b"content-length", str(len(body)).encode())]})
+        await send({"type": "http.response.body", "body": body})
+
+
+app.add_middleware(BodyLimit)
+
+
+AUDIT = logging.getLogger("oncall.audit")
+if not AUDIT.handlers:  # uvicorn configures only its own loggers
+    _audit_handler = logging.StreamHandler()
+    _audit_handler.setFormatter(logging.Formatter("%(asctime)s audit %(message)s"))
+    AUDIT.addHandler(_audit_handler)
+    AUDIT.setLevel(logging.INFO)
+AUDITED_PREFIXES = ("/ops/", "/settings")
+
+
+def _login_user(header: str | None) -> str | None:
+    if not header or not header.lower().startswith("basic "):
+        return None
+    try:
+        return base64.b64decode(header[6:].strip()).decode("utf-8").partition(":")[0] or None
+    except (binascii.Error, UnicodeDecodeError):
+        return None
+
+
+@app.middleware("http")
+async def audit_changes(request: Request, call_next):
+    """Log who changed Live mode, keys, the Prometheus URL or settings, and the
+    outcome (refused attempts too). Bodies are never logged: they hold secrets."""
+    response = await call_next(request)
+    if request.method in UNSAFE_METHODS and request.url.path.startswith(AUDITED_PREFIXES):
+        AUDIT.info(
+            "%s %s status=%s user=%s client=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            _login_user(request.headers.get("authorization")) or "-",
+            request.client.host if request.client else "-",
+        )
+    return response
 
 
 static_dir = APP_DIR / "static"
@@ -253,7 +426,9 @@ def connectors():
 
 @app.post("/ops/shadow")
 def ops_set_shadow(body: ShadowModeRequest):
-    """Switch Shadow vs Live. Live ON requires confirm='LIVE'."""
+    """Switch Shadow vs Live. Live ON requires confirm='LIVE' and a login password."""
+    if not body.shadow_mode and _auth_settings() is None:
+        raise HTTPException(400, "Set APP_PASSWORD before turning Live on: anyone who can open the app could page people.")
     try:
         return ops_mod.set_shadow_mode(shadow=body.shadow_mode, confirm=body.confirm)
     except ValueError as exc:
@@ -561,6 +736,8 @@ async def ingest_alerts(request: Request):
     try:
         payload = await request.json()
         rows = normalize_ingest(payload)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
@@ -576,8 +753,8 @@ async def ingest_alerts(request: Request):
         score_now = True
     if request.query_params.get("budget_k"):
         budget_k = _budget(request.query_params["budget_k"])
-    buffered = STORE.buffer_alerts(rows)
-    response: dict = {"buffered_batches": buffered, "received": len(rows)}
+    buffered, duplicates = STORE.buffer_new_alerts(rows)
+    response: dict = {"buffered_batches": buffered, "received": len(rows), "duplicates": duplicates}
     if score_now:
         rows_now, last_id = STORE.peek_buffer()
         try:
@@ -603,6 +780,7 @@ def index():
 # Evaluate my data: upload -> tune + evaluate -> use the settings -> score
 
 EVAL_DIR = APP_DIR / "data" / "evals"
+_EVAL_LOCK = threading.Lock()
 
 
 def _eval_folder(eval_id: str) -> Path:
@@ -653,6 +831,10 @@ async def evaluate_data(
     """
     from src.generic import evaluate, live_setting
 
+    # One evaluation at a time: each is CPU-heavy. A separate lock from the
+    # scoring job, so a long evaluation never delays a live paging job.
+    if not _EVAL_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "Another evaluation is running; retry when it finishes")
     eval_id = uuid.uuid4().hex[:12]
     folder = EVAL_DIR / eval_id
     folder.mkdir(parents=True, exist_ok=True)
@@ -688,9 +870,11 @@ async def evaluate_data(
                                                         "dataset": dataset}, default=str), encoding="utf-8")
         _prune_evals(keep=eval_id)
         return {"eval_id": eval_id, "dataset": dataset, "report": data, "suggested": suggested}
-    except HTTPException:
+    except BaseException:  # any failure: drop the half-written folder
         shutil.rmtree(folder, ignore_errors=True)
         raise
+    finally:
+        _EVAL_LOCK.release()
 
 
 def _prune_evals(keep: str, limit: int | None = None) -> None:
