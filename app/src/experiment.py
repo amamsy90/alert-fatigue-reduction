@@ -216,10 +216,10 @@ def miss_causes(run: WindowRun, data: GaiaData, config: Config, name: str = "pro
     caught: set[str] = set()
     for item in shown:
         if item.kind == "alert":
-            if item.payload.fault_id:
-                caught.add(item.payload.fault_id)
+            if item.alert.fault_id:
+                caught.add(item.alert.fault_id)
         elif item.kind != "gap":
-            caught |= {f.fault_id for f in spike_hits(item.payload, by_service)}
+            caught |= {f.fault_id for f in spike_hits(item.spike, by_service)}
     with_data = faults_with_metric_data(run.test_faults, data.metrics)
     use_gate = name in ("proposed", "jumps_tuned", "p3_per_series", "p3_per_series_jumps")
     table = (run.learned_by_series if name.startswith("p3_per_series") else run.confirm_by_series) or {}

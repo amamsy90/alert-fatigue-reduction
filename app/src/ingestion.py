@@ -110,9 +110,13 @@ def time_split(
     """
     if not items:
         return [], []
-    t0 = min(getattr(x, "timestamp", getattr(x, "start", None)) for x in items)
+    def when(x) -> pd.Timestamp:
+        return x.timestamp if hasattr(x, "timestamp") else x.start
+
+    t0 = min(when(x) for x in items)
     boundary = t0 + pd.Timedelta(days=split_day)
-    train, test = [], []
+    train: list = []
+    test: list = []
     for x in items:
         ts = getattr(x, "timestamp", getattr(x, "start", None))
         (train if ts < boundary else test).append(x)

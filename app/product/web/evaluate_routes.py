@@ -96,8 +96,8 @@ async def evaluate_data(
                 raise HTTPException(400, "Upload a metrics file (or choose an example dataset)")
             for role, upload in (("metrics", metrics_file), ("incidents", incidents_file), ("events", events_file)):
                 await _save_upload(upload, folder / f"{role}.csv")
-        paths = {role: folder / f"{role}.csv" for role in ("metrics", "incidents", "events")}
-        paths = {role: p if p.exists() else None for role, p in paths.items()}
+        candidates = {role: folder / f"{role}.csv" for role in ("metrics", "incidents", "events")}
+        paths = {role: p if p.exists() else None for role, p in candidates.items()}
         try:
             k_list = tuple(_budget(x) for x in budgets.replace(" ", "").split(",") if x)
         except HTTPException as exc:

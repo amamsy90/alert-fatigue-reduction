@@ -12,6 +12,7 @@ import threading
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -20,58 +21,23 @@ from src.classifier import AlertClassifier
 from src.config import Config, day_of
 from src.entities import SURFACED_ACTIONS, Action, Alert, Decision, Fault
 from src.features import build_feature_frame
-from src.gaia_loader import load_run_folder
-from src.ingestion import align_alerts_to_faults, load_alerts, load_faults, time_split
-from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks, load_metric_folder
+from src.ingestion import time_split
+from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
 from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_thresholds
-from src.sample_data import generate_demo_day
 
+from .inputs import (  # noqa: F401 — re-exported for callers of product.pipeline
+    JobInputs,
+    _default_paths,
+    load_alerts_from_dicts,
+    load_inputs,
+    load_metrics_csv,
+)
+from .labels import FEEDBACK_PREFIX, apply_feedback, label_source  # noqa: F401
 from .model_store import SavedModel, load_model, save_model
+from .paging import page_job
 from .settings import config_from_env, live_detector
 from .store import QueueStore
-
-APP_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _default_paths() -> dict[str, Path]:
-    return {
-        "gaia_run": APP_ROOT / "data" / "gaia_raw" / "run" / "run",
-        "gaia_metrics": APP_ROOT / "data" / "gaia_metrics",
-        "sample_dir": APP_ROOT / "data" / "sample_product",
-    }
-
-
-def load_alerts_from_dicts(rows: list[dict]) -> list[Alert]:
-    alerts: list[Alert] = []
-    for i, row in enumerate(rows):
-        ts = pd.to_datetime(row["timestamp"], utc=True)
-        alerts.append(
-            Alert(
-                alert_id=str(row.get("alert_id") or f"w{i:06d}"),
-                timestamp=ts,
-                source=str(row["source"]),
-                alert_type=str(row.get("alert_type") or row.get("severity") or "info"),
-                severity=str(row.get("severity") or "info").lower(),
-                message=str(row.get("message") or "")[:300],
-                fault_id=row.get("fault_id"),
-            )
-        )
-    alerts.sort(key=lambda a: a.timestamp)
-    return alerts
-
-
-def load_metrics_csv(path: str | Path) -> pd.DataFrame:
-    """Accept either a folder of GAIA-style files or one CSV with timestamp,value,service."""
-    path = Path(path)
-    if path.is_dir():
-        return load_metric_folder(path)
-    # Any column names: timestamp/time/date, value/count/..., series/service/host/...;
-    # long or wide (one column per series). See src/generic.py.
-    from src.generic import load_metrics
-
-    frame, _ = load_metrics(path, default_series=path.stem)
-    return frame
 
 
 def _spike_flags(alerts: list[Alert], spikes: list, config: Config) -> list[bool]:
@@ -124,57 +90,6 @@ def _jump_items(
             }
         )
     return items
-
-
-FEEDBACK_PREFIX = "fb_"
-
-
-def apply_feedback(alerts: list[Alert], store: QueueStore) -> dict[str, int]:
-    """Label alerts from on-call marks: inside a Real window is a fault, and an
-    alert marked Noise is noise even inside a window. Existing labels are kept."""
-    faults = [
-        Fault(
-            fault_id=f["fault_id"],
-            start=pd.Timestamp(f["start"]),
-            end=pd.Timestamp(f["end"]),
-            component=f["component"],
-        )
-        for f in store.feedback_faults()
-    ]
-    noise = store.feedback_noise_alerts()
-    labelled = overridden = 0
-    by_service: dict[str, list[Fault]] = defaultdict(list)
-    for fault in faults:
-        by_service[fault.component].append(fault)
-    for alert in alerts:
-        if (alert.source, alert.timestamp.value) in noise:
-            if alert.fault_id is not None:
-                overridden += 1
-            alert.fault_id = None
-            continue
-        if alert.fault_id is None:
-            for fault in by_service.get(alert.source, []):
-                if fault.start <= alert.timestamp <= fault.end:
-                    alert.fault_id = fault.fault_id
-                    labelled += 1
-                    break
-    return {"labelled_by_real_marks": labelled, "cleared_by_noise_marks": overridden}
-
-
-def _label_source(alerts: list[Alert]) -> str:
-    kinds = set()
-    for alert in alerts:
-        if alert.fault_id is None:
-            continue
-        if alert.fault_id == "weak":
-            kinds.add("weak_severity")
-        elif str(alert.fault_id).startswith(FEEDBACK_PREFIX):
-            kinds.add("feedback")
-        else:
-            kinds.add("real")
-    if "weak_severity" in kinds:
-        return "weak_severity"
-    return "+".join(sorted(kinds)) or "none"
 
 
 @dataclass
@@ -299,7 +214,7 @@ def score_alerts(
         model_used, train_count = "trained", trained["train_alerts"]
         training = trained["training"]
         split_at = trained["split_at"]
-    elif prefer_saved:
+    elif prefer_saved and saved is not None:
         model = saved.model
         escalate_threshold = saved.escalate_threshold
         review_threshold = saved.review_threshold
@@ -332,7 +247,7 @@ def score_alerts(
     # window exists. The one-day sample has no later window, so it stays on the
     # built-in rule and is not fit on the same points it shows.
     metric_split = split_at
-    if metric_split is None and has_metrics and faults:
+    if metric_split is None and metrics is not None and has_metrics and faults:
         metric_split = metrics["timestamp"].min() + pd.Timedelta(days=config.split_day)
     has_later = bool(
         metric_split is not None
@@ -415,12 +330,12 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config) ->
     model = AlertClassifier(config).fit(train_alerts, train_spikes)
     train_proba = model.predict_proba(train_alerts, train_spikes)
     escalate_threshold = tune_threshold(train_alerts, train_proba, config)
-    test_proba = model.predict_proba(test_alerts, test_spikes) if test_alerts else []
+    test_proba: Any = model.predict_proba(test_alerts, test_spikes) if test_alerts else []
     return {
         "model": model,
         "escalate_threshold": escalate_threshold,
         "review_threshold": bayes_threshold(config),
-        "label_source": _label_source(train_alerts),
+        "label_source": label_source(train_alerts),
         "train_alerts": len(train_alerts),
         "split_at": split_at,
         "training": {
@@ -459,6 +374,55 @@ def run_job(*args, **kwargs) -> dict:
         _JOB_LOCK.release()
 
 
+def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel | None) -> SavedModel | None:
+    """Save the model fitted on this batch; otherwise keep the one that was loaded."""
+    if result.model is None:
+        return loaded
+    saved = SavedModel(
+        model=result.model,
+        escalate_threshold=result.escalate_threshold,
+        review_threshold=result.review_threshold,
+        label_source=result.label_source,
+        trained_at=pd.Timestamp.now("UTC").isoformat(),
+        train_alerts=result.train_alerts,
+        feedback_real=real_marks,
+    )
+    save_model(saved)
+    return saved
+
+
+def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, real_marks: int,
+              page: dict, whp: dict, feedback_stats: dict) -> dict:
+    decisions = result.decisions
+    jumps = result.jumps
+
+    def shown(kind: str) -> int:
+        return sum(1 for j in jumps if j["kind"] == kind and j["shown"])
+
+    return {
+        "alert_count": len(result.alerts),
+        "escalate": sum(1 for d in decisions if d.action.value == "escalate"),
+        "review": sum(1 for d in decisions if d.action.value == "review"),
+        "suppress": sum(1 for d in decisions if d.action.value == "suppress"),
+        "jumps": sum(1 for j in jumps if j["kind"] == "jump"),
+        "jumps_shown": shown("jump"),
+        "gap_items": shown("gap"),
+        "leak_items": shown("leak"),
+        "rise_unit": result.rise_unit,
+        "detector": result.detector_label,
+        "confirm_by_series": result.confirm_by_series or {},
+        "confirm_min_rise": None if result.config is None else result.config.confirm_min_rise,
+        "has_metrics": inputs.metrics is not None and not inputs.metrics.empty,
+        "label_source": result.label_source,
+        "model_used": result.model_used,
+        "model": saved.status(real_marks) if saved else None,
+        "training": result.training,
+        "pagerduty": page,
+        "would_have_paged": whp,
+        **feedback_stats,
+    }
+
+
 def _run_job_locked(
     store: QueueStore,
     *,
@@ -470,198 +434,41 @@ def _run_job_locked(
     alert_rows: list[dict] | None = None,
     faults_path: str | Path | None = None,
 ) -> dict:
+    """Load → label from marks → score → save the model → page → store the job."""
     if shadow_mode is None:
         from .ops import get_shadow_mode
 
         shadow_mode = get_shadow_mode()
-
-    paths = _default_paths()
-    metrics: pd.DataFrame | None = None
-    faults: list[Fault] | None = None
-    source = mode
-
-    sample_config = None
-    live_metrics = False  # pulled from Prometheus just now: silence up to now is real
-    if mode == "sample":
-        generate_demo_day(paths["sample_dir"])
-        alerts = load_alerts(paths["sample_dir"] / "alerts.csv")
-        faults = load_faults(paths["sample_dir"] / "faults.csv")
-        alerts, faults = align_alerts_to_faults(alerts, faults)
-        metrics = load_metrics_csv(paths["sample_dir"] / "metrics.csv")
-        # Keep the leak window from the environment (0 turns leaks off) but
-        # score this byte series with the absolute 0.5 GB rule it was built for.
-        sample_config = replace(
-            config_from_env(budget_k),
-            memory_jump_mode="absolute",
-            memory_jump_bytes=Config().memory_jump_bytes,
-        )
-    elif mode == "gaia":
-        run_path = paths["gaia_run"]
-        if not run_path.exists():
-            raise FileNotFoundError(f"GAIA run folder not found: {run_path}")
-        alerts, faults = load_run_folder(run_path)
-        metrics_dir = paths["gaia_metrics"]
-        if metrics_dir.exists():
-            metrics = load_metric_folder(metrics_dir)
-    elif mode == "upload":
-        from src.generic import load_events, load_incidents
-
-        if alerts_csv is None and alert_rows is None and not metrics_path:
-            raise ValueError("upload needs an alerts/events file, a metrics file, or both")
-        if metrics_path:
-            metrics = load_metrics_csv(metrics_path)
-        known = set(metrics["series_id"].astype(str)) if metrics is not None else None
-        if alert_rows is not None:
-            alerts = load_alerts_from_dicts(alert_rows)
-        elif alerts_csv is not None:
-            alerts, _ = load_events(alerts_csv, known)
-        else:
-            alerts = []
-        if faults_path:
-            faults, _ = load_incidents(faults_path, known_series=known)
-            alerts, faults = align_alerts_to_faults(alerts, faults)
-        source = "upload"
-    elif mode == "ingest":
-        if not alert_rows:
-            raise ValueError("ingest mode needs alert_rows from the buffer")
-        alerts = load_alerts_from_dicts(alert_rows)
-        if metrics_path:
-            metrics = load_metrics_csv(metrics_path)
-        else:
-            from .ops import get_prom_url
-            from .prometheus_adapter import fetch_memory_metrics
-
-            if get_prom_url():
-                metrics = fetch_memory_metrics()
-                live_metrics = True
-        source = "ingest"
-    else:
-        raise ValueError(f"Unknown mode: {mode}")
-
-    feedback_stats = apply_feedback(alerts, store)
-    saved = load_model()
+    inputs = load_inputs(mode, budget_k=budget_k, alerts_csv=alerts_csv, metrics_path=metrics_path,
+                         alert_rows=alert_rows, faults_path=faults_path)
+    feedback_stats = apply_feedback(inputs.alerts, store)
+    loaded = load_model()
     result = score_alerts(
-        alerts,
-        metrics=metrics,
+        inputs.alerts,
+        metrics=inputs.metrics,
         budget_k=budget_k,
         shadow_mode=shadow_mode,
-        saved=saved,
-        faults=faults,
-        config=sample_config,
+        saved=loaded,
+        faults=inputs.faults,
+        config=inputs.config,
         use_saved_detector=mode != "sample",
-        now=pd.Timestamp.now(tz="UTC") if live_metrics else None,
+        now=pd.Timestamp.now(tz="UTC") if inputs.live_metrics else None,
     )
     real_marks = store.feedback_summary()["real"]
-    if result.model is not None:
-        saved = SavedModel(
-            model=result.model,
-            escalate_threshold=result.escalate_threshold,
-            review_threshold=result.review_threshold,
-            label_source=result.label_source,
-            trained_at=pd.Timestamp.now("UTC").isoformat(),
-            train_alerts=result.train_alerts,
-            feedback_real=real_marks,
-        )
-        save_model(saved)
-    decisions = result.decisions
-    # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
-    # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
-    from .notifiers import notify_opsgenie, notify_slack
-    from .ops import (
-        PAGEABLE_MODES,
-        can_page,
-        channel_cutoff,
-        configured_channels,
-        login_configured,
-        page_cutoff,
-        set_channel_watermark,
-        set_page_watermark,
-    )
-    from .pagerduty import notify_escalations, page_items, would_have_paged
-
-    # Ingest jobs re-score the metric history; only items shown since the last
-    # ingest job are new. Alerts in an ingest batch are all new (the buffer is
-    # acknowledged after each job), so they are not filtered.
-    page_spikes = list(result.shown_spikes or [])
-    run_at = pd.Timestamp.now(tz="UTC")
-    if mode in PAGEABLE_MODES:
-        cutoff = page_cutoff(run_at)
-        page_spikes = [s for s in page_spikes if cutoff < s.shown_at <= run_at]
-
-    if mode not in PAGEABLE_MODES:
-        page = {"sent": 0, "failed": 0, "skipped": f"mode={mode} never pages"}
-    elif shadow_mode:
-        page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
-    elif not configured_channels():
-        page = {"sent": 0, "failed": 0, "skipped": "no channel configured"}
-    elif not login_configured():
-        page = {"sent": 0, "failed": 0, "skipped": "no login password (APP_PASSWORD)"}
-    elif not can_page():
-        page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
-    else:
-        channels = configured_channels()
-        per: dict[str, dict] = {}
-
-        def _for(channel: str) -> list:
-            # Skip metric items this channel already delivered on an earlier try.
-            mark = channel_cutoff(channel, run_at)
-            return [s for s in page_spikes if s.shown_at > mark]
-
-        if "pagerduty" in channels:
-            per["pagerduty"] = notify_escalations(result.alerts, decisions, spikes=_for("pagerduty"))
-        if "slack" in channels:
-            items = page_items(result.alerts, decisions, spikes=_for("slack"))
-            per["slack"] = notify_slack(items, len(items))
-        if "opsgenie" in channels:
-            per["opsgenie"] = notify_opsgenie(page_items(result.alerts, decisions, spikes=_for("opsgenie")))
-        for channel, outcome in per.items():
-            if not outcome.get("failed"):
-                set_channel_watermark(channel, run_at)
-        page = {
-            "sent": sum(int(r.get("sent", 0)) for r in per.values()),
-            "failed": sum(int(r.get("failed", 0)) for r in per.values()),
-            "channels": per,
-        }
-    whp = would_have_paged(result.alerts, decisions, spikes=page_spikes)
-    if mode in PAGEABLE_MODES:
-        whp["since"] = cutoff.isoformat()
-        # Advance in shadow too, so turning Live on never pages the shadow period.
-        # Keep the old mark if a send failed, so the next job retries it.
-        if not page.get("failed"):
-            set_page_watermark(run_at)
+    saved = _save_trained_model(result, real_marks, loaded)
+    page, whp = page_job(mode, shadow_mode, result.alerts, result.decisions, result.shown_spikes or [])
     job_id = store.save_job(
-        source=source,
+        source=inputs.source,
         budget_k=budget_k,
         escalate_threshold=result.escalate_threshold,
         review_threshold=result.review_threshold,
         shadow_mode=shadow_mode,
         alerts=result.alerts,
-        decisions=decisions,
+        decisions=result.decisions,
         spike_flags=result.spike_flags,
         jumps=result.jumps,
         day_offset_hours=result.config.day_offset_hours if result.config else 0.0,
-        meta={
-            "alert_count": len(result.alerts),
-            "escalate": sum(1 for d in decisions if d.action.value == "escalate"),
-            "review": sum(1 for d in decisions if d.action.value == "review"),
-            "suppress": sum(1 for d in decisions if d.action.value == "suppress"),
-            "jumps": sum(1 for j in result.jumps if j["kind"] == "jump"),
-            "jumps_shown": sum(1 for j in result.jumps if j["kind"] == "jump" and j["shown"]),
-            "gap_items": sum(1 for j in result.jumps if j["kind"] == "gap" and j["shown"]),
-            "leak_items": sum(1 for j in result.jumps if j["kind"] == "leak" and j["shown"]),
-            "rise_unit": result.rise_unit,
-            "detector": result.detector_label,
-            "confirm_by_series": result.confirm_by_series or {},
-            "confirm_min_rise": None if result.config is None else result.config.confirm_min_rise,
-            "has_metrics": metrics is not None and not metrics.empty,
-            "label_source": result.label_source,
-            "model_used": result.model_used,
-            "model": saved.status(real_marks) if saved else None,
-            "training": result.training,
-            "pagerduty": page,
-            "would_have_paged": whp,
-            **feedback_stats,
-        },
+        meta=_job_meta(result, inputs, saved, real_marks, page, whp, feedback_stats),
     )
     try:
         keep = int(os.environ.get("JOB_RETENTION", DEFAULT_JOB_RETENTION))
@@ -669,13 +476,14 @@ def _run_job_locked(
         keep = DEFAULT_JOB_RETENTION
     if keep > 0:
         store.prune_jobs(keep=keep)
+    stored = store.job_meta(job_id) or {}
     return {
         "job_id": job_id,
-        "source": source,
+        "source": inputs.source,
         "budget_k": budget_k,
         "shadow_mode": shadow_mode,
         "escalate_threshold": result.escalate_threshold,
         "review_threshold": result.review_threshold,
         "days": store.list_days(job_id),
-        "meta": store.job_meta(job_id)["meta"],
+        "meta": stored.get("meta", {}),
     }
