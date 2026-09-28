@@ -99,9 +99,9 @@ Script: `python ../tools/fetch_smd.py && python run_smd.py` → `app/results/smd
 
 | Budget K per machine | Incidents caught (196) | Metric movements shown (1,536) | Items / day | False / day | Chance (per movement) |
 |---|---|---|---|---|---|
-| 5 | 60 (30.6%) | 10.0% | 4.2 | 3.5 | 11.6% |
-| 10 | 84 (42.9%) | 18.6% | 7.7 | 6.4 | 11.6% |
-| 20 | 106 (54.1%) | 31.9% | 13.3 | 10.8 | 11.6% |
+| 5 | 60 (30.6%) | 10.1% | 4.2 | 3.5 | 12.4% |
+| 10 | 83 (42.3%) | 19.3% | 7.9 | 6.5 | 12.4% |
+| 20 | 108 (55.1%) | 33.9% | 13.8 | 11.0 | 12.4% |
 
 *Incident caught* = any metric that moved during the incident was shown while it lasted. *Metric movements* is the stricter count (each flagged metric on its own). "False" items are shown metrics that no label covers; SMD labels only some of the 38 metrics per incident, so correlated movements on unlabelled metrics count as false here. On 11 of 28 machines the detector picked on the tuning half was also the best on the test half; on the others the static rule usually was. This is a harder benchmark than GAIA (many small, mixed-metric incidents, one machine = 38 series) and the numbers are reported as they are.
 

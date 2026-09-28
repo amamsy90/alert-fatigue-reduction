@@ -207,11 +207,11 @@ On the shop data the monitoring view catches 10 of 11 problems where the notific
 
 | Budget K per machine | Incidents caught (196) | Metric movements shown (1,536) | Items / day | False / day | Chance (per movement) |
 |---|---|---|---|---|---|
-| 5 | 60 (30.6%) | 10.0% | 4.2 | 3.5 | 11.6% |
-| 10 | 84 (42.9%) | 18.6% | 7.7 | 6.4 | 11.6% |
-| 20 | 106 (54.1%) | 31.9% | 13.3 | 10.8 | 11.6% |
+| 5 | 60 (30.6%) | 10.1% | 4.2 | 3.5 | 12.4% |
+| 10 | 83 (42.3%) | 19.3% | 7.9 | 6.5 | 12.4% |
+| 20 | 108 (55.1%) | 33.9% | 13.8 | 11.0 | 12.4% |
 
-An incident counts once and is caught if any metric that moved was shown while it lasted; the movement column counts every flagged metric on its own. Half of the incidents are found at 20 items a day per machine on real mixed-metric faults, well above the 11.6% chance line, but with low precision: SMD labels only some of the 38 metrics per incident, so a correlated movement on an unlabelled metric counts as false. Where a series had three or more tuning incidents the jump rule learned its own size (Section 4 of `USE_YOUR_DATA.md`). This is a harder benchmark than GAIA and it is reported as it is.
+An incident counts once and is caught if any metric that moved was shown while it lasted; the movement column counts every flagged metric on its own. Half of the incidents are found at 20 items a day per machine on real mixed-metric faults, well above the 12.4% chance line, but with low precision: SMD labels only some of the 38 metrics per incident, so a correlated movement on an unlabelled metric counts as false. Where a series had three or more tuning incidents the jump rule learned its own size (Section 4 of `USE_YOUR_DATA.md`). This is a harder benchmark than GAIA and it is reported as it is.
 
 ---
 
@@ -359,11 +359,11 @@ Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` 
 | `nab.realTraffic` | 36% | §9 |
 | `nab.realTweets` | 36% | §9 |
 | `smd.K5.incidents` | 30.6% | §9 |
-| `smd.K10.incidents` | 42.9% | §9 |
-| `smd.K20.incidents` | 54.1% | §9 |
-| `smd.K5.movements` | 10.0% | §9 |
-| `smd.K10.movements` | 18.6% | §9 |
-| `smd.K20.movements` | 31.9% | §9 |
+| `smd.K10.incidents` | 42.3% | §9 |
+| `smd.K20.incidents` | 55.1% | §9 |
+| `smd.K5.movements` | 10.1% | §9 |
+| `smd.K10.movements` | 19.3% | §9 |
+| `smd.K20.movements` | 33.9% | §9 |
 | `stats.jump_rate_with_data` | 99.6% | §10 |
 | `stats.chance_overlap` | 2.6% | §5 |
 | `stats.confirm_minutes_median` | 0.72 | §5 |
