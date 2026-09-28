@@ -25,6 +25,8 @@ import pandas as pd
 from .config import Config, day_of
 from .entities import SURFACED_ACTIONS, Alert, Decision, Fault
 from .memory_spikes import Spike
+from .scoring import faults_by_service as _faults_by_service
+from .scoring import hit_sets, lowest_cost_threshold, spike_hits  # noqa: F401 — spike_hits is re-exported
 
 
 @dataclass
@@ -32,10 +34,24 @@ class QueueItem:
     shown_at: pd.Timestamp
     kind: str  # "jump" | "gap" | "rule" | "alert"
     service: str
-    payload: object  # Spike or Alert
+    payload: Spike | Alert
     # An alert on a service whose shown jump is still running rides on that jump:
     # it is shown inside the jump item and uses no budget slot.
     attached: bool = False
+
+    @property
+    def spike(self) -> Spike:
+        """The metric episode of a jump, leak, rule or gap item."""
+        if not isinstance(self.payload, Spike):
+            raise TypeError(f"{self.kind} item has no spike")
+        return self.payload
+
+    @property
+    def alert(self) -> Alert:
+        """The log alert of an alert item."""
+        if not isinstance(self.payload, Alert):
+            raise TypeError(f"{self.kind} item has no alert")
+        return self.payload
 
 
 def confirm_gate(spike: Spike, config: Config) -> float | None:
@@ -125,7 +141,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
                 ):
                     item.attached = True
                     shown.append(item)
-                    running[item.service].append(item.payload)
+                    running[item.service].append(item.spike)
                     continue
                 if used >= today:
                     continue
@@ -138,7 +154,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
             used += 1
             shown.append(item)
             if item.kind in METRIC_KINDS:
-                running[item.service].append(item.payload)
+                running[item.service].append(item.spike)
                 last_group = item
         carry = min(config.carry_over_max, max(0, today - used)) if config.carry_over_max > 0 else 0
     return shown
@@ -159,21 +175,6 @@ def hindsight_top_k(spikes: list[Spike], config: Config) -> list[QueueItem]:
 
 # ---------------------------------------------------------------------------
 # Scoring
-
-
-def _faults_by_service(faults: list[Fault]) -> dict[str, list[Fault]]:
-    out: dict[str, list[Fault]] = defaultdict(list)
-    for fault in faults:
-        out[fault.component].append(fault)
-    return out
-
-
-def spike_hits(spike: Spike, by_service: dict[str, list[Fault]]) -> list[Fault]:
-    return [
-        f
-        for f in by_service.get(spike.service, [])
-        if spike.start <= f.end and spike.end >= f.start
-    ]
 
 
 def score_queue(
@@ -199,13 +200,14 @@ def score_queue(
             gap_items += 1
             services = set(item.service.split(","))
             for f in faults:
-                if f.component in services and item.payload.start <= f.start <= item.payload.end:
+                if f.component in services and item.spike.start <= f.start <= item.spike.end:
                     blind.add(f.fault_id)
             continue
         if item.kind == "alert":
-            hit_ids = [item.payload.fault_id] if item.payload.fault_id in known else []
+            fid = item.alert.fault_id
+            hit_ids = [fid] if fid is not None and fid in known else []
         else:
-            hit_ids = [f.fault_id for f in spike_hits(item.payload, by_service)]
+            hit_ids = [f.fault_id for f in spike_hits(item.spike, by_service)]
         if not hit_ids and not item.attached:
             false_items += 1
         if hit_ids and not item.attached:
@@ -257,25 +259,8 @@ def tune_confirm_threshold(
     jumps = [j for j in jumps if j.kind == "jump"]
     if not jumps or not faults:
         return None
-    by_service = _faults_by_service(faults)
-    hits = [{f.fault_id for f in spike_hits(j, by_service)} for j in jumps]
-    rises = np.array([j.rise_at_confirm for j in jumps])
-    candidates = np.unique(np.quantile(rises, np.linspace(0, 0.95, n_grid)))
-    best: tuple[float, float] | None = None
-    for thr in candidates:
-        caught: set[str] = set()
-        false = 0
-        for rise, hit in zip(rises, hits):
-            if rise < thr:
-                continue
-            if hit:
-                caught |= hit
-            else:
-                false += 1
-        cost = config.miss_cost * (len(faults) - len(caught)) + config.false_alarm_cost * false
-        if best is None or cost < best[0]:
-            best = (cost, float(thr))
-    return best[1] if best else None
+    rises = [j.rise_at_confirm for j in jumps]
+    return lowest_cost_threshold(rises, hit_sets(jumps, faults), len(faults), config, n_grid)
 
 
 def tune_confirm_thresholds(

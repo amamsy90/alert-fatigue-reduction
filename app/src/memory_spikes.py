@@ -22,6 +22,7 @@ import pandas as pd
 
 from .config import Config
 from .entities import Fault
+from .scoring import overlaps
 
 # Points a series needs before robust mode scores it (the spread floor needs history).
 ROBUST_WARMUP_POINTS = 10
@@ -419,13 +420,7 @@ def score_spikes(spikes: list[Spike], faults: list[Fault]) -> dict[str, float]:
     detected: set[str] = set()
     false_spikes = 0
     for spike in spikes:
-        hits = [
-            fault
-            for fault in faults
-            if fault.component == spike.service
-            and spike.start <= fault.end
-            and spike.end >= fault.start
-        ]
+        hits = [fault for fault in faults if fault.component == spike.service and overlaps(spike, fault)]
         if hits:
             detected.update(fault.fault_id for fault in hits)
         else:

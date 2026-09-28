@@ -31,6 +31,7 @@ from .queue import (
     spike_items,
     tune_confirm_thresholds,
 )
+from .scoring import faults_by_service, spike_hits
 
 # Order is the order of rows in the result tables.
 SYSTEMS = (
@@ -207,19 +208,15 @@ def miss_causes(run: WindowRun, data: GaiaData, config: Config, name: str = "pro
     below_threshold  a jump overlapped, but its rise at confirmation was under the threshold
     budget_full      a qualifying jump existed, but the day's K slots were already used
     """
-    from .queue import spike_hits
-
-    by_service: dict[str, list[Fault]] = {}
-    for fault in run.test_faults:
-        by_service.setdefault(fault.component, []).append(fault)
+    by_service = faults_by_service(run.test_faults)
     shown = run.shown[name]
     caught: set[str] = set()
     for item in shown:
         if item.kind == "alert":
-            if item.payload.fault_id:
-                caught.add(item.payload.fault_id)
+            if item.alert.fault_id:
+                caught.add(item.alert.fault_id)
         elif item.kind != "gap":
-            caught |= {f.fault_id for f in spike_hits(item.payload, by_service)}
+            caught |= {f.fault_id for f in spike_hits(item.spike, by_service)}
     with_data = faults_with_metric_data(run.test_faults, data.metrics)
     use_gate = name in ("proposed", "jumps_tuned", "p3_per_series", "p3_per_series_jumps")
     table = (run.learned_by_series if name.startswith("p3_per_series") else run.confirm_by_series) or {}

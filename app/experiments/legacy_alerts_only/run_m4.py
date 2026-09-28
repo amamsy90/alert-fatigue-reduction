@@ -5,8 +5,8 @@ budget. The gate is: higher fault detection, MTTA at least 50% lower, and
 at least 80% fewer false alerts, at every K.
 
 Usage:
-    python run_m4.py --sample
-    python run_m4.py --gaia-run data/gaia_raw/run/run
+    python -m experiments.legacy_alerts_only.run_m4 --sample
+    python -m experiments.legacy_alerts_only.run_m4 --gaia-run data/gaia_raw/run/run
 """
 from __future__ import annotations
 
