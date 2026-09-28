@@ -6,8 +6,8 @@ baseline. The cost threshold is still chosen on week 1. Week 2 is scored
 against the severity-threshold baseline at each daily budget.
 
 Usage:
-    python run_memory_clf.py
-    python run_memory_clf.py --rule jump   # rise over recent median, all of week 1
+    python -m experiments.legacy_alerts_only.run_memory_clf
+    python -m experiments.legacy_alerts_only.run_memory_clf --rule jump   # rise over recent median, all of week 1
 """
 from __future__ import annotations
 

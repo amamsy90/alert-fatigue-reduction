@@ -30,6 +30,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from .config import Config
 from .entities import Alert, Fault
 from .memory_spikes import Spike
+from .scoring import hit_sets, lowest_cost_threshold
 
 NUMERIC = [
     "log_rise",
@@ -87,13 +88,7 @@ def jump_features(spikes: list[Spike], alerts: list[Alert]) -> pd.DataFrame:
 
 
 def _labels(spikes: list[Spike], faults: list[Fault]) -> tuple[np.ndarray, list[set[str]]]:
-    by_service: dict[str, list[Fault]] = defaultdict(list)
-    for f in faults:
-        by_service[f.component].append(f)
-    hits = [
-        {f.fault_id for f in by_service.get(s.service, []) if s.start <= f.end and s.end >= f.start}
-        for s in spikes
-    ]
+    hits = hit_sets(spikes, faults)
     return np.array([bool(h) for h in hits]), hits
 
 
@@ -144,18 +139,5 @@ class JumpRanker:
 
 
 def _tune(scores: np.ndarray, hits: list[set[str]], faults: list[Fault], config: Config) -> float:
-    best: tuple[float, float] | None = None
-    for thr in np.unique(np.quantile(scores, np.linspace(0, 0.95, 40))):
-        caught: set[str] = set()
-        false = 0
-        for score, hit in zip(scores, hits):
-            if score < thr:
-                continue
-            if hit:
-                caught |= hit
-            else:
-                false += 1
-        cost = config.miss_cost * (len(faults) - len(caught)) + config.false_alarm_cost * false
-        if best is None or cost < best[0]:
-            best = (cost, float(thr))
-    return best[1] if best else 0.0
+    thr = lowest_cost_threshold(list(scores), hits, len(faults), config)
+    return 0.0 if thr is None else thr

@@ -1,8 +1,8 @@
 """M1 runner: ingestion + alignment + baseline + metrics (deliverable D1).
 
 Usage:
-    python run_m1.py --sample                 # smoke-test on synthetic data
-    python run_m1.py --data path/to/gaia      # real GAIA files
+    python -m experiments.legacy_alerts_only.run_m1 --sample                 # smoke-test on synthetic data
+    python -m experiments.legacy_alerts_only.run_m1 --data path/to/gaia      # real GAIA files
 
 Writes results to app/results/m1_<tag>.csv and prints a summary table.
 """

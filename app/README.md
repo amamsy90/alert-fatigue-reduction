@@ -132,7 +132,7 @@ python run_validate.py        # fails if the docs and the csv files disagree
 
 Every system in the table goes through the same code (`src/experiment.py`, `src/queue.py`). See [../VALIDATION.md](../VALIDATION.md).
 
-Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretch.py`, `run_memory_clf.py`) score log alerts only; do not quote them as the system result.
+Older alert-only experiments live in `experiments/legacy_alerts_only/` (`run_m1`, `run_m2`, `run_m4`, `run_stretch`, `run_memory_clf`; run with `python -m experiments.legacy_alerts_only.run_m1`). They score log alerts only; do not quote them as the system result.
 
 ## Layout
 
@@ -150,5 +150,5 @@ Older alert-only experiments (`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretc
 | `src/gaia_loader.py` | GAIA run tables → alerts + faults (UTC) |
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
-| `_build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
+| `../tools/build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
 | `tests/` | 150 tests (`python -m pytest -q`) |

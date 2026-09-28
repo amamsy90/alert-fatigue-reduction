@@ -43,7 +43,7 @@ def ops_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SETTINGS_PATH", str(tmp_path / "settings.json"))
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(tmp_path / "queue.db")
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
     return TestClient(app_mod.app)
 
 
@@ -209,7 +209,7 @@ def test_connectors_dashboard_hides_secrets_with_ops(ops_env, monkeypatch):
     monkeypatch.setenv("PAGERDUTY_ROUTING_KEY", "secret-key-must-not-appear")
     monkeypatch.setenv("PROM_URL", "http://prom.test:9090")
     monkeypatch.setattr(
-        "product.app.probe_prometheus",
+        "product.web.ops_routes.probe_prometheus",
         lambda url=None: {"reachable": True, "version": "2.54.0"},
     )
     res = ops_env.get("/connectors")
