@@ -35,8 +35,9 @@ def _git(*args: str) -> str | None:
 
 
 def code_state() -> dict:
-    """Commit and whether tracked source files had uncommitted changes."""
-    status = _git("status", "--porcelain", "--untracked-files=no", "--", "src", "product", "run_*.py")
+    """Commit, and whether the code an experiment runs (src/ and the run_*.py
+    scripts) had uncommitted changes. The web app in product/ is not part of it."""
+    status = _git("status", "--porcelain", "--untracked-files=no", "--", "src", "run_*.py")
     return {"commit": _git("rev-parse", "--short", "HEAD"), "dirty": bool(status) if status is not None else None}
 
 
