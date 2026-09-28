@@ -4,6 +4,16 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased] — toward 1.0.0
 
+### Added (Phase 3, from the course brief review)
+- Model registry: every trained model kept as a version with a card; promotion gate on held-out cost; rollback API (`/models`).
+- Experiment log `app/results/experiments.jsonl` written by every experiment script.
+- Production monitoring: `/metrics` (Prometheus) and `/monitoring` (checked health).
+- Load test `app/perf/load_test.py` and results; AI-specific input tests; per-environment settings `app/deploy/*.env`.
+- Documents: `docs/deployment.md`, `docs/mlops.md`, `docs/monitoring.md`, `docs/privacy_responsible_ai.md`.
+
+### Fixed (Phase 3)
+- A webhook row without a usable timestamp or source was buffered and made every later scoring job fail; rows are now validated.
+
 ### Changed (Phase 2 refactor — no result changed; GAIA and NAB reruns are identical)
 - `product/app.py` split into `product/web/` (security, schemas, uploads, context, three route modules).
 - `product/pipeline.py` split into `inputs.py`, `labels.py`, `paging.py`; `run_job` is a short orchestrator.
