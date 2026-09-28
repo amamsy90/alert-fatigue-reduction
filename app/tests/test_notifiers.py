@@ -92,7 +92,8 @@ def test_failures_never_echo_the_secret():
     assert r["failed"] == 1 and "secret" not in json.dumps(r)
 
 
-def test_live_needs_any_channel(env):
+def test_live_needs_any_channel(env, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "pw")
     with pytest.raises(ValueError, match="channel"):
         ops.set_shadow_mode(shadow=False, confirm="LIVE")
     ops.set_slack_webhook("https://hooks.slack.com/x")
@@ -114,6 +115,7 @@ def test_api_saves_and_reports_without_the_secret(env):
 
 
 def test_live_ingest_fans_out_to_every_channel(env, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "pw")
     import product.app as app_mod
     from product.pipeline import run_job
 

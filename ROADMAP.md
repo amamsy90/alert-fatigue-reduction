@@ -38,9 +38,9 @@ Why this reframe: on GAIA, log triage alone misses about 82% of faults, and a me
 |---|---|---|
 | 3.1 | **Robustness replay** (`run_robustness.py`): synthetic 0.25–2 GB steps, 1-min spikes, 30-min ramps, 3-h leaks on the real series | 0.5–2 GB and spikes ≥ 98%; 0.25 GB ≈ 0; ramps and leaks ≈ 0 for the jump and rate rules; the learned threshold rejects all 0.5 GB faults |
 | 3.2 | **Slow-leak rule** (3-hour median), on by default for byte metrics | Ramps 99%, 3-h leaks 73%; 0.3 extra items a day on real data |
-| 3.3 | **Learned jump ranker** (`src/jump_ranker.py`) | No gain (70.2%): the rise threshold already gives 94% precision. Kept as an experiment |
+| 3.3 | **Learned jump ranker** (`src/jump_ranker.py`) | No gain (69.7%): the rise threshold already gives 94% precision. Kept as an experiment |
 | 3.4 | **Cross-service grouping** (`GROUP_MINUTES`) | +1.3 points (71.5%) |
-| 3.5 | **Carry-over budget** (`CARRY_OVER_MAX`) — the adaptive-K idea done causally | +4.2 points (74.4%); rate rule with the same carry-over 72.5%; 8/8 weeks |
+| 3.5 | **Carry-over budget** (`CARRY_OVER_MAX`) — the adaptive-K idea done causally | +3.0 points (72.6%); rate rule with the same carry-over 72.5%; 3 of 6 weeks after the look-ahead fixes |
 | 3.6 | **Miss analysis** (`results/miss_causes_gaia.csv`) | 46% of misses are metric outages, 52% a full budget, 2% the detector |
 
 ## Phase 4 — Any data, no code (done on this branch)

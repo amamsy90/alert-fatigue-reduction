@@ -10,9 +10,9 @@ from product.prometheus_adapter import (
     fetch_memory_metrics,
     probe_prometheus,
     prom_url_host,
+    run_prometheus_test,
     service_from_labels,
     step_seconds,
-    run_prometheus_test,
 )
 
 

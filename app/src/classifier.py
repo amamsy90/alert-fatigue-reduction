@@ -26,7 +26,7 @@ class AlertClassifier:
         self.config = config or Config()
         self._pipe: Pipeline | None = None
 
-    def fit(self, alerts: list[Alert], spikes: list | None = None) -> "AlertClassifier":
+    def fit(self, alerts: list[Alert], spikes: list | None = None) -> AlertClassifier:
         frame = build_feature_frame(alerts, self.config, spikes)
         labels = frame["label"].to_numpy()
         if len(np.unique(labels)) < 2:

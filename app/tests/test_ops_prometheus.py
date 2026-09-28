@@ -13,8 +13,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("SHADOW_MODE", "1")
 os.environ["QUEUE_DB"] = str(Path(tempfile.mkdtemp()) / "import_queue.db")
 
-from product.app import app  # noqa: E402
-from product.ops import clear_prom_url, get_prom_url, set_prom_url  # noqa: E402
+from product.ops import get_prom_url, set_prom_url  # noqa: E402
 from product.store import QueueStore  # noqa: E402
 
 
