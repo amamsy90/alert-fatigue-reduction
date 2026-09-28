@@ -25,7 +25,7 @@ def client(tmp_path, monkeypatch):
     # Re-bind store used by the app
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(db)
+    app_mod.use_store(QueueStore(db))
     return TestClient(app_mod.app)
 
 
@@ -33,7 +33,7 @@ def test_connectors_dashboard_hides_secrets(client, monkeypatch):
     monkeypatch.setenv("PAGERDUTY_ROUTING_KEY", "secret-key-must-not-appear")
     monkeypatch.setenv("PROM_URL", "http://prom.test:9090")
     monkeypatch.setattr(
-        "product.app.probe_prometheus",
+        "product.web.ops_routes.probe_prometheus",
         lambda url=None: {"reachable": True, "version": "2.54.0"},
     )
     res = client.get("/connectors")
@@ -430,7 +430,7 @@ def test_failed_scoring_keeps_the_ingest_buffer(client, monkeypatch):
     def boom(*args, **kwargs):
         raise ValueError("scoring failed")
 
-    monkeypatch.setattr(app_module, "run_job", boom)
+    monkeypatch.setattr("product.web.job_routes.run_job", boom)
     row = {"timestamp": "2026-02-01T10:00:00Z", "source": "web-01", "severity": "error", "message": "x"}
     res = client.post("/ingest/alerts", json={"alerts": [row], "score_now": True})
     assert res.status_code == 400

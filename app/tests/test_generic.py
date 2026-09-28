@@ -141,8 +141,8 @@ def test_app_evaluate_apply_and_score(tmp_path, monkeypatch):
 
     monkeypatch.setenv("SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.setenv("MODEL_PATH", str(tmp_path / "model.pkl"))
-    monkeypatch.setattr(app_mod, "STORE", QueueStore(tmp_path / "q.db"))
-    monkeypatch.setattr(app_mod, "EVAL_DIR", tmp_path / "evals")
+    monkeypatch.setattr("product.web.context.STORE", QueueStore(tmp_path / "q.db"))
+    monkeypatch.setattr("product.web.evaluate_routes.EVAL_DIR", tmp_path / "evals")
     client = TestClient(app_mod.app)
     metrics, incidents = _shop(tmp_path)
     with open(metrics, "rb") as m, open(incidents, "rb") as i:
