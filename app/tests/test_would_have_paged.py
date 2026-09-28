@@ -13,8 +13,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("SHADOW_MODE", "1")
 os.environ["QUEUE_DB"] = str(Path(tempfile.mkdtemp()) / "import_queue.db")
 
-from product.app import app  # noqa: E402
-from product.ops import set_routing_key, set_shadow_mode  # noqa: E402
+from product.ops import set_routing_key  # noqa: E402
 from product.pagerduty import would_have_paged  # noqa: E402
 from product.store import QueueStore  # noqa: E402
 from src.entities import Action, Alert, Decision  # noqa: E402

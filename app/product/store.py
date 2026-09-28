@@ -14,7 +14,6 @@ import pandas as pd
 
 from src.entities import Alert, Decision
 
-
 DEFAULT_DB = Path(__file__).resolve().parent / "data" / "queue.db"
 
 

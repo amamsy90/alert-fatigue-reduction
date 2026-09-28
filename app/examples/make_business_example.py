@@ -49,7 +49,7 @@ def main() -> None:
         OUT / "incidents.csv", index=False)
 
     events = []
-    for i in range(1500):
+    for _ in range(1500):
         t = T0 + pd.Timedelta(minutes=int(rng.integers(0, 21 * 24 * 60)))
         region = str(rng.choice(["eu", "us", "asia"]))
         kind = rng.choice(["campaign sent", "ticket: where is my order", "ticket: refund", "ticket: login"],
