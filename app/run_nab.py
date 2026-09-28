@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.generic import evaluate
+from src.tracking import record_run
 
 ROOT = Path("data/nab")
 BUDGETS = (1, 2, 5)
@@ -48,6 +49,10 @@ def main() -> None:
     k2 = frame[frame["budget_k"] == 2].pivot(index="dataset", columns="queue", values="detection_rate")
     print("\nK=2 detection by dataset:\n" + k2.round(3).to_string())
     print(f"\nWrote {out / 'nab_eval.csv'} and {out / 'nab_settings.csv'}")
+    mine = frame[(frame["budget_k"] == 2) & (frame["queue"] == "your_queue")]
+    record_run("nab", config={"budgets": BUDGETS, "train_fraction": train_fraction}, data=[ROOT],
+               outputs=[out / "nab_eval.csv", out / "nab_settings.csv"],
+               metrics={f"K2.{d}": float(r) for d, r in zip(mine["dataset"], mine["detection_rate"])})
 
 
 if __name__ == "__main__":

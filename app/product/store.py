@@ -421,6 +421,15 @@ class QueueStore:
                 conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
         return len(old)
 
+    def recent_jobs(self, limit: int = 30) -> list[dict]:
+        """Newest jobs first: id, time, source and meta (for monitoring)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT job_id, created_at, source, meta_json FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [{"job_id": r["job_id"], "created_at": r["created_at"], "source": r["source"],
+                 "meta": json.loads(r["meta_json"] or "{}")} for r in rows]
+
     def job_meta(self, job_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()

@@ -16,7 +16,7 @@ PANEL = RGBColor(0xF6, 0xF4, 0xEF)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 
 W, H = Inches(13.333), Inches(7.5)
-OUT = Path(__file__).resolve().parents[1] / "Alert_Fatigue_Proposal_Rehearsal.pptx"
+OUT = Path(__file__).resolve().parents[1] / "submission" / "Alert_Fatigue_Proposal_Rehearsal.pptx"
 
 
 def add_text(slide, text, x, y, w, h, size, color, bold=False, align=PP_ALIGN.LEFT):

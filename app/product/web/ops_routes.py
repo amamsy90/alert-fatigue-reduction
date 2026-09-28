@@ -4,8 +4,11 @@ from __future__ import annotations
 import os
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import PlainTextResponse
 
 from product import ops as ops_mod
+from product.monitoring import METRICS, gauges
+from product.monitoring import health as service_health
 from product.prometheus_adapter import probe_prometheus, run_prometheus_test
 from product.web import context as ctx
 from product.web.schemas import (
@@ -18,6 +21,18 @@ from product.web.schemas import (
 from product.web.security import _auth_settings
 
 router = APIRouter()
+
+
+@router.get("/metrics")
+def metrics():
+    """Prometheus text format: requests, latency, jobs, pages, ingest, and health gauges."""
+    return PlainTextResponse(METRICS.render() + gauges(ctx.STORE), media_type="text/plain; version=0.0.4")
+
+
+@router.get("/monitoring")
+def monitoring():
+    """Service, model and data health with a verdict against the targets in docs/monitoring.md."""
+    return service_health(ctx.STORE)
 
 
 def _connector_status() -> dict:

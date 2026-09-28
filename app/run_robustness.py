@@ -34,6 +34,7 @@ from src.config import Config
 from src.experiment import load_gaia
 from src.memory_spikes import detect_jumps, detect_leaks
 from src.queue import tune_confirm_threshold
+from src.tracking import GAIA_INPUTS, record_run
 
 GB = 1e9
 SHAPES = {
@@ -140,6 +141,8 @@ def main() -> None:
     out = Path("results") / "robustness_gaia.csv"
     pd.DataFrame(rows).to_csv(out, index=False)
     print(f"Week-1 confirm threshold {thr / GB:.2f} GB. Wrote {out}")
+    record_run("robustness_gaia", data=GAIA_INPUTS, outputs=[out],
+               metrics={f"{r['shape']}.{r['detector']}": r["detection_rate"] for r in rows if r["detector"] == "jump_0.5g"})
 
 
 if __name__ == "__main__":
