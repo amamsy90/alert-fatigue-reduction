@@ -6,8 +6,8 @@ import math
 import os
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError
+from urllib.parse import urlencode, urlparse
 from urllib.request import HTTPRedirectHandler, build_opener
 
 import pandas as pd
