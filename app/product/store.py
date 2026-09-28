@@ -1,15 +1,18 @@
 """SQLite store for scored alert-queue jobs."""
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
 
 from src.entities import Alert, Decision
-
 
 DEFAULT_DB = Path(__file__).resolve().parent / "data" / "queue.db"
 
@@ -20,10 +23,22 @@ class QueueStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """One transaction: commit on success, roll back on error, always close.
+
+        WAL lets the queue page read while an ingest writes; the busy timeout
+        waits for a writer instead of failing with "database is locked".
+        """
+        conn = sqlite3.connect(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            conn.execute("PRAGMA busy_timeout = 10000")
+            conn.execute("PRAGMA journal_mode = WAL")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init(self) -> None:
         with self._connect() as conn:
@@ -83,6 +98,10 @@ class QueueStore:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     received_at TEXT NOT NULL,
                     payload_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS ingest_seen (
+                    fingerprint TEXT PRIMARY KEY,
+                    seen_at TEXT NOT NULL
                 );
                 """
             )
@@ -413,13 +432,40 @@ class QueueStore:
         return data
 
     def buffer_alerts(self, payload: list[dict]) -> int:
+        """Buffer alert rows; returns the number of buffered batches."""
+        return self.buffer_new_alerts(payload)[0]
+
+    def buffer_new_alerts(self, payload: list[dict]) -> tuple[int, int]:
+        """Buffer only rows not seen in the last INGEST_DEDUP_HOURS (default 24).
+
+        A client that retries after a 409, or Alertmanager re-sending a firing
+        alert, must not buffer (and page) the same alert twice. Returns
+        (buffered batches, rows skipped as duplicates).
+        """
+        now = pd.Timestamp.now("UTC")
+        cutoff = (now - pd.Timedelta(hours=_dedup_hours())).isoformat()
+        prints = [_fingerprint(row) for row in payload]
         with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO ingest_buffer (received_at, payload_json) VALUES (?, ?)",
-                (pd_utcnow(), json.dumps(payload)),
+            conn.execute("DELETE FROM ingest_seen WHERE seen_at < ?", (cutoff,))
+            fresh, seen_now = [], set()
+            for row, fp in zip(payload, prints):
+                if fp in seen_now or conn.execute(
+                    "SELECT 1 FROM ingest_seen WHERE fingerprint = ?", (fp,)
+                ).fetchone():
+                    continue
+                seen_now.add(fp)
+                fresh.append(row)
+            conn.executemany(
+                "INSERT OR REPLACE INTO ingest_seen (fingerprint, seen_at) VALUES (?, ?)",
+                [(fp, now.isoformat()) for fp in seen_now],
             )
+            if fresh:
+                conn.execute(
+                    "INSERT INTO ingest_buffer (received_at, payload_json) VALUES (?, ?)",
+                    (now.isoformat(), json.dumps(fresh)),
+                )
             row = conn.execute("SELECT COUNT(*) AS n FROM ingest_buffer").fetchone()
-        return int(row["n"])
+        return int(row["n"]), len(payload) - len(fresh)
 
     def buffer_stats(self) -> dict:
         with self._connect() as conn:
@@ -483,6 +529,18 @@ class QueueStore:
             else:
                 alerts.append(chunk)
         return alerts
+
+
+def _dedup_hours() -> float:
+    try:
+        return max(float(os.environ.get("INGEST_DEDUP_HOURS", "24")), 0.0)
+    except ValueError:
+        return 24.0
+
+
+def _fingerprint(row: dict) -> str:
+    """Same alert = same content. Keys are sorted so field order does not matter."""
+    return hashlib.sha256(json.dumps(row, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def pd_utcnow() -> str:

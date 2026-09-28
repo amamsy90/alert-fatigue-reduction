@@ -105,7 +105,7 @@ Tuned on the first half of each series, scored on the second half, K = 2 items a
 | NAB cloud servers | 17 | 12 (71%) | 58% | 0.3 |
 | NAB online ads | 6 | 5 (83%) | 58% | 1.4 |
 | NAB machine / taxi / CPU | 13 | 5 (38%) — static rule 54% | 15% | 0.04 |
-| NAB road traffic | 11 | 5 (45%) | 13% | 0.4 |
+| NAB road traffic | 11 | 4 (36%) | 12% | 0.3 |
 | NAB Twitter volume | 11 | 4 (36%) | 36% | 1.7 |
 
 It helps clearly on the shop data, road traffic and machine data, a little on cloud servers and ads (NAB's wide labels make chance high there), and **not at all on Twitter volume**. That is the point of the page: it tells you on *your* data, before you rely on it.

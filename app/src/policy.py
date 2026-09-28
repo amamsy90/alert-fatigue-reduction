@@ -3,8 +3,9 @@
 An alert is eligible when escalating it costs less than missing it:
 P(real) >= false_alarm_cost / (miss_cost + false_alarm_cost). The threshold
 actually used is the one that minimizes cost on the training week, so a
-miscalibrated score cannot spend the budget on noise. Eligible alerts are
-ranked by expected miss cost, and at most K of them are escalated each day.
+miscalibrated score cannot spend the budget on noise. At most K eligible
+alerts are escalated each day, first come, first served: alerts are read in
+time order, so no decision depends on an alert that arrives later that day.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from .baseline import time_order
 from .config import Config, day_of
 from .entities import Action, Alert, Decision
 
@@ -47,12 +49,13 @@ def tune_threshold(alerts: list[Alert], proba: np.ndarray, config: Config) -> fl
 def policy_decisions(
     alerts: list[Alert], proba: np.ndarray, config: Config, threshold: float
 ) -> list[Decision]:
-    """Suppress duplicates and cheap alerts, then spend the daily budget."""
+    """Suppress duplicates and cheap alerts, then spend the daily budget in arrival order."""
     decisions: list[Decision | None] = [None] * len(alerts)
     seen: set[tuple[str, str, str]] = set()
-    candidates: dict[pd.Timestamp, list[tuple[float, int]]] = defaultdict(list)
+    used: dict[pd.Timestamp, int] = defaultdict(int)
 
-    for idx, alert in enumerate(alerts):
+    for idx in time_order(alerts):
+        alert = alerts[idx]
         score = float(proba[idx])
         key = (alert.source, alert.alert_type, alert.message)
         if key in seen:
@@ -60,29 +63,14 @@ def policy_decisions(
             continue
         seen.add(key)
         if score < threshold:
-            decisions[idx] = Decision(
-                alert.alert_id, Action.SUPPRESS, score, "below cost threshold"
-            )
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "below cost threshold")
             continue
-        expected_miss = score * config.miss_cost
-        candidates[day_of(alert.timestamp, config)].append((expected_miss, idx))
-
-    chosen: set[int] = set()
-    for day_candidates in candidates.values():
-        day_candidates.sort(key=lambda item: -item[0])
-        for _, idx in day_candidates[: config.budget_k]:
-            chosen.add(idx)
-
-    for idx, alert in enumerate(alerts):
-        if decisions[idx] is not None:
+        day = day_of(alert.timestamp, config)
+        if used[day] >= config.budget_k:
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "below daily budget")
             continue
-        score = float(proba[idx])
-        if idx in chosen:
-            decisions[idx] = Decision(alert.alert_id, Action.ESCALATE, score, "policy top-k")
-        else:
-            decisions[idx] = Decision(
-                alert.alert_id, Action.SUPPRESS, score, "below daily budget"
-            )
+        used[day] += 1
+        decisions[idx] = Decision(alert.alert_id, Action.ESCALATE, score, "policy top-k")
     return decisions  # type: ignore[return-value]
 
 
@@ -93,55 +81,35 @@ def review_decisions(
     escalate_threshold: float,
     review_threshold: float,
 ) -> list[Decision]:
-    """Confident faults take budget slots first. Uncertain alerts fill the rest.
+    """Confident faults are escalated, uncertain alerts go to a person, both from
+    the same daily budget, first come first served.
 
     Scores below the review floor are suppressed without asking anyone.
     """
     decisions: list[Decision | None] = [None] * len(alerts)
     seen: set[tuple[str, str, str]] = set()
-    escalate_by_day: dict[pd.Timestamp, list[tuple[float, int]]] = defaultdict(list)
-    review_by_day: dict[pd.Timestamp, list[tuple[float, int]]] = defaultdict(list)
+    used: dict[pd.Timestamp, int] = defaultdict(int)
 
-    for idx, alert in enumerate(alerts):
+    for idx in time_order(alerts):
+        alert = alerts[idx]
         score = float(proba[idx])
         key = (alert.source, alert.alert_type, alert.message)
         if key in seen:
             decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "exact duplicate")
             continue
         seen.add(key)
-        day = day_of(alert.timestamp, config)
-        if score >= escalate_threshold:
-            escalate_by_day[day].append((score, idx))
-        elif score >= review_threshold:
-            review_by_day[day].append((score, idx))
-        else:
+        if score < review_threshold:
             decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "confident noise")
-
-    chosen_escalate: set[int] = set()
-    chosen_review: set[int] = set()
-    days = set(escalate_by_day) | set(review_by_day)
-    for day in days:
-        slots = config.budget_k
-        ranked = sorted(escalate_by_day.get(day, []), key=lambda item: -item[0])
-        for _, idx in ranked[:slots]:
-            chosen_escalate.add(idx)
-        slots -= min(slots, len(ranked))
-        ranked_review = sorted(review_by_day.get(day, []), key=lambda item: -item[0])
-        for _, idx in ranked_review[:slots]:
-            chosen_review.add(idx)
-
-    for idx, alert in enumerate(alerts):
-        if decisions[idx] is not None:
             continue
-        score = float(proba[idx])
-        if idx in chosen_escalate:
+        day = day_of(alert.timestamp, config)
+        if used[day] >= config.budget_k:
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "below daily budget")
+            continue
+        used[day] += 1
+        if score >= escalate_threshold:
             decisions[idx] = Decision(alert.alert_id, Action.ESCALATE, score, "confident fault")
-        elif idx in chosen_review:
-            decisions[idx] = Decision(alert.alert_id, Action.REVIEW, score, "ask a person")
         else:
-            decisions[idx] = Decision(
-                alert.alert_id, Action.SUPPRESS, score, "below daily budget"
-            )
+            decisions[idx] = Decision(alert.alert_id, Action.REVIEW, score, "ask a person")
     return decisions  # type: ignore[return-value]
 
 
@@ -153,35 +121,41 @@ def spike_review_decisions(
     review_threshold: float,
     in_spike: list[bool],
 ) -> list[Decision]:
-    """Cost policy first; leftover slots go only to alerts inside a memory jump.
+    """Confident alerts are escalated; uncertain ones go to a person only when
+    they arrive inside a memory jump. One daily budget, first come first served.
 
     Uncertain alerts outside a jump are not worth a person's time: on GAIA they
     filled the budget with noise.
     """
-    decisions = policy_decisions(alerts, proba, config, escalate_threshold)
+    decisions: list[Decision | None] = [None] * len(alerts)
+    seen: set[tuple[str, str, str]] = set()
     used: dict[pd.Timestamp, int] = defaultdict(int)
-    for alert, decision in zip(alerts, decisions):
-        if decision.action == Action.ESCALATE:
-            used[day_of(alert.timestamp, config)] += 1
 
-    candidates: dict[pd.Timestamp, list[tuple[float, int]]] = defaultdict(list)
-    for idx, (alert, decision) in enumerate(zip(alerts, decisions)):
-        if (
-            decision.action == Action.SUPPRESS
-            and decision.reason != "exact duplicate"
-            and in_spike[idx]
-            and float(proba[idx]) >= review_threshold
-        ):
-            candidates[day_of(alert.timestamp, config)].append((float(proba[idx]), idx))
-
-    for day, day_candidates in candidates.items():
-        slots = max(0, config.budget_k - used[day])
-        day_candidates.sort(key=lambda item: -item[0])
-        for score, idx in day_candidates[:slots]:
+    for idx in time_order(alerts):
+        alert = alerts[idx]
+        score = float(proba[idx])
+        key = (alert.source, alert.alert_type, alert.message)
+        if key in seen:
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "exact duplicate")
+            continue
+        seen.add(key)
+        day = day_of(alert.timestamp, config)
+        confident = score >= escalate_threshold
+        worth_asking = in_spike[idx] and score >= review_threshold
+        if not (confident or worth_asking):
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "below cost threshold")
+            continue
+        if used[day] >= config.budget_k:
+            decisions[idx] = Decision(alert.alert_id, Action.SUPPRESS, score, "below daily budget")
+            continue
+        used[day] += 1
+        if confident:
+            decisions[idx] = Decision(alert.alert_id, Action.ESCALATE, score, "policy top-k")
+        else:
             decisions[idx] = Decision(
-                alerts[idx].alert_id, Action.REVIEW, score, "ask a person: inside memory jump"
+                alert.alert_id, Action.REVIEW, score, "ask a person: inside memory jump"
             )
-    return decisions
+    return decisions  # type: ignore[return-value]
 
 
 def share_budget_with_jumps(

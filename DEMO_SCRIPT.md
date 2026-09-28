@@ -34,11 +34,11 @@ Numbers below match `FINAL_REPORT.md` / `run_validate.py` (not the older `CODE_R
 Say roughly:
 
 - Public proof: GAIA MicroSS, train week 1, test 55 days, 1,223 faults.
-- At K = 20: full queue **70.2%** (about **83%** of the 84.9% ceiling), vs Prometheus-style delta **~69%**, log severity **0%**.
-- Walk-forward mean **72.5%** (95% CI 65.7–78.3%).
+- At K = 20: full queue **69.6%** (about **82%** of the 84.9% ceiling), vs Prometheus-style delta **~69%**, log severity **0%**.
+- Walk-forward mean **71.3%** (95% CI 64.5–76.7%); the detector alone 74.8%, 8/8 weeks over the rate rule.
 - Misses: mostly no metric data or a full budget — not "silent faults."
 
-Optional one line: "Carry-over stretch reaches 74.4%; I keep the honest 70.2% as the reference claim."
+Optional one line: "After removing the last look-ahead the full queue ties the rate rule; the detector alone is the claim that holds (8/8 weeks)."
 
 ---
 

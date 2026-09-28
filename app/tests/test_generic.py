@@ -3,9 +3,8 @@ import json
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from src.generic import evaluate, live_setting, load_events, load_incidents, load_metrics, setting_from_dict, detect
+from src.generic import detect, evaluate, live_setting, load_events, load_incidents, load_metrics, setting_from_dict
 
 T0 = pd.Timestamp("2026-01-01", tz="UTC")
 

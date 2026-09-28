@@ -14,7 +14,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | D1 | Data pipeline + baseline numbers on the shared split | Done (`results/m1_gaia.csv`) |
 | D2 | Alert classifier vs baseline at equal budget | Done (`results/m2_gaia.csv`) |
 | D3 | Memory-jump detector vs injected faults | Done (`results/memory_gaia_jump.csv`) — 86.1% overlap |
-| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 70.2% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
+| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 69.6% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
 | D5 | Local on-call app (shadow mode, marks, saved model) | Done (`app/product/`) |
 | D6 | Final report + name / course / date on documents | Report includes interval + silent-fault table; name / course / date still open |
 
@@ -33,7 +33,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | T9 | Score jump overlap on week 1 (tune) and test period | M3 | Done |
 | T10 | Causal shared budget: first come, alerts ≤ 25% of K, leaks and gaps as items | M4 | Done |
 | T11 | Queue evaluation at K = 5 / 10 / 20 / 50 | M4 | Done |
-| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, full queue 72.5%, rate rule 70.7%) |
+| T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, full queue 71.3%, rate rule 70.7%) |
 | T12 | Stretch: ask only inside a jump; Real / Noise; retrain | D5 | Done |
 | T13 | Final report; name / course / date | D6 | Report in `FINAL_REPORT.md`; fill author fields |
 | T14 | Interval, sign test vs rate rule, signal counts incl. no-metric-data | M4 | Done (`results/stats_gaia.csv`) |

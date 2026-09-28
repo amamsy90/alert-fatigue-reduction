@@ -105,7 +105,7 @@ def build_feature_frame(
                 "has_error": int(alert.severity in ("error", "critical")),
                 "during_memory_spike": int(
                     any(
-                        spike.shown_at <= alert.timestamp <= spike.end
+                        spike.open_at(alert.timestamp)
                         for spike in spikes_by_service.get(alert.source, [])
                         if getattr(spike, "kind", "jump") != "gap"
                     )

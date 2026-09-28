@@ -79,8 +79,12 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 |---|---|---|
 | `PAGE_LOOKBACK_MINUTES` | `60` | First ingest job only: how far back metric items may be paged (later jobs page only what is new since the last one) |
 | `SHADOW_MODE` | `1` | Bootstrap default; UI Live override is saved in `ops.json`. `0` = Live |
-| `APP_PASSWORD` / `APP_USER` | none / `oncall` | Basic-auth login for everything except `/health` |
-| `INGEST_TOKEN` | none | Bearer token for `/ingest/*` |
+| `APP_PASSWORD` / `APP_USER` | none / `oncall` | Basic-auth login for everything except `/health`. Required before Live mode can be turned on, and behind a reverse proxy |
+| `INGEST_TOKEN` | none | Bearer token for `/ingest/*` (header only; `?token=` is refused) |
+| `ALLOWED_HOSTS` | none | Extra `Host` names the app answers from this machine without a password (DNS-rebinding guard) |
+| `MAX_INGEST_MB` | `10` | Largest JSON body `/ingest/*` and other JSON routes accept; bigger bodies get 413 while they stream in |
+| `INGEST_DEDUP_HOURS` | `24` | An alert with the same content seen within this window is not buffered again |
+| `PROM_ALLOW_PRIVATE` | `0` | `1` allows a private / loopback Prometheus (in-cluster); metadata addresses are always refused |
 | `JUMP_MODE` | `absolute` | `relative` for metrics that are not bytes |
 | `JUMP_BYTES` | `5e8` | Absolute rise that makes a point hot |
 | `JUMP_RATIO` | `0.3` | Relative rise (30% over the recent median) |
@@ -92,7 +96,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `LEAK_WINDOW_MINUTES` / `LEAK_BYTES` | `180` / `5e8` | Slow-leak rule (byte metrics only); `0` = off |
 | `GROUP_MINUTES` | `0` | Metric items this close on other services share one slot |
 | `CARRY_OVER_MAX` | `0` | Unused slots carried to the next day (e.g. `10`) |
-| `MAX_UPLOAD_MB` | `200` | Largest CSV the upload and Evaluate pages accept |
+| `MAX_UPLOAD_MB` | `200` | Largest CSV the upload and Evaluate pages accept (the whole request is stopped while it streams in once it passes 3 files' worth) |
 | `JOB_RETENTION` / `EVAL_RETENTION` | `200` / `30` | Jobs and evaluations kept on disk; older ones are deleted (Real / Noise marks are kept) |
 | `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
 | `SETTINGS_PATH` | `product/data/settings.json` | Settings saved from **Evaluate my data** / `cli tune` (replace the built-in rule) |
