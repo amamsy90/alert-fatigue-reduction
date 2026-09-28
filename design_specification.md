@@ -1,6 +1,6 @@
 # Alert Fatigue Reduction — Design Specification
 
-**Author:** Aishah Mohamed Alyammahi  **Course:** Software Engineering and Programming  **Date:** [Date]  **Version:** 2.0
+**Author:** Aishah Mohamed Alyammahi  **Course:** Software Engineering and Programming  **Date:** [Date]  **Version:** 3.0
 **Sector:** Cloud microservice operations (online platforms)
 
 ---
@@ -12,7 +12,7 @@ This document specifies a system that reduces alert fatigue on a **cloud microse
 The system is trained and evaluated on **GAIA MicroSS** and benchmarked against fixed severity thresholds plus exact duplicate suppression.
 
 **In scope:** offline training and evaluation on GAIA; classification; memory-jump detection; budget-aware policy; evaluation harness; a local web app in shadow mode (webhook ingest, Prometheus memory, Real / Noise marks, saved model).
-**Out of scope for the measured result:** Slack/Opsgenie; multi-tenant SaaS; real human response times (MTTA is from timestamps). PagerDuty exists in the app but is off in shadow mode and is not used in the scores below.
+**Out of scope for the measured result:** paging (PagerDuty, Slack and Opsgenie exist in the app but are off in shadow mode and are not used in the scores below); multi-tenant SaaS; real human response times (MTTA is from timestamps). Operations detail (environments, model registry, monitoring, privacy) is in `docs/`.
 
 ## 2. System overview
 
@@ -123,7 +123,7 @@ At K = 20 on the test period: full queue **69.6%**, jumps with learned threshold
 
 ### 4.7 Product (local on-call app)
 
-- FastAPI + SQLite + browser UI (local port, currently 8083). Shadow mode on by default.
+- FastAPI + SQLite + browser UI (port 8080 in Docker). Shadow mode on by default. Model versions with a promotion gate and rollback (`docs/mlops.md`); `/metrics` and `/monitoring` (`docs/monitoring.md`).
 - Modes: sample, GAIA, CSV upload, webhook ingest, and a CLI (`python -m product.cli score`). Optional Prometheus metrics (`PROM_URL`). Every alert of a batch is queued.
 - **Evaluate my data** (`/evaluate`, `cli evaluate` / `tune`, `src/generic.py`): any metric table (column names detected, long or wide), optional events and past problems; per-series split; static, rate and robust jump rules tuned on the early part with the same cost; report with a chance line and miss causes; the best detector can be saved as the live setting.
 - **Rules-only mode** when there are no labels: jumps + gaps + severity for alerts. A model is trained once labels or Real/Noise marks exist.
