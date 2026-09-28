@@ -1,6 +1,8 @@
 """Translate Prometheus Alertmanager webhooks into the queue's alert rows."""
 from __future__ import annotations
 
+import pandas as pd
+
 
 def looks_like_alertmanager(payload: object) -> bool:
     if not isinstance(payload, dict):
@@ -60,3 +62,32 @@ def normalize_ingest(payload: object) -> list[dict]:
     if isinstance(payload, dict) and isinstance(payload.get("alerts"), list):
         return list(payload["alerts"])
     raise ValueError("Body must be {alerts: [...]} or an Alertmanager webhook")
+
+
+def validate_rows(rows: list) -> tuple[list[dict], list[dict]]:
+    """Split alert rows into usable ones and rejections with a reason.
+
+    A usable row is an object with a parseable `timestamp` and a non-empty
+    `source`. Bad rows must never reach the buffer: one of them used to make
+    every later scoring job fail ("poison message").
+    """
+    good: list[dict] = []
+    errors: list[dict] = []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            errors.append({"index": i, "reason": "not an object"})
+            continue
+        source = row.get("source")
+        if not isinstance(source, str) or not source.strip():
+            errors.append({"index": i, "reason": "missing source"})
+            continue
+        raw = row.get("timestamp")
+        try:
+            ts = pd.to_datetime(raw, utc=True) if raw not in (None, "") else pd.NaT
+        except (ValueError, TypeError, OverflowError):
+            ts = pd.NaT
+        if pd.isna(ts):
+            errors.append({"index": i, "reason": f"unreadable timestamp {str(raw)[:40]!r}"})
+            continue
+        good.append(row)
+    return good, errors
