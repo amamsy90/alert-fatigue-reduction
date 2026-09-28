@@ -22,7 +22,7 @@ About 30,000 lines arrived in five days, most of the design work before the firs
 
 - **Reviews changed the claims, not just the code.** The first review showed the baseline was a straw man (log severity catches 0%) and that the queue ranked by hindsight. The report now compares against a Prometheus rate rule and uses a causal queue.
 - **Negative results are reported.** The full queue now ties the rate rule week by week; the report says so and keeps the claim that holds (the detector wins 8/8 weeks).
-- **Tests grew with the fixes:** 46 → 150 → 186, including tests that fail if a decision starts to use later data.
+- **Tests grew with the fixes:** 46 → 150 → 186 → 200, including tests that fail if a decision starts to use later data.
 - **Reproducibility.** Every number comes from a script, and since Phase 0 a checker ties the report to the result files.
 
 ## 3. What went wrong
@@ -30,7 +30,7 @@ About 30,000 lines arrived in five days, most of the design work before the firs
 - **Look-ahead crept back in.** After the first review removed the main hindsight ranking, five smaller uses of later data remained in helper code while the text said "no look-ahead". A test that adds later data and checks earlier decisions did not change would have caught them; `test_causality.py` now does.
 - **The checker checked itself.** `run_validate.py` compared results to numbers typed into its own source, so the report could drift unnoticed (ADR 0006).
 - **Security followed features.** Live paging, keys and a Prometheus URL were added before a threat model existed. The second review found an SSRF bypass, open access behind a proxy, and a way to page without a password.
-- **Scope grew late.** Slack, Opsgenie, SMD and a pilot offer were added on the last day, which left less time for tests of the core (`src/experiment.py` still has none).
+- **Scope grew late.** Slack, Opsgenie, SMD and a pilot offer were added on the last day, which left less time for tests of the core (`src/experiment.py` had none until Phase 2).
 - **Process was invisible.** Large commits, no issues and no CI make the work hard for anyone else to follow or review.
 
 ## 4. What changes from now on
@@ -39,7 +39,7 @@ About 30,000 lines arrived in five days, most of the design work before the firs
 2. **Remaining work is tracked as GitHub issues**, one per item in Phases 2–3 and one per residual risk in `docs/threat_model.md`.
 3. **A decision that shapes the design gets an ADR** before the code.
 4. **A security-relevant feature gets a threat-model row and a test in the same change.**
-5. **The mypy error budget only goes down** (39 at the start of CI).
+5. **No type errors.** mypy started at 39 errors; Phase 2 brought it to 0 and CI now fails on any new one.
 6. **Releases are tagged** and summarised in `CHANGELOG.md`.
 
 ## 5. Author's notes

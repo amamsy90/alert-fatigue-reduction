@@ -10,6 +10,7 @@ import pandas as pd
 
 from .entities import Alert, Fault
 from .memory_spikes import Spike
+from .scoring import overlaps
 
 
 @dataclass(frozen=True)
@@ -87,7 +88,7 @@ def faults_with_jumps(faults: list[Fault], jumps: list[Spike]) -> set[str]:
     caught: set[str] = set()
     for fault in faults:
         for jump in by_service.get(fault.component, []):
-            if jump.start <= fault.end and jump.end >= fault.start:
+            if overlaps(jump, fault):
                 caught.add(fault.fault_id)
                 break
     return caught
@@ -203,7 +204,7 @@ def false_jumps_near_other_faults(
         by_service[fault.component].append(fault)
     false = [
         j for j in jumps
-        if not any(j.start <= f.end and j.end >= f.start for f in by_service.get(j.service, []))
+        if not any(overlaps(j, f) for f in by_service.get(j.service, []))
     ]
     starts = np.sort(np.array([f.start.value for f in faults], dtype=np.int64))
     window = int(minutes * 60e9)
