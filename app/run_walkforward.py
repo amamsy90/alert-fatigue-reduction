@@ -16,6 +16,7 @@ import pandas as pd
 
 from src.config import Config
 from src.experiment import faults_with_metric_data, load_gaia, run_window, score_window
+from src.tracking import GAIA_INPUTS, record_run
 
 
 def main() -> None:
@@ -57,6 +58,8 @@ def main() -> None:
     means = frame.groupby("queue")["detection_rate"].mean()
     print("Mean over folds: " + ", ".join(f"{q} {means[q]:.1%}" for q in means.index))
     print(f"Wrote {out}")
+    record_run("walkforward_gaia", config=Config(), data=GAIA_INPUTS, outputs=[out],
+               metrics={f"mean.{q}": float(means[q]) for q in ("delta_5m", "jumps_tuned", "proposed") if q in means})
 
 
 if __name__ == "__main__":

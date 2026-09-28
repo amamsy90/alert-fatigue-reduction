@@ -39,6 +39,7 @@ from src.generic import (
     split_points,
 )
 from src.queue import build_queue, spike_items
+from src.tracking import record_run
 
 ROOT = Path("data/smd")
 CACHE = Path("results/smd_cache")
@@ -101,6 +102,10 @@ def main() -> None:
     frame = pd.DataFrame(rows)
     out = Path("results") / "smd_eval.csv"
     frame.to_csv(out, index=False)
+    mine = frame[frame["queue"] == "your_queue"]
+    record_run("smd", config={"budgets": BUDGETS, "train_fraction": train_fraction}, data=[ROOT], outputs=[out],
+               metrics={f"K{k}.incidents": float(g["incidents_caught"].sum() / g["incidents"].sum())
+                        for k, g in mine.groupby("budget_k")})
     print("\nPer metric movement, mean detection over machines:")
     print(frame.pivot_table(index="budget_k", columns="queue", values="detection_rate").round(3).to_string())
     yq = frame[frame["queue"] == "your_queue"]

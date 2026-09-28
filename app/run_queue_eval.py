@@ -24,6 +24,7 @@ import pandas as pd
 
 from src.config import Config
 from src.experiment import MISS_CAUSES, load_gaia, miss_causes, run_window, score_window
+from src.tracking import GAIA_INPUTS, record_run
 
 
 def main() -> None:
@@ -60,6 +61,10 @@ def main() -> None:
     pd.DataFrame(rows).to_csv(out, index=False)
     pd.DataFrame(misses).to_csv(out.parent / "miss_causes_gaia.csv", index=False)
     print(f"Results written to {out} and {out.parent / 'miss_causes_gaia.csv'}")
+    k20 = {r["queue"]: r for r in rows if r["budget_k"] == 20}
+    record_run("queue_eval_gaia", config=config, data=GAIA_INPUTS,
+               outputs=[out, out.parent / "miss_causes_gaia.csv"],
+               metrics={f"K20.{q}": k20[q]["detection_rate"] for q in ("delta_5m", "jumps_tuned", "proposed") if q in k20})
 
 
 if __name__ == "__main__":
