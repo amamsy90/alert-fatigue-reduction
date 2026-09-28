@@ -1,0 +1,125 @@
+"""Model versions: every trained model kept with a card, a promotion gate, rollback."""
+from __future__ import annotations
+
+import logging
+
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+from product import model_store
+from product.model_store import SavedModel, activate_version, load_model, load_registry, register_model
+from product.pipeline import promotion_decision
+from product.store import QueueStore
+from src.config import Config
+
+
+def _model(threshold: float) -> SavedModel:
+    return SavedModel(None, threshold, 0.1, "real", pd.Timestamp.now("UTC").isoformat(), 50, 0)
+
+
+@pytest.fixture()
+def env(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODEL_PATH", str(tmp_path / "model.pkl"))
+    return tmp_path
+
+
+def test_every_model_gets_a_version_and_a_card(env):
+    first = register_model(_model(0.5), {"data_fingerprint": "abc", "gate": "no active model yet"}, promote=True)
+    assert first["version"] == "v0001" and first["promoted"]
+    assert first["data_fingerprint"] == "abc" and first["code_version"]
+    assert load_registry()["active"] == "v0001"
+    assert load_model().escalate_threshold == 0.5
+
+
+def test_a_candidate_is_kept_but_not_activated(env):
+    register_model(_model(0.5), {}, promote=True)
+    second = register_model(_model(0.9), {"gate": "worse"}, promote=False)
+    assert second["version"] == "v0002" and not second["promoted"]
+    assert load_registry()["active"] == "v0001"
+    assert load_model().escalate_threshold == 0.5  # live batches still use v0001
+    assert (env / "models" / "v0002.pkl").exists()
+
+
+def test_rollback_restores_an_earlier_version_and_refuses_a_changed_file(env):
+    register_model(_model(0.5), {}, promote=True)
+    register_model(_model(0.7), {}, promote=True)
+    assert load_model().escalate_threshold == 0.7
+    activate_version("v0001")
+    assert load_model().escalate_threshold == 0.5
+    assert [h["version"] for h in load_registry()["history"]] == ["v0001", "v0002", "v0001"]
+    (env / "models" / "v0002.pkl").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="changed"):
+        activate_version("v0002")
+    with pytest.raises(KeyError):
+        activate_version("v0099")
+
+
+def _report(fp: int, fn: int) -> dict:
+    return {"fp": fp, "fn": fn, "tp": 5, "precision": 0.5, "recall": 0.5}
+
+
+def test_promotion_gate_compares_held_out_cost_on_the_same_alerts():
+    cfg = Config()  # a miss costs 10, a false alarm 1
+    assert promotion_decision(None, has_incumbent=False, config=cfg)[0]
+    better = {"test": _report(fp=3, fn=1), "incumbent_test": _report(fp=1, fn=2)}  # 13 vs 21
+    assert promotion_decision(better, True, cfg) == (True, "held-out cost 13 <= active model's 21")
+    worse = {"test": _report(fp=0, fn=3), "incumbent_test": _report(fp=5, fn=1)}  # 30 vs 15
+    promote, reason = promotion_decision(worse, True, cfg)
+    assert not promote and "kept as a candidate" in reason
+    assert not promotion_decision({"test": None}, True, cfg)[0]  # no held-out window: keep the active model
+
+
+@pytest.fixture()
+def client(env, monkeypatch):
+    for name in ("QUEUE_DB", "SETTINGS_PATH", "OPS_PATH"):
+        monkeypatch.setenv(name, str(env / name.lower()))
+    for name in ("APP_PASSWORD", "ALLOW_OPEN_ACCESS"):
+        monkeypatch.delenv(name, raising=False)
+    import product.app as app_mod
+
+    app_mod.use_store(QueueStore(env / "queue.db"))
+    return TestClient(app_mod.app)
+
+
+def _labelled_upload() -> dict:
+    rows = []
+    for day in range(10):
+        for i in range(12):
+            source = "webservice1" if i < 3 else "dbservice1"
+            rows.append(f"a{day:02d}{i:02d},2026-01-{day + 1:02d}T12:{i:02d}:00Z,{source},log,warning,event {day}-{i}")
+    alerts = "alert_id,timestamp,source,alert_type,severity,message\n" + "\n".join(rows) + "\n"
+    faults = "fault_id,start,end,component,description\n" + "".join(
+        f"f{day},2026-01-{day + 1:02d}T11:58:00Z,2026-01-{day + 1:02d}T12:03:00Z,webservice1,x\n" for day in range(10)
+    )
+    return {"alerts_file": ("alerts.csv", alerts, "text/csv"), "faults_file": ("faults.csv", faults, "text/csv")}
+
+
+def test_training_through_the_app_registers_versions_with_cards(client):
+    first = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()
+    training = first["meta"]["training"]
+    assert training["model_version"] == "v0001" and training["promoted"]
+    again = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()["meta"]["training"]
+    assert again["model_version"] == "v0002"
+    assert again["incumbent_test"] is not None  # the active model was scored on the same held-out alerts
+    listing = client.get("/models").json()
+    assert [v["version"] for v in listing["versions"]] == ["v0001", "v0002"]
+    card = listing["versions"][0]
+    assert card["data_fingerprint"] and card["held_out"]["alerts"] > 0 and card["gate"]
+    assert client.get("/model").json()["version"] == listing["active"]
+
+
+def test_rollback_through_the_api_is_audited(client, caplog):
+    client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"})
+    register_model(_model(0.99), {}, promote=True)
+    assert client.get("/models").json()["active"] == "v0002"
+    with caplog.at_level(logging.INFO, logger="oncall.audit"):
+        res = client.post("/models/v0001/activate")
+    assert res.status_code == 200 and res.json()["active"] == "v0001"
+    assert client.post("/models/v0042/activate").status_code == 404
+    assert client.post("/models/latest/activate").status_code == 400
+    assert any("POST /models/v0001/activate status=200" in r.getMessage() for r in caplog.records)
+
+
+def test_model_store_paths_follow_model_path(env):
+    assert model_store.models_dir() == env / "models"

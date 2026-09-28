@@ -4,23 +4,13 @@ services:
     ports:
       # Bound to this machine only. Change to "8080:8080" to share it, and set a password first.
       - "127.0.0.1:8080:8080"
+    # Settings per environment: ENV_FILE=deploy/prod.env docker compose up -d (default: dev).
+    env_file:
+      - ${ENV_FILE:-deploy/dev.env}
     environment:
-      SHADOW_MODE: "1"             # 0 = page when Live + a channel; UI override wins once saved
+      # Only the database path is fixed here; everything else comes from the env file
+      # (deploy/dev.env, deploy/test.env, deploy/prod.env) so one file describes an environment.
       QUEUE_DB: /app/product/data/queue.db
-      APP_USER: ${APP_USER:-oncall}
-      APP_PASSWORD: ${APP_PASSWORD:-}
-      INGEST_TOKEN: ${INGEST_TOKEN:-}   # Alertmanager: http_config.authorization.credentials
-      JUMP_MODE: ${JUMP_MODE:-absolute} # relative for metrics that are not memory in bytes
-      JUMP_BYTES: ${JUMP_BYTES:-500000000}
-      JUMP_RATIO: ${JUMP_RATIO:-0.3}
-      ALERT_SHARE: ${ALERT_SHARE:-0.25}
-      # Set 1 for a private Prometheus (Docker/k8s) on a trusted network; metadata is always refused.
-      PROM_ALLOW_PRIVATE: ${PROM_ALLOW_PRIVATE:-0}
-      # PROM_URL: http://host.docker.internal:9090
-      # PROM_SERVICE_LABEL: app
-      # PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
-      # SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
-      # OPSGENIE_API_KEY: ${OPSGENIE_API_KEY:-}
     volumes:
       - queue-data:/app/product/data
       - ./data/gaia_raw:/app/data/gaia_raw:ro

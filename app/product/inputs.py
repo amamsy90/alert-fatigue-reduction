@@ -17,6 +17,7 @@ from src.ingestion import align_alerts_to_faults, load_alerts, load_faults
 from src.memory_spikes import load_metric_folder
 from src.sample_data import generate_demo_day
 
+from .alertmanager import validate_rows
 from .settings import config_from_env
 
 APP_ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,9 @@ def _default_paths() -> dict[str, Path]:
 
 
 def load_alerts_from_dicts(rows: list[dict]) -> list[Alert]:
+    """Alert rows (webhook or upload) as Alerts, oldest first. Unusable rows are
+    skipped, so a buffer written before ingest validation still scores."""
+    rows, _ = validate_rows(rows)
     alerts: list[Alert] = []
     for i, row in enumerate(rows):
         ts = pd.to_datetime(row["timestamp"], utc=True)

@@ -1,5 +1,5 @@
 // Minimal Markdown -> DOCX for this project's docs. Needs Node + `npm install docx`.
-// Regenerate the Word files: node tools/md2docx.js FINAL_REPORT.md Alert_Fatigue_Final_Report.docx "" <folder with figure PNGs>
+// Regenerate the Word files: node tools/md2docx.js FINAL_REPORT.md submission/Alert_Fatigue_Final_Report.docx "" <folder with figure PNGs>
 // usage: node md2docx.js input.md output.docx "Subtitle line" [imageDir]
 const fs = require("fs");
 const path = require("path");

@@ -8,8 +8,9 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 
-from product.alertmanager import looks_like_alertmanager, normalize_ingest
-from product.model_store import load_model
+from product.alertmanager import looks_like_alertmanager, normalize_ingest, validate_rows
+from product.model_store import activate_version, load_model, load_registry
+from product.monitoring import record_ingest
 from product.pipeline import JobBusy, run_job
 from product.web import context as ctx
 from product.web.schemas import FeedbackRequest, RunRequest
@@ -96,7 +97,28 @@ def model_status():
     saved = load_model()
     if saved is None:
         return {"saved": False}
-    return {"saved": True, **saved.status(ctx.STORE.feedback_summary()["real"])}
+    return {"saved": True, "version": load_registry()["active"], **saved.status(ctx.STORE.feedback_summary()["real"])}
+
+
+@router.get("/models")
+def list_models():
+    """Every kept model version with its model card; `active` scores live batches."""
+    registry = load_registry()
+    return {"active": registry["active"], "versions": registry["versions"], "history": registry.get("history", [])}
+
+
+@router.post("/models/{version}/activate")
+def activate_model(version: str):
+    """Roll back (or forward) to a kept version. The file's SHA-256 must still match."""
+    if not version.startswith("v") or not version[1:].isdigit():
+        raise HTTPException(400, "Bad model version")
+    try:
+        entry = activate_version(version)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"active": entry["version"], "model": entry}
 
 
 @router.get("/feedback/faults.csv")
@@ -161,6 +183,10 @@ async def ingest_alerts(request: Request):
         raise HTTPException(400, f"Invalid JSON: {exc}") from exc
     if not rows:
         return {"buffered_batches": 0, "received": 0, "note": "no firing alerts"}
+    received = len(rows)
+    rows, rejected = validate_rows(rows)
+    if not rows:
+        raise HTTPException(400, {"message": "no usable alerts", "rejected": len(rejected), "errors": rejected[:5]})
     score_now = False
     budget_k = 20
     if isinstance(payload, dict) and not looks_like_alertmanager(payload):
@@ -171,7 +197,10 @@ async def ingest_alerts(request: Request):
     if request.query_params.get("budget_k"):
         budget_k = _budget(request.query_params["budget_k"])
     buffered, duplicates = ctx.STORE.buffer_new_alerts(rows)
-    response: dict = {"buffered_batches": buffered, "received": len(rows), "duplicates": duplicates}
+    record_ingest(len(rows) - duplicates, duplicates)
+    response: dict = {"buffered_batches": buffered, "received": received, "duplicates": duplicates}
+    if rejected:
+        response.update(rejected=len(rejected), errors=rejected[:5])
     if score_now:
         rows_now, last_id = ctx.STORE.peek_buffer()
         try:
