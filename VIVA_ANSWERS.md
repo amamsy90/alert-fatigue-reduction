@@ -73,6 +73,22 @@ What is not new, if they push: the jump rule is a threshold on a rolling median.
 
 ---
 
+## 5. How is it run as a product? (MLOps, monitoring, deployment)
+
+**"What happens when you retrain?"** Every trained model is saved as a new version (`v0001`, `v0002`, ...) with a model card: when, on which data (a fingerprint), with which code (the git commit), and how it did on its held-out window. It becomes the live model only if its held-out cost (10 x misses + false alarms) is no worse than the current model's **on the same held-out alerts**. Otherwise it stays a candidate. If a live model turns bad, the operator rolls back with one call (`POST /models/{version}/activate`); the file's hash is checked and the change is audited. See `docs/mlops.md`.
+
+**"How do you know it still works next month?"** `/monitoring` checks p95 latency, error rate, failed pages, precision from the engineers' Real/Noise marks (target 0.7 once there are 20 marks), alert-volume drift (last batch vs the usual size), and monitoring gaps. `/metrics` gives the same to Prometheus with example alert rules. See `docs/monitoring.md`.
+
+**"How do you track experiments?"** Every experiment script appends a line to `app/results/experiments.jsonl`: commit, library versions, config, data fingerprint, output hashes, metrics, and why it was run. `run_validate.py` then checks the report's 51 numbers against the results.
+
+**"Development, test, production?"** Same image everywhere; only `app/deploy/*.env` differs. Dev on a laptop, test in CI plus a shadow instance on real traffic, production on the team server behind TLS with a password. Nothing pages until someone deliberately turns Live on. See `docs/deployment.md`.
+
+**"How fast is it?"** 50 concurrent users: 228 requests/s, p95 0.32 s, no errors. A 400-alert webhook batch scores in 0.2 s; the whole GAIA month in 27 s.
+
+**"What about privacy?"** Everything stays on the team's server. No external AI API. Messages are cut to 300 characters and IDs are normalised before learning. Only paging summaries leave, in Live mode, to the team's own tools. See `docs/privacy_responsible_ai.md`.
+
+**"What bug did testing find?"** A webhook row with no usable timestamp used to be buffered and then make every later scoring job fail. Rows are now validated at ingest, and bad ones are rejected with a reason (`tests/test_ai_inputs.py`).
+
 ## Demo script
 
 About five minutes. Defaults: shadow mode on, K = 20, leak rule on, no saved Evaluate settings.
@@ -92,4 +108,4 @@ About five minutes. Defaults: shadow mode on, K = 20, leak rule on, no saved Eva
    - Walk-forward, re-learned from the past only: detector **74.8%** (wins 8/8 weeks), full queue **71.3%** (ties the rate rule week by week), rate rule **70.7%**. The weak week is a monitoring outage (only 61% of that week's faults have any metric data), and the queue shows it as a gap.
 6. If they ask "does it only work because every fault is 1 GB?": on the real series, steps from 0.5 GB to 2 GB and one-minute spikes are caught at least 98% of the time by the jump rule; 0.25 GB is not; slow leaks need the leak rule (about 99% of 30-minute ramps, about 73% of 3-hour leaks). NAB is the check that it is not only microservices, and on Twitter volume it is no better than chance. Say that. It is in the report.
 
-Do not claim a GPT, do not claim the full queue beats the detector alone on GAIA, and do not quote `run_m1` / `run_m2` / `run_m4`.
+Do not claim a GPT, do not claim the full queue beats the detector alone on GAIA, and do not quote the alerts-only scripts in `app/experiments/legacy_alerts_only/`.
