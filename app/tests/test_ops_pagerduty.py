@@ -86,7 +86,21 @@ def test_routing_key_never_returned_full_on_get(ops_env):
     assert body["pagerduty"]["will_page"] is False  # still shadow
 
 
-def test_api_set_live_requires_confirm_and_key(ops_env):
+def _login(client, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    client.auth = ("oncall", "pw")
+
+
+def test_api_live_requires_a_password(ops_env):
+    ops_env.post("/ops/pagerduty/key", json={"routing_key": "rk_api_live"})
+    res = ops_env.post("/ops/shadow", json={"shadow_mode": False, "confirm": "LIVE"})
+    assert res.status_code == 400
+    assert "APP_PASSWORD" in res.json()["detail"]
+    assert ops_env.get("/connectors").json()["live"] is False
+
+
+def test_api_set_live_requires_confirm_and_key(ops_env, monkeypatch):
+    _login(ops_env, monkeypatch)
     no_key = ops_env.post("/ops/shadow", json={"shadow_mode": False, "confirm": "LIVE"})
     assert no_key.status_code == 400
     ops_env.post("/ops/pagerduty/key", json={"routing_key": "rk_api_live"})
@@ -110,7 +124,8 @@ def test_api_save_and_clear_routing_key(ops_env):
     assert cleared.json()["configured"] is False
 
 
-def test_test_page_only_when_live_and_key(ops_env):
+def test_test_page_only_when_live_and_key(ops_env, monkeypatch):
+    _login(ops_env, monkeypatch)
     assert ops_env.post("/ops/pagerduty/test").status_code == 400  # shadow, no key
     ops_env.post("/ops/pagerduty/key", json={"routing_key": "rk_live_test"})
     assert ops_env.post("/ops/pagerduty/test").status_code == 400  # still shadow

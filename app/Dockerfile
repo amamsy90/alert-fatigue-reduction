@@ -16,8 +16,9 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
 ENV PYTHONPATH=/app
 ENV SHADOW_MODE=1
 ENV QUEUE_DB=/app/product/data/queue.db
-# In-cluster / Compose Prometheus is almost always private; override to 0 to refuse.
-ENV PROM_ALLOW_PRIVATE=1
+# Private Prometheus (in-cluster / Compose) is refused by default (SSRF). Set 1 only when
+# the app sits on a trusted network; cloud metadata is always refused.
+ENV PROM_ALLOW_PRIVATE=0
 
 USER appuser
 
