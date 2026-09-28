@@ -25,16 +25,16 @@ Script: `python run_queue_eval.py` → `app/results/queue_eval_gaia.csv`
 | delta_5m (fair baseline) | 68.9% | 17.4 | 2.1 | 88% |
 | jumps_online | 67.8% | 17.5 | 2.4 | 86% |
 | **jumps_tuned** (detector alone) | **72.6%** | 17.1 | **1.0** | 94% |
-| **proposed** (jumps + leaks + gaps + alerts) | **70.2%** | 17.6 | 1.6 | 91% |
+| **proposed** (jumps + leaks + gaps + alerts) | **69.6%** | 17.7 | 1.8 | 90% |
 | jumps_hindsight (old headline, not causal) | 72.9% | 17.5 | 1.3 | 93% |
-| p3_ranker | 70.2% | 17.6 | 1.6 | 91% |
-| p3_grouped (2 min) | 71.5% | 17.5 | 1.6 | 91% |
-| p3_carryover (≤ 10 slots) | 74.4% | 18.6 | 1.6 | 91% |
+| p3_ranker | 69.7% | 17.7 | 1.8 | 90% |
+| p3_grouped (2 min) | 70.7% | 17.6 | 1.9 | 89% |
+| p3_carryover (≤ 10 slots) | 72.6% | 18.6 | 2.1 | 89% |
 | delta_5m_carryover | 72.5% | 18.5 | 2.4 | 87% |
 
-Oracle ceiling at K=20: **84.9%** (22 faults a day > 20 slots). Proposed at K=5 / 10 / 50: 19.5% / 38.6% / 85.8%.
+Oracle ceiling at K=20: **84.9%** (22 faults a day > 20 slots). Proposed at K=5 / 10 / 50: 19.5% / 38.8% / 85.8%.
 
-**Misses** (`results/miss_causes_gaia.csv`, proposed, K=20): 166 no metric data, 191 budget full, 4 no jump, 3 below threshold.
+**Misses** (`results/miss_causes_gaia.csv`, proposed, K=20): 166 no metric data, 198 budget full, 4 no jump, 4 below threshold.
 
 ## Walk-forward
 
@@ -45,15 +45,15 @@ Everything learned is re-learned before each later week; the week is scored once
 | Fold | Test week | Faults | With metric data | delta_5m | jumps_tuned | proposed | p3_carryover |
 |---|---|---|---|---|---|---|---|
 | 1 | 8–15 Jul | 161 | 100% | 77.6% | 84.5% | 82.0% | 84.5% |
-| 2 | 15–22 Jul | 134 | 91% | 73.9% | 81.3% | 77.6% | 84.3% |
-| 3 | 22–29 Jul | 162 | 94% | 72.2% | 77.2% | 71.0% | 74.7% |
-| 4 | 29 Jul–5 Aug | 163 | 82% | 67.5% | 69.3% | 67.5% | 71.8% |
+| 2 | 15–22 Jul | 134 | 91% | 73.9% | 81.3% | 74.6% | 79.8% |
+| 3 | 22–29 Jul | 162 | 94% | 72.2% | 77.2% | 71.0% | 73.5% |
+| 4 | 29 Jul–5 Aug | 163 | 82% | 67.5% | 69.3% | 67.5% | 69.9% |
 | 5 | 5–12 Aug | 162 | 84% | 69.1% | 71.6% | 71.0% | 77.2% |
-| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 77.0% | 82.0% |
-| 7 | 19–26 Aug | 173 | 61% | 51.4% | 52.0% | 52.0% | 57.8% |
-| 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 82.2% | 83.0% |
+| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 74.1% | 79.9% |
+| 7 | 19–26 Aug | 173 | 61% | 51.4% | 52.0% | 50.9% | 54.9% |
+| 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 79.1% | 79.1% |
 
-Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **72.5%** (95% CI 65.7–78.3%; 6 wins, 1 loss, 1 tie, p = 0.0625); p3_carryover **76.9%** vs delta_5m_carryover 74.3% (8/8, p = 0.0039). Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
+Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **71.3%** (95% CI 64.5–76.7%; 4 wins, 3 losses, 1 tie, p = 0.5); p3_carryover **74.8%** vs delta_5m_carryover 74.3% (3 of 6 decided weeks, p = 0.66). Numbers after the look-ahead fixes (FINAL_REPORT §5); `run_validate.py` checks them against the report's Checked numbers table. Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
 
 ## Signals and checks
 
@@ -90,7 +90,7 @@ Script: `python ../tools/fetch_nab.py && python run_nab.py` → `app/results/nab
 | realAWSCloudwatch | 17 | 70.6% | 57.6% |
 | realAdExchange | 6 | 83.3% | 58.0% |
 | realKnownCause | 13 | 38.5% | 15.4% |
-| realTraffic | 11 | 45.5% | 12.7% |
+| realTraffic | 11 | 36.4% | 11.6% |
 | realTweets | 11 | 36.4% | 36.0% |
 
 ## Second benchmark: other fault types (SMD)

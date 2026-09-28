@@ -112,7 +112,7 @@ Sweep K = 5, 10, 20, 50.
 
 A fault is caught if a surfaced alert carries its label **or** a shown jump on its service overlaps its window.
 
-At K = 20 on the test period: full queue **70.2%**, jumps with learned threshold **72.6%**, Prometheus-style rate rule **68.9%**, log severity **0%**. Best possible 84.9%.
+At K = 20 on the test period: full queue **69.6%**, jumps with learned threshold **72.6%**, Prometheus-style rate rule **68.9%**, log severity **0%**. Best possible 84.9%.
 
 ### 4.6 Evaluation harness
 
@@ -198,12 +198,12 @@ At K = 20 on the test period: full queue **70.2%**, jumps with learned threshold
 | Static `memory > p99` | 57.2%; 3.0 false/day |
 | Rate rule `delta(mem[5m]) > 0.5 GB` | 68.9%; 2.1 false/day |
 | Jumps + learned threshold | **72.6%**; 1.0 false/day |
-| Full queue (jumps + leaks + gaps + alerts) | **70.2%**; 1.6 false/day; precision 91% |
-| Carry-over ≤ 10 slots (Phase 3) | 74.4% (rate rule with the same: 72.5%) |
+| Full queue (jumps + leaks + gaps + alerts) | **69.6%**; 1.8 false/day; precision 90% |
+| Carry-over ≤ 10 slots (Phase 3) | 72.6% (rate rule with the same: 72.5%) |
 | Best possible (oracle) | 84.9% |
 | Full queue at K=5 / 10 / 50 | 19.5% / 38.6% / 85.8% |
-| Misses at K=20 | 166 no data, 191 budget full, 7 detector |
-| Walk-forward mean (8 weeks) | full queue 72.5% (CI 65.7–78.3%); jumps + threshold 74.8% (8/8 wins vs rate rule); rate rule 70.7%; carry-over 76.9% |
+| Misses at K=20 | 166 no data, 198 budget full, 8 detector |
+| Walk-forward mean (8 weeks) | full queue 71.3% (CI 64.5–76.7%); jumps + threshold 74.8% (8/8 wins vs rate rule); rate rule 70.7%; carry-over 74.8% |
 | Jump overlap where metric data exists | 99.6% |
 | Test faults with no log and no metric data | 10.8% |
 | Fault start → jump confirmed | median 0.72 min |
@@ -214,7 +214,7 @@ The review record is [VALIDATION.md](VALIDATION.md). In short:
 
 - **Train** on days 0–7 only for the main numbers: jump size, classifier, cost threshold.
 - **Test** on the following 55 days, never shuffled.
-- **Walk-forward:** re-learn the classifier, its threshold and the jump confirmation threshold before each later week; jump size stays 0.5 GB. Full queue mean 72.5% (95% CI 65.7–78.3%).
+- **Walk-forward:** re-learn the classifier, its threshold and the jump confirmation threshold before each later week; jump size stays 0.5 GB. Full queue mean 71.3% (95% CI 64.5–76.7%).
 - **`run_stats.py`** writes the interval, sign tests vs the rate rule, per-service rates, signal counts (incl. no-metric-data), chance overlap and confirmation times.
 - **`run_m1` / `run_m2` / `run_m4` / `run_stretch`** score alerts only. They are not the system result.
 - **`python run_validate.py`** checks that the csv files still match the published headlines.
