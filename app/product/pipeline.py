@@ -8,9 +8,9 @@ alert classifier takes over the alert share of the budget.
 from __future__ import annotations
 
 import os
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, replace
-import threading
 from pathlib import Path
 
 import pandas as pd
@@ -566,16 +566,17 @@ def _run_job_locked(
     decisions = result.decisions
     # Hard safety: sample / GAIA / Evaluate-upload never page, even if Live is on.
     # Only ingest (live webhook) jobs may call notify_escalations when Live + key.
+    from .notifiers import notify_opsgenie, notify_slack
     from .ops import (
         PAGEABLE_MODES,
         can_page,
         channel_cutoff,
         configured_channels,
+        login_configured,
         page_cutoff,
         set_channel_watermark,
         set_page_watermark,
     )
-    from .notifiers import notify_opsgenie, notify_slack
     from .pagerduty import notify_escalations, page_items, would_have_paged
 
     # Ingest jobs re-score the metric history; only items shown since the last
@@ -593,6 +594,8 @@ def _run_job_locked(
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     elif not configured_channels():
         page = {"sent": 0, "failed": 0, "skipped": "no channel configured"}
+    elif not login_configured():
+        page = {"sent": 0, "failed": 0, "skipped": "no login password (APP_PASSWORD)"}
     elif not can_page():
         page = {"sent": 0, "failed": 0, "skipped": "shadow mode"}
     else:

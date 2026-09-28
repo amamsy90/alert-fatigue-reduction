@@ -271,9 +271,16 @@ def configured_channels() -> list[str]:
     return out
 
 
+def login_configured() -> bool:
+    """A login password is set (APP_PASSWORD)."""
+    return bool(os.environ.get("APP_PASSWORD"))
+
+
 def can_page() -> bool:
-    """Live mode and at least one channel (PagerDuty, Slack, Opsgenie) are required."""
-    return (not get_shadow_mode()) and bool(configured_channels())
+    """Live mode, at least one channel (PagerDuty, Slack, Opsgenie) and a login
+    password are all required. The password check is here as well as on the
+    Live switch, so SHADOW_MODE=0 in the environment cannot bypass it."""
+    return (not get_shadow_mode()) and bool(configured_channels()) and login_configured()
 
 
 # Modes that may call notify_escalations when Live + key. Sample, GAIA,
@@ -379,7 +386,10 @@ def prom_allow_private() -> bool:
     return os.environ.get("PROM_ALLOW_PRIVATE", "0") == "1"
 
 
-def _host_addresses(host: str) -> list[ipaddress._BaseAddress]:
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+
+def _host_addresses(host: str) -> list[IPAddress]:
     """Every address a Prometheus host means: IP literals (including legacy forms
     such as 127.1, 2130706433 or 0x7f000001) and whatever DNS returns.
 
@@ -399,7 +409,7 @@ def _host_addresses(host: str) -> list[ipaddress._BaseAddress]:
         infos = socket.getaddrinfo(host, None)
     except (OSError, UnicodeError):
         return []
-    out = []
+    out: list[IPAddress] = []
     for info in infos:
         addr = str(info[4][0]).split("%", 1)[0]  # drop an IPv6 zone id
         try:
