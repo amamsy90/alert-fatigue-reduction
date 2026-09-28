@@ -8,3 +8,6 @@ data/sample_product/
 examples/shop/
 product/data/
 results/smd_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/

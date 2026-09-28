@@ -4,31 +4,30 @@ from __future__ import annotations
 import base64
 import binascii
 import ipaddress
+import json
 import logging
 import os
 import secrets
+import shutil
 import tempfile
 import threading
+import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-import json
-import shutil
-import uuid
-
 from product import datasets as example_data
-from product.alertmanager import looks_like_alertmanager, normalize_ingest
-from product.settings import clear_saved, load_saved, save_saved
 from product import ops as ops_mod
+from product.alertmanager import looks_like_alertmanager, normalize_ingest
 from product.model_store import load_model
 from product.pipeline import JobBusy, run_job
 from product.prometheus_adapter import probe_prometheus, run_prometheus_test
+from product.settings import clear_saved, load_saved, save_saved
 from product.store import QueueStore
 
 APP_DIR = Path(__file__).resolve().parent

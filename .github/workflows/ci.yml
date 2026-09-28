@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+env:
+  # mypy errors left from before type checking was added. CI fails if the count
+  # goes up; lower this number whenever a change removes some (docs/test_plan.md).
+  MYPY_BUDGET: 39
+  COVERAGE_MIN: 85
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --group dev
+      - name: requirements.lock matches uv.lock
+        run: diff <(uv export --format requirements-txt --no-dev --locked --no-emit-project -q | grep -v '^#') <(grep -v '^#' requirements.lock)
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Type check (errors may only go down)
+        run: |
+          set +e
+          uv run mypy > mypy.txt 2>&1
+          status=$?
+          set -e
+          cat mypy.txt
+          if grep -q "^Success: no issues found" mypy.txt; then n=0
+          elif grep -qE "^Found [0-9]+ errors? in" mypy.txt; then n=$(grep -oE "^Found [0-9]+" mypy.txt | grep -oE "[0-9]+")
+          else echo "mypy did not finish (exit $status)"; exit 1; fi
+          echo "mypy errors: $n (budget $MYPY_BUDGET)"
+          test "$n" -le "$MYPY_BUDGET"
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --group dev --python ${{ matrix.python }}
+      - name: Tests with coverage
+        run: uv run pytest -q --cov --cov-report=term --cov-fail-under=$COVERAGE_MIN
+      - name: Report numbers match the result files
+        run: uv run python run_validate.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t oncall-queue:ci .
+      - name: Container starts and answers /health
+        run: |
+          docker run -d --name oq -p 8080:8080 oncall-queue:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs oq
+          exit 1
