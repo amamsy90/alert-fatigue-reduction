@@ -107,7 +107,7 @@ Script: `python ../tools/fetch_smd.py && python run_smd.py` → `app/results/smd
 
 ## Older scripts (alerts only)
 
-`run_m1.py`, `run_m2.py`, `run_m4.py`, `run_stretch.py`, `run_memory_clf.py` score log alerts only and do not count a jump as a catch. Do not quote them as the system result.
+The scripts in `app/experiments/legacy_alerts_only/` (`run_m1`, `run_m2`, `run_m4`, `run_stretch`, `run_memory_clf`) score log alerts only and do not count a jump as a catch. Do not quote them as the system result.
 
 ## Reproduce
 

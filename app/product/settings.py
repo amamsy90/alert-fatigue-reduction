@@ -17,16 +17,23 @@
 """
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 from src.config import Config
 
 
-def _float(name: str, default: float | None) -> float | None:
+def _optional_float(name: str) -> float | None:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
-        return default
+        return None
     return float(raw)
+
+
+def _float(name: str, default: float) -> float:
+    value = _optional_float(name)
+    return default if value is None else value
 
 
 def config_from_env(budget_k: int = 20) -> Config:
@@ -37,7 +44,7 @@ def config_from_env(budget_k: int = 20) -> Config:
         memory_jump_bytes=_float("JUMP_BYTES", base.memory_jump_bytes),
         memory_jump_ratio=_float("JUMP_RATIO", base.memory_jump_ratio),
         memory_jump_window_minutes=int(_float("JUMP_WINDOW_MINUTES", base.memory_jump_window_minutes)),
-        confirm_min_rise=_float("CONFIRM_MIN_RISE", None),
+        confirm_min_rise=_optional_float("CONFIRM_MIN_RISE"),
         alert_share=_float("ALERT_SHARE", base.alert_share),
         gap_minutes=int(_float("GAP_MINUTES", base.gap_minutes)),
         day_offset_hours=_float("DAY_OFFSET_HOURS", base.day_offset_hours),
@@ -52,8 +59,6 @@ def config_from_env(budget_k: int = 20) -> Config:
 # Settings saved from the "Evaluate my data" page (or `cli tune`). They replace
 # the built-in memory-jump rule for the live queue until they are reset.
 
-import json  # noqa: E402
-from pathlib import Path  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parent / "data" / "settings.json"
 
