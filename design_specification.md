@@ -118,7 +118,7 @@ At K = 20 on the test period: full queue **69.6%**, jumps with learned threshold
 
 - Baselines: log severity + exact duplicates; static `memory > train p99`; rate rule `delta(mem[5m]) > 0.5 GB`. All go through the same causal queue.
 - Metrics: alert precision/recall; jump overlap and false jumps; reduction rate; incident detection; MTTA (injection → first shown item); false items per day; cost-weighted error (miss = 10×).
-- Scripts: `run_m1.py` (baseline), `run_m2.py` (classifier), `run_memory.py` / `run_memory_clf.py` (jumps), `run_m4.py` (alert policy), `run_stretch.py` (ask-a-person, alerts only), `run_queue_eval.py` (whole queue), `run_walkforward.py`, `run_stats.py`.
+- Scripts: `run_memory.py` (jumps), `run_queue_eval.py` (whole queue), `run_walkforward.py`, `run_stats.py`, `run_robustness.py`, `run_nab.py`, `run_smd.py`. The alerts-only milestone scripts (baseline, classifier, alert policy, ask-a-person) are in `app/experiments/legacy_alerts_only/`.
 - Honest limits: every GAIA fault is the same 1 GB, 600 s memory program. Time to confirm is measured from the confirming point: median 0.72 min (30 s sampling).
 
 ### 4.7 Product (local on-call app)

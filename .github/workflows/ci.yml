@@ -15,7 +15,7 @@ defaults:
 env:
   # mypy errors left from before type checking was added. CI fails if the count
   # goes up; lower this number whenever a change removes some (docs/test_plan.md).
-  MYPY_BUDGET: 39
+  MYPY_BUDGET: 0
   COVERAGE_MIN: 85
 
 jobs:

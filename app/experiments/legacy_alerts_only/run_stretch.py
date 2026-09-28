@@ -5,8 +5,8 @@ M4 policy as long as those faults fit in K. The rest of the budget is a review
 queue. The written report shows how the mix changes at K = 5, 10, 20, 50.
 
 Usage:
-    python run_stretch.py --gaia-run data/gaia_raw/run/run
-    python run_stretch.py --sample
+    python -m experiments.legacy_alerts_only.run_stretch --gaia-run data/gaia_raw/run/run
+    python -m experiments.legacy_alerts_only.run_stretch --sample
 """
 from __future__ import annotations
 

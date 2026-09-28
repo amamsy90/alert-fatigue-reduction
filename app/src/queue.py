@@ -32,10 +32,24 @@ class QueueItem:
     shown_at: pd.Timestamp
     kind: str  # "jump" | "gap" | "rule" | "alert"
     service: str
-    payload: object  # Spike or Alert
+    payload: Spike | Alert
     # An alert on a service whose shown jump is still running rides on that jump:
     # it is shown inside the jump item and uses no budget slot.
     attached: bool = False
+
+    @property
+    def spike(self) -> Spike:
+        """The metric episode of a jump, leak, rule or gap item."""
+        if not isinstance(self.payload, Spike):
+            raise TypeError(f"{self.kind} item has no spike")
+        return self.payload
+
+    @property
+    def alert(self) -> Alert:
+        """The log alert of an alert item."""
+        if not isinstance(self.payload, Alert):
+            raise TypeError(f"{self.kind} item has no alert")
+        return self.payload
 
 
 def confirm_gate(spike: Spike, config: Config) -> float | None:
@@ -125,7 +139,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
                 ):
                     item.attached = True
                     shown.append(item)
-                    running[item.service].append(item.payload)
+                    running[item.service].append(item.spike)
                     continue
                 if used >= today:
                     continue
@@ -138,7 +152,7 @@ def build_queue(items: list[QueueItem], config: Config) -> list[QueueItem]:
             used += 1
             shown.append(item)
             if item.kind in METRIC_KINDS:
-                running[item.service].append(item.payload)
+                running[item.service].append(item.spike)
                 last_group = item
         carry = min(config.carry_over_max, max(0, today - used)) if config.carry_over_max > 0 else 0
     return shown
@@ -199,13 +213,14 @@ def score_queue(
             gap_items += 1
             services = set(item.service.split(","))
             for f in faults:
-                if f.component in services and item.payload.start <= f.start <= item.payload.end:
+                if f.component in services and item.spike.start <= f.start <= item.spike.end:
                     blind.add(f.fault_id)
             continue
         if item.kind == "alert":
-            hit_ids = [item.payload.fault_id] if item.payload.fault_id in known else []
+            fid = item.alert.fault_id
+            hit_ids = [fid] if fid is not None and fid in known else []
         else:
-            hit_ids = [f.fault_id for f in spike_hits(item.payload, by_service)]
+            hit_ids = [f.fault_id for f in spike_hits(item.spike, by_service)]
         if not hit_ids and not item.attached:
             false_items += 1
         if hit_ids and not item.attached:

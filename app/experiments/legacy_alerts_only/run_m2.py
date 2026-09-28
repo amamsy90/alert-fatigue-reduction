@@ -4,8 +4,8 @@ Trains on week 1 and scores week 2. At each daily budget K the classifier
 must beat the baseline's precision and recall.
 
 Usage:
-    python run_m2.py --sample
-    python run_m2.py --gaia-run data/gaia_raw/run/run
+    python -m experiments.legacy_alerts_only.run_m2 --sample
+    python -m experiments.legacy_alerts_only.run_m2 --gaia-run data/gaia_raw/run/run
 """
 from __future__ import annotations
 
