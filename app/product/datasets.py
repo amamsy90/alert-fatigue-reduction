@@ -34,8 +34,10 @@ def _shop_files() -> dict:
         import importlib.util
 
         spec = importlib.util.spec_from_file_location("make_business_example", EXAMPLES / "make_business_example.py")
+        if spec is None or spec.loader is None:
+            raise FileNotFoundError(EXAMPLES / "make_business_example.py")
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        spec.loader.exec_module(module)
         module.main()
     return {"metrics": folder / "orders.csv", "incidents": folder / "incidents.csv",
             "events": folder / "notifications.csv"}

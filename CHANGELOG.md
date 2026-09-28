@@ -4,6 +4,14 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased] — toward 1.0.0
 
+### Changed (Phase 2 refactor — no result changed; GAIA and NAB reruns are identical)
+- `product/app.py` split into `product/web/` (security, schemas, uploads, context, three route modules).
+- `product/pipeline.py` split into `inputs.py`, `labels.py`, `paging.py`; `run_job` is a short orchestrator.
+- One definition of a catch and one threshold search in `src/scoring.py`, replacing four hand-written overlap checks and two copies of the tuning loop.
+- `QueueItem.payload` is typed; mypy 39 errors → 0 (CI budget 0).
+- Alerts-only milestone scripts moved to `app/experiments/legacy_alerts_only/`; deck builder to `tools/build_rehearsal.py`.
+- Tests for `experiment.py`, `scoring.py` and `settings.py` (186 → 200 tests, coverage 86% → 89%).
+
 ### Added
 - Requirements with IDs, user stories and a traceability matrix (`docs/requirements.md`).
 - Architecture diagrams: context, components, ingest-to-page sequence, deployment, data model (`docs/architecture.md`).

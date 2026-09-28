@@ -251,7 +251,7 @@ def build():
         ("Static rule: memory > p99", "57.2%", "16.0", "3.0"),
         ("Prometheus rate rule: delta(mem[5m]) > 0.5 GB", "68.9%", "17.4", "2.1"),
         ("Jump rule + week-1 threshold", "72.6%", "17.1", "1.0"),
-        ("Full queue: jumps + leaks + gaps + alerts", "70.2%", "17.6", "1.6"),
+        ("Full queue: jumps + leaks + gaps + alerts", "69.6%", "17.7", "1.8"),
     )
     table = s.shapes.add_table(len(rows), 4, Inches(0.55), Inches(1.2), Inches(12.2), Inches(2.9)).table
     widths = (Inches(6.4), Inches(2.0), Inches(1.9), Inches(1.9))

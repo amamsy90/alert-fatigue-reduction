@@ -33,66 +33,79 @@ The code has two layers: a library that knows nothing about HTTP (`app/src/`) an
 
 ```mermaid
 flowchart TB
-    subgraph product["app/product — web app and connectors"]
-        api["app.py\nroutes + middleware\n(body limit, login, audit)"]
+    subgraph web["app/product/web — HTTP layer"]
+        app["app.py (wiring)\nmiddleware order + routers"]
+        sec["security.py\nlogin, CSRF, Host,\nbody limit, audit"]
+        routes["ops_routes · job_routes ·\nevaluate_routes"]
+        ctx["context.py\nstore in use, paths"]
+    end
+    subgraph product["app/product — jobs and connectors"]
         cli["cli.py\nscore / evaluate / tune"]
         pipe["pipeline.py\nrun_job, score_alerts"]
-        store["store.py\nSQLite: jobs, decisions,\njumps, feedback, buffer"]
-        ops["ops.py\nops.json: Live switch, keys,\nPrometheus URL, page marks"]
-        am["alertmanager.py\nnormalize webhook"]
+        inputs["inputs.py\nload a batch per mode"]
+        labels["labels.py\nReal / Noise marks"]
+        paging["paging.py\nwho is paged, page marks"]
+        store["store.py\nSQLite"]
+        ops["ops.py\nops.json, SSRF check"]
         prom["prometheus_adapter.py\nfetch, no redirects"]
-        notify["pagerduty.py, notifiers.py\nPagerDuty / Slack / Opsgenie"]
-        model["model_store.py\npickle + sha256"]
-        settings["settings.py\nsaved Evaluate settings"]
+        notify["pagerduty.py, notifiers.py"]
+        model["model_store.py · settings.py"]
     end
     subgraph lib["app/src — detection and evaluation library"]
         spikes["memory_spikes.py\njumps, leaks, gaps"]
-        clf["classifier.py, features.py\ncost-sensitive alert model"]
-        policy["policy.py, baseline.py\nalert decisions, first come"]
-        queue["queue.py\ncausal daily queue, scoring"]
+        clf["classifier.py, features.py"]
+        policy["policy.py, baseline.py\nfirst come"]
+        queue["queue.py\ncausal daily queue"]
+        scoring["scoring.py\none 'caught' rule,\none threshold search"]
         generic["generic.py\nEvaluate any data"]
-        exp["experiment.py, eval_stats.py\nGAIA runs, statistics"]
-        cfg["config.py, entities.py"]
+        exp["experiment.py, eval_stats.py"]
     end
-    api --> pipe
-    api --> store
-    api --> ops
-    api --> am
-    api --> generic
+    app --> sec
+    app --> routes
+    routes --> ctx
+    routes --> pipe
+    routes --> ops
+    routes --> generic
+    ctx --> store
     cli --> pipe
-    cli --> generic
+    pipe --> inputs
+    pipe --> labels
+    pipe --> paging
     pipe --> store
-    pipe --> ops
-    pipe --> prom
-    pipe --> notify
     pipe --> model
-    pipe --> settings
     pipe --> spikes
     pipe --> clf
     pipe --> policy
     pipe --> queue
+    inputs --> prom
     prom --> ops
-    generic --> spikes
+    paging --> ops
+    paging --> notify
+    queue --> scoring
+    spikes --> scoring
     generic --> queue
-    exp --> spikes
-    exp --> policy
     exp --> queue
-    spikes --> cfg
-    queue --> cfg
+    exp --> scoring
 ```
 
 | Module | Responsibility | Depends on |
 |---|---|---|
-| `product/app.py` | HTTP routes, request-body limit, login and CSRF / Host checks, audit log, upload handling | pipeline, store, ops, generic |
-| `product/pipeline.py` | One scoring job: load inputs, score, build the queue, page (if allowed), save | src, store, ops, notifiers |
+| `product/app.py` | Wires the middleware (audit → body limit → login) and the routers; nothing else | web |
+| `product/web/security.py` | Login, CSRF and Host checks, request-body limit, audit log | uploads |
+| `product/web/*_routes.py` | One module per route group: ops (health, connectors, `/ops/*`), jobs (queue, marks, uploads, ingest, pages), evaluate | context, pipeline, ops, generic |
+| `product/web/context.py` | The queue store in use (`use_store`) and file locations | store |
+| `product/pipeline.py` | `score_alerts` and the job orchestrator: load → label → score → save model → page → store | inputs, labels, paging, src |
+| `product/inputs.py` | Read one batch for a mode (sample, GAIA, upload, ingest with Prometheus) | src, prometheus_adapter |
+| `product/paging.py` | Decide whether a job may page, send to each channel, move the page marks | ops, pagerduty, notifiers |
 | `product/store.py` | SQLite persistence; one transaction per call | — |
 | `product/ops.py` | Operator state in `ops.json` (locked writes); SSRF check for Prometheus | — |
-| `src/memory_spikes.py` | Jump, leak and gap detection; `Spike.open_at` | config |
+| `src/memory_spikes.py` | Jump, leak and gap detection; `Spike.open_at` | scoring |
 | `src/policy.py`, `src/baseline.py` | Alert decisions under a daily budget, first come | config |
-| `src/queue.py` | Build the causal queue; score it against faults | memory_spikes |
+| `src/queue.py` | Build the causal queue; score it against faults | scoring |
+| `src/scoring.py` | The one definition of a catch (same service, overlapping window) and the one lowest-cost threshold search | config |
 | `src/generic.py` | Column detection, per-series tuning and the Evaluate report | memory_spikes, queue |
 
-Known design debt (Phase 2): `app.py`, `pipeline.py` and `generic.py` each hold several responsibilities, and the fault-overlap scoring appears in six places.
+Design debt left after Phase 2: `src/generic.py` (about 700 lines) still mixes CSV sniffing, tuning and the report, and `policy.tune_threshold` (per-alert labels) is a separate search from `scoring.lowest_cost_threshold` (distinct faults), by design.
 
 ---
 
@@ -104,9 +117,10 @@ Known design debt (Phase 2): `app.py`, `pipeline.py` and `generic.py` each hold 
 sequenceDiagram
     autonumber
     participant AM as Alertmanager
-    participant API as app.py
+    participant API as web/job_routes.py
     participant ST as store.py (SQLite)
     participant PL as pipeline.run_job
+    participant PG as paging.page_job
     participant OPS as ops.py
     participant PR as Prometheus
     participant LIB as src (detect, score, queue)
@@ -130,20 +144,21 @@ sequenceDiagram
     PL->>LIB: detect_jumps / detect_leaks / detect_gaps(now)
     PL->>LIB: classifier score → spike_review_decisions (first come)
     PL->>LIB: build_queue (≤ K a day, alerts ≤ share)
-    PL->>OPS: can_page? (Live + channel)
+    PL->>PG: page_job(mode, shadow, alerts, decisions, shown)
+    PG->>OPS: can_page? (Live + channel + password)
     loop each configured channel
-        PL->>OPS: channel_cutoff(channel)
-        PL->>CH: items shown since that channel's mark
-        PL->>OPS: set_channel_watermark (if delivered)
+        PG->>OPS: channel_cutoff(channel)
+        PG->>CH: items shown since that channel's mark
+        PG->>OPS: set_channel_watermark (if delivered)
     end
-    PL->>OPS: set_page_watermark (if no channel failed)
+    PG->>OPS: set_page_watermark (if no channel failed)
     PL->>ST: save_job (decisions, jumps, meta)
     PL-->>API: job summary
     API->>ST: ack_buffer
     API-->>AM: 200 {received, duplicates, job}
 ```
 
-In shadow mode steps 17–20 are replaced by a *would-have-paged* record (every job keeps one). Step 21 still runs, so turning Live on never pages the shadow period.
+In shadow mode steps 19–21 are replaced by a *would-have-paged* record (every job keeps one). Step 22 still runs, so turning Live on never pages the shadow period.
 
 ---
 

@@ -44,7 +44,7 @@ def ops_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SETTINGS_PATH", str(tmp_path / "settings.json"))
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(tmp_path / "queue.db")
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
     return TestClient(app_mod.app)
 
 

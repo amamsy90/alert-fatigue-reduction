@@ -3,7 +3,7 @@
 `generate` writes two weeks of alerts: injected faults that each produce a
 burst of related alerts across a few sources, plus background noise and exact
 duplicates. Deterministic via Config.random_seed. The alerts-only scripts
-(`run_m1.py` and the classifier smoke test) use this. It has no metrics.
+(`experiments/legacy_alerts_only/run_m1.py` and the classifier smoke test) use this. It has no metrics.
 
 `generate_demo_day` writes one short day the product queue can show in a
 click: a memory jump, a monitoring gap, a slow leak, and a few log lines.

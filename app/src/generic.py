@@ -145,6 +145,7 @@ def load_metrics(obj, default_series: str = "series") -> tuple[pd.DataFrame, dic
     s = _pick(raw.columns, SERIES_NAMES, exclude=(t, v))
     if s is None and v is not None and len(text) == 1:
         s = text[0]
+    s_col: str | None
     if v is None and len(numeric) >= 1:
         # wide: one numeric column per series
         long = raw.melt(id_vars=[t], value_vars=numeric, var_name="__series", value_name="__value")
@@ -332,7 +333,7 @@ def _cost(spikes: list[Spike], faults: list[Fault], config: Config) -> tuple[flo
     return config.miss_cost * (len(faults) - len(caught)) + config.false_alarm_cost * false, len(caught), false
 
 
-GRIDS = {
+GRIDS: dict[str, dict[str, tuple]] = {
     "jump": {"window_points": (12, 48, 288), "z": (3, 4, 5, 6, 8, 12), "min_points": (1, 2, 3)},
     "delta": {"window_points": (1, 3, 12), "z": (3, 4, 5, 6, 8, 12), "min_points": (1, 2, 3)},
     "static": {"window_points": (0,), "z": (0.99, 0.995, 0.999), "min_points": (1, 2, 3)},
@@ -372,6 +373,7 @@ def tune(metrics: pd.DataFrame, train_faults: list[Fault], cuts: dict, kind: str
             key = (cost, -caught, false)
             if best is None or key < best[0]:
                 best = (key, setting, caught, false)
+    assert best is not None  # the grid is never empty
     (cost, _, _), setting, caught, false = best
     return setting, {"tuned": True, "tried": tried, "train_cost": cost, "train_caught": caught,
                      "train_incidents": len(train_faults), "train_false": false}
@@ -634,11 +636,11 @@ def _miss_causes(frame, faults, jumps, shown) -> dict:
         if it.kind == "gap":
             continue
         if it.kind == "alert":
-            fid = getattr(it.payload, "fault_id", None)
-            if fid in known:
+            fid = it.alert.fault_id
+            if fid is not None and fid in known:
                 caught.add(fid)
             continue
-        caught.update(f.fault_id for f in spike_hits(it.payload, by_service))
+        caught.update(f.fault_id for f in spike_hits(it.spike, by_service))
     overlapped = {f.fault_id for j in jumps for f in spike_hits(j, by_service)}
     counts = {"no_data": 0, "no_detection": 0, "budget_full": 0}
     for f in faults:

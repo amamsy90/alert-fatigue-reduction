@@ -30,7 +30,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(tmp_path / "queue.db")
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
     return TestClient(app_mod.app)
 
 
@@ -42,7 +42,7 @@ def test_health_does_not_probe_prometheus(client, monkeypatch):
         called["n"] += 1
         raise AssertionError("health must not probe Prometheus")
 
-    monkeypatch.setattr("product.app.probe_prometheus", boom)
+    monkeypatch.setattr("product.web.ops_routes.probe_prometheus", boom)
     monkeypatch.setattr("product.prometheus_adapter.probe_prometheus", boom)
     res = client.get("/health")
     assert res.status_code == 200
