@@ -41,7 +41,7 @@ def env(tmp_path, monkeypatch):
         monkeypatch.setenv(var, str(tmp_path / f"{var.lower()}.x"))
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(tmp_path / "queue.db")
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
     return TestClient(app_mod.app)
 
 
