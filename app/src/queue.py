@@ -25,6 +25,8 @@ import pandas as pd
 from .config import Config, day_of
 from .entities import SURFACED_ACTIONS, Alert, Decision, Fault
 from .memory_spikes import Spike
+from .scoring import faults_by_service as _faults_by_service
+from .scoring import hit_sets, lowest_cost_threshold, spike_hits  # noqa: F401 — spike_hits is re-exported
 
 
 @dataclass
@@ -175,21 +177,6 @@ def hindsight_top_k(spikes: list[Spike], config: Config) -> list[QueueItem]:
 # Scoring
 
 
-def _faults_by_service(faults: list[Fault]) -> dict[str, list[Fault]]:
-    out: dict[str, list[Fault]] = defaultdict(list)
-    for fault in faults:
-        out[fault.component].append(fault)
-    return out
-
-
-def spike_hits(spike: Spike, by_service: dict[str, list[Fault]]) -> list[Fault]:
-    return [
-        f
-        for f in by_service.get(spike.service, [])
-        if spike.start <= f.end and spike.end >= f.start
-    ]
-
-
 def score_queue(
     name: str,
     shown: list[QueueItem],
@@ -272,25 +259,8 @@ def tune_confirm_threshold(
     jumps = [j for j in jumps if j.kind == "jump"]
     if not jumps or not faults:
         return None
-    by_service = _faults_by_service(faults)
-    hits = [{f.fault_id for f in spike_hits(j, by_service)} for j in jumps]
-    rises = np.array([j.rise_at_confirm for j in jumps])
-    candidates = np.unique(np.quantile(rises, np.linspace(0, 0.95, n_grid)))
-    best: tuple[float, float] | None = None
-    for thr in candidates:
-        caught: set[str] = set()
-        false = 0
-        for rise, hit in zip(rises, hits):
-            if rise < thr:
-                continue
-            if hit:
-                caught |= hit
-            else:
-                false += 1
-        cost = config.miss_cost * (len(faults) - len(caught)) + config.false_alarm_cost * false
-        if best is None or cost < best[0]:
-            best = (cost, float(thr))
-    return best[1] if best else None
+    rises = [j.rise_at_confirm for j in jumps]
+    return lowest_cost_threshold(rises, hit_sets(jumps, faults), len(faults), config, n_grid)
 
 
 def tune_confirm_thresholds(
