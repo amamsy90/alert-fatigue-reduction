@@ -87,12 +87,14 @@ Log lines are China time and are converted to UTC so they line up with the metri
 | Rate rule: `delta(mem[5m]) > 0.5 GB` | 68.9% | 81% | 17.4 | 2.1 | 88% |
 | Jump rule, first come | 67.8% | 80% | 17.5 | 2.4 | 86% |
 | **Jump rule + learned threshold** (detector alone) | **72.6%** | **86%** | 17.1 | **1.0** | **94%** |
-| **Full queue** (jumps + leaks + gaps + alerts) | **70.2%** | **83%** | 17.6 | 1.6 | 91% |
+| **Full queue** (jumps + leaks + gaps + alerts) | **69.6%** | **82%** | 17.7 | 1.8 | 90% |
 | *Old headline: day's jumps ranked by final peak (not real time)* | *72.9%* | *86%* | *17.5* | *1.3* | *93%* |
 
 **Best possible at K = 20 is 84.9%**: GAIA injects 22 faults a day, more than 20 on 34 of 55 days.
 
-At K = 5 / 10 / 50 the full queue catches 19.5% / 38.6% / 85.8% (rate rule: 19.3% / 38.6% / 86.0%). Its advantage is at the realistic budget K = 20, where slots are scarce, and in false items (1.0–1.6 a day vs 2.1).
+At K = 5 / 10 / 50 the full queue catches 19.5% / 38.8% / 85.8% (rate rule: 19.3% / 38.6% / 86.0%). Its advantage is at the realistic budget K = 20, where slots are scarce, and in false items (1.0–1.8 a day vs 2.1).
+
+**Removing the last look-ahead.** A code review found five places where the queue still used information from later in the day, although the text said it did not. The per-day alert filters kept each day's *most severe* (or highest-scoring) K alerts, which needs the whole day; an overlapping jump that arrived *after* a leak was confirmed could still remove that leak; the robust score used the spread of the whole series; and an alert "rode on" a jump using the jump's final end. All five now use only what is known at the moment of the decision: alerts spend the budget first come, first served; a leak is dropped only by a jump already shown; the robust spread uses earlier points only; and an alert rides on a jump only while the jump's last hot point is within its gap (`Spike.open_at`). `tests/test_causality.py` checks each one. The honest cost is small: the full queue drops from 70.2% to 69.6% at K = 20 and shows 1.8 false items a day instead of 1.6. The detector alone is unchanged (72.6%), because none of the five touched it.
 
 **Why the full queue scores below the detector alone on GAIA.** Every GAIA fault is a 1 GB memory fault, so leak items (0.2 a day), gap items (0.4 a day) and log alerts spend slots that jumps would have used. On a platform with leaks, outages, and CPU, disk or code faults, those are the parts that catch them (Section 7). Both rows are reported; the detector comparison is the first claim, the full queue is what the tool runs.
 
@@ -106,14 +108,14 @@ The old ranking needed the whole day in advance. Replacing it with a learned con
 
 ### Where the misses come from
 
-The full queue misses 364 of the 1,223 test faults at K = 20 (`results/miss_causes_gaia.csv`):
+The full queue misses 372 of the 1,223 test faults at K = 20 (`results/miss_causes_gaia.csv`):
 
 | Cause | Faults | Share of misses |
 |---|---|---|
-| No metric data during the fault (monitoring outage) | 166 | 46% |
-| A qualifying jump existed, but the day's 20 slots were used | 191 | 52% |
+| No metric data during the fault (monitoring outage) | 166 | 45% |
+| A qualifying jump existed, but the day's 20 slots were used | 198 | 53% |
 | Metric data, but no jump overlapped | 4 | 1% |
-| A jump overlapped, but below the confirmation threshold | 3 | 1% |
+| A jump overlapped, but below the confirmation threshold | 4 | 1% |
 
 **Only 2% of misses are the detector's fault.** The rest are data outages (which the queue flags as gap items) and a budget smaller than the fault rate.
 
@@ -126,17 +128,17 @@ Before each later week, **everything learned is re-learned from the past only** 
 | Fold | Test week | Faults | With metric data | Rate rule | Detector alone | Full queue |
 |---|---|---|---|---|---|---|
 | 1 | 8–15 Jul | 161 | 100% | 77.6% | 84.5% | 82.0% |
-| 2 | 15–22 Jul | 134 | 91% | 73.9% | 81.3% | 77.6% |
+| 2 | 15–22 Jul | 134 | 91% | 73.9% | 81.3% | 74.6% |
 | 3 | 22–29 Jul | 162 | 94% | 72.2% | 77.2% | 71.0% |
 | 4 | 29 Jul–5 Aug | 163 | 82% | 67.5% | 69.3% | 67.5% |
 | 5 | 5–12 Aug | 162 | 84% | 69.1% | 71.6% | 71.0% |
-| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 77.0% |
-| 7 | 19–26 Aug | 173 | **61%** | 51.4% | 52.0% | 52.0% |
-| 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 82.2% |
-| **Mean** | | | | **70.7%** | **74.8%** | **72.5%** (95% CI 65.7–78.3%) |
+| 6 | 12–19 Aug | 139 | 92% | 75.5% | 79.1% | 74.1% |
+| 7 | 19–26 Aug | 173 | **61%** | 51.4% | 52.0% | 50.9% |
+| 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 79.1% |
+| **Mean** | | | | **70.7%** | **74.8%** | **71.3%** (95% CI 64.5–76.7%) |
 
 - The **detector** (jump rule + learned threshold) beats the rate rule in **8/8** weeks (sign test p = 0.0039).
-- The **full queue** beats it in 6 weeks, loses 1 and ties 1 (p = 0.0625, not significant at 5%). On GAIA its extra item types cost slots; see Section 5.
+- The **full queue** does **not** beat the rate rule week by week: 4 wins, 3 losses, 1 tie (p = 0.5). Before the look-ahead fixes in Section 5 it won 6 of 8; part of that margin came from choosing each day's alerts with hindsight. On GAIA its extra item types cost slots; see Section 5.
 - The comparison is against a real rule. The log-severity rule scores 0% every week, so a test against it would prove nothing.
 
 **Fold 7** is weak because of a **monitoring outage**: every service's metrics stop from 20 Aug 13:18 UTC for 2 days 12 hours, so only 61% of that week's faults have any metric data. The full queue shows this outage as a gap item within 10 minutes. No metric-based method could catch those faults.
@@ -172,11 +174,11 @@ What this shows:
 
 | Option (K = 20) | Caught | Items / day | Walk-forward mean | Verdict |
 |---|---|---|---|---|
-| Full queue (reference) | 70.2% | 17.6 | 72.5% | — |
-| **Learned jump ranker** instead of the rise threshold | 70.2% | 17.6 | 73.2% | No gain: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs |
-| **Group** metric items within 2 min on other services into one slot | 71.5% | 17.5 | 74.0% | Small gain; one item may then name two services |
-| **Confirm level per series** (learned on week 1; off in the headline) | 70.0% | 17.5 | 71.8% | Mixed: the detector alone keeps 72.6% with fewer false items (0.8 vs 1.0 a day), but the levels reject real faults — 25 misses below threshold instead of 3, and 84.1% vs 85.9% at K = 50. The web app uses it; the published tables use the single gate |
-| **Carry over** up to 10 unused slots to the next day | **74.4%** | 18.6 | **76.9%** | Largest gain; the average stays under K. The same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%); the full queue still wins **8/8** weeks (p = 0.0039) |
+| Full queue (reference) | 69.6% | 17.7 | 71.3% | — |
+| **Learned jump ranker** instead of the rise threshold | 69.7% | 17.7 | 71.8% | No gain: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs |
+| **Group** metric items within 2 min on other services into one slot | 70.7% | 17.6 | 72.6% | Small gain; one item may then name two services |
+| **Confirm level per series** (learned on week 1; off in the headline) | 69.3% | 17.6 | 70.5% | Mixed: the detector alone keeps 72.6% with fewer false items (0.8 vs 1.0 a day), but the levels reject real faults — 26 misses below threshold instead of 4, and 84.1% vs 85.8% at K = 50. The web app uses it; the published tables use the single gate |
+| **Carry over** up to 10 unused slots to the next day | **72.6%** | 18.6 | **74.8%** | Largest gain; the average stays under K. But the same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%), and the full queue then wins only 3 of 6 decided weeks (p = 0.66). Before the look-ahead fixes this row read 74.4% and 8/8 weeks; that margin did not survive |
 
 Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice.
 
@@ -196,7 +198,7 @@ Results on data that is not microservices (tuned on the first half of each serie
 | NAB realAWSCloudwatch | cloud servers | 17 | 71% | 58% | 0.3 |
 | NAB realAdExchange | online advertising | 6 | 83% | 58% | 1.4 |
 | NAB realKnownCause | machine temperature, taxi demand, CPU | 13 | 38% (static rule 54%) | 15% | 0.04 |
-| NAB realTraffic | road traffic sensors | 11 | 45% | 13% | 0.4 |
+| NAB realTraffic | road traffic sensors | 11 | 36% (rate rule 45%) | 12% | 0.3 |
 | NAB realTweets | Twitter mention volume | 11 | 36% | 36% | 1.7 |
 
 On the shop data the monitoring view catches 10 of 11 problems where the notification stream by severity catches 3. On NAB the queue is clearly above chance on traffic and machine data, modestly on cloud servers and ads (NAB's anomaly windows are wide, so chance is high), and **no better than chance on Twitter volume**. The test sets are small (6–17 problems), and on one dataset the detector chosen on the tuning part was not the best on the test part. These are exactly the facts a new user needs before relying on it, which is why the app shows them.
@@ -232,12 +234,12 @@ An incident counts once and is caught if any metric that moved was shown while i
 
 | Early target | Measured | Verdict |
 |---|---|---|
-| 95% detection at K=20 | 70–73% (ceiling 84.9%) | Not possible at K=20: more faults per day than slots. 83–86% of the ceiling |
-| Beat the usual rule | Detector +3.7 points over a rate rule, 8/8 weeks; log severity 0% | Met, against a fair rule |
-| Fewer false items | 1.0–1.6 vs 2.1 a day (rate rule) | Met |
+| 95% detection at K=20 | 69.6–72.6% (ceiling 84.9%) | Not possible at K=20: more faults per day than slots. 82–86% of the ceiling |
+| Beat the usual rule | Detector +3.7 points over a rate rule, 8/8 weeks; full queue +0.7 points, 4 of 8 weeks; log severity 0% | Met by the detector, against a fair rule; the full queue ties it |
+| Fewer false items | 1.0–1.8 vs 2.1 a day (rate rule) | Met |
 | Works on every service | Jump overlap 81–91% on all ten | Met |
-| Walk-forward not lucky | Means 72.5–74.8%, CI 65.7–78.3% | Met |
-| Real-time | Confirmed in 0.72 min, no look-ahead | Met |
+| Walk-forward not lucky | Means 71.3–74.8%, CI 64.5–76.7% | Met |
+| Real-time | Confirmed in 0.72 min; no look-ahead, checked by `tests/test_causality.py` | Met |
 | Works beyond 1 GB faults | 0.5–2 GB steps and spikes ≥ 98%; leaks 73–99% with the leak rule; 0.25 GB not | Partly — stated |
 
 Per service (test period):
@@ -260,7 +262,7 @@ Per service (test period):
 ## 11. Limits (say these if asked)
 
 1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (Section 7) tests other sizes and shapes; Section 9 tests other domains (NAB, a shop), with small test sets and a chance line. CPU, disk or network faults are now measured on real servers (SMD, Section 9) but not inside microservices.
-2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector; +1.3 for the full queue, not significant weekly). The larger gains are fewer false items, a real-time queue, leak and gap coverage, and carry-over.
+2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
 4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels. When a batch has a training window and faults, the queue now also learns a **confirm level per series** on that window only (same cost: 10 × miss + false) and freezes it. Series with too little training signal keep the single global level. This is the metric-side learner. The sklearn classifier is still only for log alerts. The headline table above is the earlier **single** threshold (0.62 GB on week 1); it has not been re-measured with per-series gates.
 5. `run_m1`, `run_m2`, `run_m4`, `run_stretch` are alerts-only experiments. Do not quote them as the system result.
@@ -306,3 +308,63 @@ Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` 
 | Figures | `figures/detection_vs_k.svg`, `figures/walkforward.svg` |
 | Tool | Web app `docker compose up` (http://127.0.0.1:8080/, **/evaluate** for your own data), CLI `python -m product.cli` |
 | End-user guide | `USE_YOUR_DATA.md` |
+
+---
+
+## Checked numbers
+
+`python run_validate.py` (in `app/`) recomputes every value below from `app/results/` and fails if one no longer rounds to what is printed here, if a key is missing, or if a sentence it guards (for example "the detector wins 8/8 weeks") stops being true. Rates are shares of test faults; `false` is false items a day.
+
+| Key | Value | Where in this report |
+|---|---|---|
+| `queue.K20.logs_severity` | 0.0% | §5 table |
+| `queue.K20.static_p99` | 57.2% | §5 table |
+| `queue.K20.delta_5m` | 68.9% | §5 table |
+| `queue.K20.jumps_online` | 67.8% | §5 table |
+| `queue.K20.jumps_tuned` | 72.6% | §5 table |
+| `queue.K20.proposed` | 69.6% | §5 table |
+| `queue.K20.jumps_hindsight` | 72.9% | §5 table |
+| `queue.K50.proposed` | 85.8% | §5 text |
+| `false.K20.delta_5m` | 2.1 | §5 table |
+| `false.K20.jumps_tuned` | 1.0 | §5 table |
+| `false.K20.proposed` | 1.8 | §5 table |
+| `ceiling.K20` | 84.9% | §5 |
+| `misses.K20.no_metric_data` | 166 | §5 misses |
+| `misses.K20.budget_full` | 198 | §5 misses |
+| `misses.K20.no_jump` | 4 | §5 misses |
+| `misses.K20.below_threshold` | 4 | §5 misses |
+| `walkforward.proposed.mean` | 71.3% | §6 |
+| `walkforward.proposed.ci_low` | 64.5% | §6 |
+| `walkforward.proposed.ci_high` | 76.7% | §6 |
+| `walkforward.proposed.wins` | 4 | §6 |
+| `walkforward.jumps_tuned.mean` | 74.8% | §6 |
+| `walkforward.jumps_tuned.wins` | 8 | §6 |
+| `walkforward.delta_5m.mean` | 70.7% | §6 |
+| `robustness.step_1g.jump_0.5g` | 100% | §7 |
+| `robustness.step_0.25g.jump_0.5g` | 1% | §7 |
+| `robustness.ramp_1g.jump+leak_3h` | 99% | §7 |
+| `robustness.step_0.5g.jump_0.5g+threshold` | 0% | §7 |
+| `queue.K20.p3_ranker` | 69.7% | §8 |
+| `queue.K20.p3_grouped` | 70.7% | §8 |
+| `queue.K20.p3_per_series` | 69.3% | §8 |
+| `queue.K50.p3_per_series` | 84.1% | §8 |
+| `false.K20.p3_per_series_jumps` | 0.8 | §8 |
+| `queue.K20.p3_carryover` | 72.6% | §8 |
+| `queue.K20.delta_5m_carryover` | 72.5% | §8 |
+| `walkforward.carryover.mean` | 74.8% | §8 |
+| `walkforward.delta_carryover.mean` | 74.3% | §8 |
+| `nab.realAWSCloudwatch` | 71% | §9 |
+| `nab.realAdExchange` | 83% | §9 |
+| `nab.realKnownCause` | 38% | §9 |
+| `nab.realTraffic` | 36% | §9 |
+| `nab.realTweets` | 36% | §9 |
+| `smd.K5.incidents` | 30.6% | §9 |
+| `smd.K10.incidents` | 42.9% | §9 |
+| `smd.K20.incidents` | 54.1% | §9 |
+| `smd.K5.movements` | 10.0% | §9 |
+| `smd.K10.movements` | 18.6% | §9 |
+| `smd.K20.movements` | 31.9% | §9 |
+| `stats.jump_rate_with_data` | 99.6% | §10 |
+| `stats.chance_overlap` | 2.6% | §5 |
+| `stats.confirm_minutes_median` | 0.72 | §5 |
+| `stats.false_jumps_near_fault` | 24.6% | §10 |
