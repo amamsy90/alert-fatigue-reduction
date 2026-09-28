@@ -14,6 +14,7 @@ import pandas as pd
 from src.entities import Alert, Decision
 from src.memory_spikes import Spike
 
+from .monitoring import record_page
 from .notifiers import notify_opsgenie, notify_slack
 from .ops import (
     PAGEABLE_MODES,
@@ -59,6 +60,7 @@ def _send(alerts: list[Alert], decisions: list[Decision], spikes: list[Spike], r
     if "opsgenie" in channels:
         per["opsgenie"] = notify_opsgenie(page_items(alerts, decisions, spikes=_for("opsgenie")))
     for channel, outcome in per.items():
+        record_page(channel, int(outcome.get("sent", 0)), int(outcome.get("failed", 0)))
         if not outcome.get("failed"):
             set_channel_watermark(channel, run_at)
     return {

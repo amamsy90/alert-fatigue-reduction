@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import os
 import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -36,6 +37,7 @@ from .inputs import (  # noqa: F401 — re-exported for callers of product.pipel
 )
 from .labels import FEEDBACK_PREFIX, apply_feedback, label_source  # noqa: F401
 from .model_store import SavedModel, held_out_cost, load_model, register_model
+from .monitoring import record_job
 from .paging import page_job
 from .settings import config_from_env, live_detector
 from .store import QueueStore
@@ -387,11 +389,17 @@ DEFAULT_JOB_RETENTION = 200
 
 def run_job(*args, **kwargs) -> dict:
     if not _JOB_LOCK.acquire(blocking=False):
+        record_job(kwargs.get("mode", "sample"), "busy", 0.0)
         raise JobBusy("another job is already running; retry shortly")
+    start = time.perf_counter()
+    outcome = "failed"
     try:
-        return _run_job_locked(*args, **kwargs)
+        result = _run_job_locked(*args, **kwargs)
+        outcome = "ok"
+        return result
     finally:
         _JOB_LOCK.release()
+        record_job(kwargs.get("mode", "sample"), outcome, time.perf_counter() - start)
 
 
 def promotion_decision(training: dict | None, has_incumbent: bool, config: Config) -> tuple[bool, str]:
