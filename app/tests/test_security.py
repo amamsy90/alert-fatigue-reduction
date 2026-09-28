@@ -91,7 +91,7 @@ def client(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(tmp_path / "queue.db")
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
     return app_mod.app
 
 

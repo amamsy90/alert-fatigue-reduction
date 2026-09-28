@@ -25,8 +25,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("OPS_PATH", str(tmp_path / "ops.json"))
     import product.app as app_mod
 
-    app_mod.STORE = QueueStore(tmp_path / "queue.db")
-    monkeypatch.setattr(app_mod, "EVAL_DIR", tmp_path / "evals")
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
+    monkeypatch.setattr("product.web.evaluate_routes.EVAL_DIR", tmp_path / "evals")
     return TestClient(app_mod.app)
 
 
@@ -104,10 +104,10 @@ def test_jobs_run_one_at_a_time(monkeypatch):
 
 
 def test_old_evaluations_are_pruned(client, tmp_path):
-    import product.app as app_mod
+    from product.web import evaluate_routes as ev
 
     for name in ("a1", "b2", "c3"):
-        (app_mod.EVAL_DIR / name).mkdir(parents=True)
+        (ev.EVAL_DIR / name).mkdir(parents=True)
         time.sleep(0.002)
-    app_mod._prune_evals(keep="c3", limit=1)
-    assert sorted(f.name for f in app_mod.EVAL_DIR.iterdir()) == ["c3"]
+    ev._prune_evals(keep="c3", limit=1)
+    assert sorted(f.name for f in ev.EVAL_DIR.iterdir()) == ["c3"]
