@@ -458,6 +458,10 @@ def test_tampered_model_file_is_refused(tmp_path):
     assert load_model(path).escalate_threshold == 0.5
     path.write_bytes(path.read_bytes() + b"x")
     assert load_model(path) is None
+    # A file with no hash beside it used to be loaded and then trusted.
+    (path.with_name(path.name + ".sha256")).unlink()
+    path.write_bytes(b"not a model")
+    assert load_model(path) is None
 
 
 def test_no_password_means_private_networks_only(monkeypatch):

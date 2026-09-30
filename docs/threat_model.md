@@ -48,24 +48,24 @@ flowchart LR
 | T3 | Spoofing | DNS rebinding: a page on `evil.example` resolves to 127.0.0.1 and drives the local API | A loopback client must send a local `Host` (or one in `ALLOWED_HOSTS`) | `test_loopback_client_needs_a_local_host_name` |
 | T4 | Tampering | CSRF: a page the user visits posts to the app, and the browser attaches Basic-auth credentials | State-changing requests with a foreign `Origin` / `Referer` (or `Origin: null`) are refused | `test_cross_site_posts_are_refused` |
 | T5 | Elevation | Anyone who reaches the app turns Live on and pages the team | Live needs `APP_PASSWORD`, a channel, typed `LIVE`; `can_page()` re-checks the password, so `SHADOW_MODE=0` cannot bypass it; only ingest jobs page | `test_api_live_requires_a_password`, `test_env_live_without_a_password_never_pages`, `test_sample_never_pages_even_when_live` |
-| T6 | Info. disclosure | SSRF: the Prometheus URL points at cloud metadata or an internal service | The host is resolved and every address checked (loopback tricks, trailing dot, public names pointing inside); private needs `PROM_ALLOW_PRIVATE=1` (off by default, also in Docker); metadata and link-local always refused; redirects refused; checked again before every fetch | `test_loopback_tricks_are_refused`, `test_public_name_pointing_at_metadata_is_refused`, `test_prometheus_fetch_refuses_redirects` |
+| T6 | Info. disclosure | SSRF: the Prometheus URL points at cloud metadata or an internal service | The host is resolved once and every address is checked (loopback tricks, trailing dot, public names pointing inside, a name that does not resolve); the fetch dials that address and does not resolve the name again; private needs `PROM_ALLOW_PRIVATE=1` (off by default, also in Docker); metadata and link-local always refused; redirects refused | `test_loopback_tricks_are_refused`, `test_public_name_pointing_at_metadata_is_refused`, `test_unresolved_prometheus_host_is_refused`, `test_fetch_dials_the_address_from_the_safety_check`, `test_prometheus_fetch_refuses_redirects` |
 | T7 | Info. disclosure | Keys leak through the API, errors or logs | Keys are shown as configured + last 4; errors report the exception type only; URLs are redacted; the audit log never logs bodies; `ops.json` is owner-only where supported | `test_routing_key_never_returned_full_on_get`, `test_failures_never_echo_the_secret`, `test_ops_changes_are_audited_without_secrets` |
 | T8 | Info. disclosure | The ingest token ends up in proxy logs | The token is read from the `Authorization` header only; `?token=` is refused | `test_ingest_token_in_query_string_is_refused` |
 | T9 | Denial of service | A huge upload or ingest body fills memory or disk | Bodies are counted while they stream and stopped with 413 (`MAX_UPLOAD_MB`, `MAX_INGEST_MB`) | `test_oversized_ingest_body_is_refused`, `test_upload_above_limit_is_refused` |
 | T10 | Denial of service | Parallel scoring or evaluations exhaust the CPU | One job and one evaluation at a time; others get 409 | `test_jobs_run_one_at_a_time`, `test_busy_job_returns_409` |
 | T11 | Tampering | Retries or repeated webhooks page the same alert twice | Alerts are fingerprinted and not buffered twice within `INGEST_DEDUP_HOURS`; page marks are per channel | `test_resent_alerts_are_buffered_once`, `test_channel_mark_only_moves_the_channel_that_delivered` |
-| T12 | Tampering | A changed model file changes what is paged | The model is saved with a SHA-256 file; a mismatch is refused | `test_tampered_model_file_is_refused` |
+| T12 | Tampering | A changed model file changes what is paged | The model file is a zip of JSON and a skops (not pickle) scikit-learn file. A missing or mismatched SHA-256 is refused, a pickle is refused, and skops types outside `numpy.ravel` are refused. A corrupt registry fails the job instead of looking like "no model" | `test_tampered_model_file_is_refused`, `test_pickle_bytes_are_refused_even_with_a_matching_hash`, `test_corrupt_registry_is_not_treated_as_empty` |
 | T13 | Repudiation | Nobody can say who turned Live on or changed a key | Audit log (`oncall.audit`): method, path, status, login user, client; refused attempts too | `test_ops_changes_are_audited_without_secrets` |
 
 ## 4. Residual risks (accepted or planned)
 
 | # | Risk | Why it remains | Plan |
 |---|---|---|---|
-| R1 | DNS rebinding between the Prometheus check and the fetch (the name resolves safely at check time, then to a private address at fetch time) | The fetch resolves the name again; pinning the checked address needs a custom connection | Connect to the checked address and send the original `Host` |
+| R1 | Closed: the fetch dials the address from the same lookup that passed the SSRF check | | |
 | R2 | Basic auth over plain HTTP sends the password in every request | TLS is expected at a reverse proxy; the app does not terminate TLS | Document TLS as required when sharing; consider sessions with secure cookies |
-| R3 | No limit on login attempts | Not built | Add a per-client backoff on 401 |
+| R3 | Closed: five failed logins from one client lock that client for 60 seconds (`LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`). `/health` stays open | | |
 | R4 | One shared password, no roles | Single-team tool | Separate viewer and operator roles if needed |
 | R5 | Audit log goes to stdout only | Kept simple | Ship container logs to the team's log store |
 | R6 | Secrets in `ops.json` are not encrypted at rest | File permissions only | Read keys from a secret manager or Docker secrets |
-| R7 | A jump whose points reach Prometheus after the next job's page mark is never paged | The mark is wall-clock time, not data time | Track paged item keys instead of a time mark |
-| R8 | Pickle model files execute code when loaded | The hash stops a changed file, not a malicious first file | Save the model in a data-only format |
+| R7 | Closed: paging remembers item keys, so a late point with a new key is still paged | | |
+| R8 | Closed: model files are a JSON plus skops archive. `load_model` never calls pickle or joblib | | |

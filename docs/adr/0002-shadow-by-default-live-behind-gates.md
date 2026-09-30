@@ -17,4 +17,4 @@ Only items shown since the last job are paged, per channel, so switching to Live
 ## Consequences
 - A team can run the tool for weeks and compare *would have paged* with what happened.
 - Live needs an operator decision and a password; the audit log records who switched it.
-- A jump whose points reach Prometheus after the next job's mark can be skipped (known limitation, see the threat model).
+- A jump is identified by its key (kind, service, start), so a point that arrives after the previous job is still paged. The first ingest job only pages the lookback window, then remembers the rest of the history.

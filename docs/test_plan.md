@@ -31,7 +31,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 226 tests, coverage report
+uv run pytest -q --cov           # 236 tests, coverage report
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -46,7 +46,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 226 pass |
+| Tests | all pass on Python 3.10 and 3.12 | 236 pass |
 | Coverage | line coverage ≥ `COVERAGE_MIN` | 90% (min 85%) |
 | Results | `run_validate.py` passes | 51 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
@@ -69,7 +69,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% | 226 / 226 on Python 3.10 and 3.12 |
+| Automated tests passing | 100% | 236 / 236 on Python 3.10 and 3.12 |
 | Line coverage | ≥ 85% | 90% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
@@ -87,4 +87,4 @@ Performance numbers: one container on a laptop (20 logical CPUs), `perf/load_tes
 
 - The load test runs against a live server by hand (`perf/load_test.py`), not in CI; results are kept in `app/results/perf/`.
 - No browser (UI) tests; the static pages are checked only for the controls they must contain.
-- Residual risks R1–R8 in `docs/threat_model.md` have no tests because they are not fixed.
+- Residual risks still open are R2, R4, R5 and R6 in `docs/threat_model.md`. R1, R3 (login lockout), R7 and R8 (skops, not pickle) are tested.

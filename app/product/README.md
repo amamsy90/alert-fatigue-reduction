@@ -32,7 +32,7 @@ A jump with no alerts inside is still shown: it may be a fault the logs missed. 
 - Prometheus memory adapter (`PROM_URL`); one metric, step capped under 10,000 points
 - **Shadow mode** (default): decisions are stored; nothing is paged. Each job records `would_have_paged` (what Live would have opened) for demos. Live can be turned on only when `APP_PASSWORD` is set.
 - **Real / Noise** on every alert and jump. Later runs use those marks as labels. Real window = jump span, or ±5 minutes around a Real alert. Noise overrides a Real window.
-- Saved model (`product/data/model.pkl`). Small webhook batches are scored with it. Retrain reminder after 7 days or new Real marks (`GET /model`).
+- Saved model (`product/data/model.pkl`, a skops archive rather than a pickle). Small webhook batches are scored with it. Retrain reminder after 7 days or new Real marks (`GET /model`).
 - Optional login: set `APP_PASSWORD` (user defaults to `oncall`). `/health` stays open.
 
 ## Out of scope

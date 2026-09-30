@@ -54,6 +54,40 @@ def test_public_name_pointing_at_private_address_is_refused(private_off):
             ops.assert_prom_url_safe("http://prom.example.com")
 
 
+def test_unresolved_prometheus_host_is_refused(private_off):
+    with patch("product.ops.socket.getaddrinfo", side_effect=OSError("nxdomain")):
+        with pytest.raises(ValueError, match="did not resolve"):
+            ops.assert_prom_url_safe("http://prom.example.com")
+
+
+def test_fetch_dials_the_address_from_the_safety_check(monkeypatch):
+    """The fetch must not resolve the name again after the check."""
+    import socket
+
+    from product.prometheus_adapter import fetch_memory_metrics
+
+    monkeypatch.setenv("PROM_URL", "http://prom.example:9090")
+    lookups = {"n": 0}
+    fake = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    def lookup(*_a, **_k):
+        lookups["n"] += 1
+        return fake
+
+    seen = {}
+
+    def connect(address, timeout=None):
+        seen["address"] = address
+        raise OSError("stop after the dial")
+
+    monkeypatch.setattr("product.ops.socket.getaddrinfo", lookup)
+    monkeypatch.setattr("product.prometheus_adapter.socket.create_connection", connect)
+    with pytest.raises(OSError, match="stop after the dial"):
+        fetch_memory_metrics(hours=1)
+    assert lookups["n"] == 1
+    assert seen["address"] == ("93.184.216.34", 9090)
+
+
 def test_public_name_with_public_addresses_is_allowed(private_off):
     fake = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
     with patch("product.ops.socket.getaddrinfo", return_value=fake):
@@ -95,6 +129,29 @@ def client(tmp_path, monkeypatch):
 
     app_mod.use_store(QueueStore(tmp_path / "queue.db"))
     return app_mod.app
+
+
+def test_repeated_bad_logins_lock_the_client(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    monkeypatch.setenv("LOGIN_LOCK_SECONDS", "60")
+    http = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    try:
+        assert http.get("/connectors", auth=("oncall", "no")).status_code == 401
+        assert http.get("/connectors", auth=("oncall", "no")).status_code == 401
+        locked = http.get("/connectors", auth=("oncall", "no"))
+        assert locked.status_code == 429
+        assert locked.headers["retry-after"]
+        # A correct password does not skip the lock.
+        assert http.get("/connectors", auth=("oncall", "s3cret")).status_code == 429
+        # Health checks stay open.
+        assert http.get("/health").status_code == 200
+    finally:
+        reset_login_attempts()
+    assert http.get("/connectors", auth=("oncall", "s3cret")).status_code == 200
 
 
 def test_forwarded_request_needs_a_password(client, monkeypatch):
