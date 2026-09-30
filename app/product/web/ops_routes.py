@@ -161,7 +161,7 @@ def ops_test_page():
     try:
         _post(body)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"PagerDuty rejected the test: {exc}") from exc
+        raise HTTPException(502, f"PagerDuty rejected the test: {type(exc).__name__}") from exc
     return {"sent": 1, "dedup_key": "oncall-queue-test", "note": "Resolve the test incident in PagerDuty."}
 
 

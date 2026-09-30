@@ -293,10 +293,10 @@ def may_page_for_mode(mode: str) -> bool:
 
 
 # --- Paging watermark -------------------------------------------------------
-# An ingest job re-scores up to 14 days of metrics. Without a watermark, the
-# first Live run would page every jump shown in that history. Only metric items
-# confirmed after the last ingest job (or, the first time, within the last
-# PAGE_LOOKBACK_MINUTES) are paged or counted as would-have-paged.
+# An ingest job re-scores up to 14 days of metrics. The first ingest job pages
+# only items inside PAGE_LOOKBACK_MINUTES and remembers every shown key. Later
+# jobs page any key that was not remembered, including a point whose timestamp
+# is older than the previous job's clock.
 
 DEFAULT_PAGE_LOOKBACK_MINUTES = 60.0
 
@@ -342,6 +342,39 @@ def clear_page_watermark() -> None:
     with _edit() as data:
         data.pop("paged_through", None)
         data.pop("paged_through_by_channel", None)
+        data.pop("paged_item_keys", None)
+        data.pop("paged_item_keys_by_channel", None)
+
+
+def seen_spike_keys() -> set[str] | None:
+    """Keys already considered for paging, or None before the first ingest job.
+
+    A missing key is a new item even when its timestamp is older than the last
+    job's clock (a Prometheus point that arrived late).
+    """
+    data = _load()
+    if "paged_item_keys" not in data:
+        return None
+    return set(data.get("paged_item_keys") or [])
+
+
+def set_seen_spike_keys(keys: set[str]) -> None:
+    with _edit() as data:
+        data["paged_item_keys"] = sorted(keys)
+
+
+def channel_delivered_keys(channel: str) -> set[str]:
+    raw = (_load().get("paged_item_keys_by_channel") or {}).get(channel) or []
+    return set(raw)
+
+
+def add_channel_delivered_keys(channel: str, keys: set[str]) -> None:
+    if not keys:
+        return
+    with _edit() as data:
+        marks = data.setdefault("paged_item_keys_by_channel", {})
+        current = set(marks.get(channel) or [])
+        marks[channel] = sorted(current | keys)
 
 
 def channel_cutoff(channel: str, now=None):
@@ -393,8 +426,8 @@ def _host_addresses(host: str) -> list[IPAddress]:
     """Every address a Prometheus host means: IP literals (including legacy forms
     such as 127.1, 2130706433 or 0x7f000001) and whatever DNS returns.
 
-    An empty list means the name does not resolve here; the request itself would
-    then fail on DNS, so there is nothing to reach.
+    An empty list means the name does not resolve. Callers must refuse that:
+    a later lookup could return a private address.
     """
     try:
         return [ipaddress.ip_address(host)]
@@ -433,8 +466,8 @@ def assert_prom_url_safe(url: str) -> None:
     tricks (127.1, 2130706433), a trailing dot, or a public name that points at
     a private or metadata address are refused too. Set PROM_ALLOW_PRIVATE=1 for
     in-cluster / Docker Compose Prometheus. Cloud metadata hosts and link-local
-    addresses are always refused. The fetch itself refuses redirects
-    (prometheus_adapter.urlopen), and this check runs again before every fetch.
+    addresses are always refused. The fetch dials the address returned by this
+    lookup (it does not resolve the name again) and refuses redirects.
     """
     url = (url or "").strip()
     if not url:
@@ -450,7 +483,13 @@ def assert_prom_url_safe(url: str) -> None:
     if host in _PRIVATE_PROM_HOSTNAMES or host.endswith((".localhost", ".local")):
         if not prom_allow_private():
             raise _private_refused()
-    for ip in _host_addresses(host):
+    addresses = _host_addresses(host)
+    if not addresses:
+        raise ValueError(
+            "Prometheus host did not resolve; refusing it so a later lookup cannot reach a private address"
+        )
+    approved: list[IPAddress] = []
+    for ip in addresses:
         mapped = getattr(ip, "ipv4_mapped", None)
         if mapped is not None:
             ip = mapped
@@ -464,6 +503,31 @@ def assert_prom_url_safe(url: str) -> None:
             )
         if (ip.is_private or not ip.is_global) and not prom_allow_private():
             raise _private_refused()
+        approved.append(ip)
+    # Loopback was skipped above after the allow-private check. Dial one of the
+    # addresses this lookup returned; the fetch must not resolve the name again.
+    chosen = approved[0] if approved else addresses[0]
+    _APPROVED_PROM[(_pin_key(url))] = str(chosen)
+
+
+# Base URL -> IP approved by the lookup in assert_prom_url_safe. The fetch dials
+# this address instead of resolving the name a second time (DNS rebinding).
+_APPROVED_PROM: dict[str, str] = {}
+
+
+def _pin_key(url: str) -> str:
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def pinned_prom_address(url: str) -> str:
+    """IP from the safety check for this URL, resolving once if it has not run yet."""
+    key = _pin_key(url)
+    ip = _APPROVED_PROM.get(key)
+    if ip:
+        return ip
+    assert_prom_url_safe(url if "://" in url else f"http://{url}")
+    return _APPROVED_PROM[key]
 
 
 def set_prom_url(url: str) -> dict:

@@ -65,7 +65,7 @@ def test_ingest_job_pages_only_new_jumps(ops_env, monkeypatch):
 
     for name in ("QUEUE_DB", "MODEL_PATH", "SETTINGS_PATH"):
         monkeypatch.setenv(name, str(ops_env / f"{name.lower()}.x"))
-    ops.set_prom_url("http://prom.test:9090")
+    ops.set_prom_url("http://93.184.216.34:9090")
     now = pd.Timestamp.now(tz="UTC").floor("30s")
     monkeypatch.setattr("product.prometheus_adapter.fetch_memory_metrics", lambda *a, **k: _history(now))
     store = QueueStore(ops_env / "queue.db")
@@ -75,6 +75,53 @@ def test_ingest_job_pages_only_new_jumps(ops_env, monkeypatch):
     whp = first["meta"]["would_have_paged"]
     assert whp["spikes"] == 1  # the jump 10 min ago, not the one a day ago
     assert ops.get_page_watermark() is not None
+    assert ops.seen_spike_keys()
 
     second = pipeline.run_job(store, mode="ingest", budget_k=20, shadow_mode=True, alert_rows=rows)
     assert second["meta"]["would_have_paged"]["spikes"] == 0  # already considered
+
+
+def test_late_point_is_paged_even_when_its_timestamp_is_behind_the_clock(ops_env):
+    """A point that reaches Prometheus after the previous job still has a new key."""
+    from product.paging import page_job
+
+    now = pd.Timestamp("2026-09-27 12:00", tz="UTC")
+    old = _spike(60 * 24, now)
+    recent = _spike(10, now)
+    _, first = page_job("ingest", True, [], [], [old, recent], run_at=now)
+    assert first["spikes"] == 1
+
+    late = _spike(30, now)  # confirmed before this next job's clock, but not in the first pull
+    _, second = page_job(
+        "ingest", True, [], [], [old, recent, late], run_at=now + pd.Timedelta(minutes=5)
+    )
+    assert second["spikes"] == 1
+    assert second["items"][0]["dedup_key"].startswith("jump:svc:")
+
+
+def test_failed_channel_retries_only_that_channel(ops_env, monkeypatch):
+    from product.paging import page_job
+
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    ops.set_routing_key("rk")
+    ops.set_slack_webhook("https://hooks.slack.com/x")
+    ops.set_shadow_mode(shadow=False, confirm="LIVE")
+    now = pd.Timestamp("2026-09-27 12:00", tz="UTC")
+    recent = _spike(10, now)
+    calls = {"pagerduty": 0, "slack": 0}
+
+    def pd_fail(*_a, **_k):
+        calls["pagerduty"] += 1
+        return {"sent": 0, "failed": 1}
+
+    def slack_ok(items, count, **_k):
+        calls["slack"] += 1
+        return {"sent": 1, "failed": 0}
+
+    monkeypatch.setattr("product.paging.notify_escalations", pd_fail)
+    monkeypatch.setattr("product.paging.notify_slack", slack_ok)
+    page_job("ingest", False, [], [], [recent], run_at=now)
+    assert calls == {"pagerduty": 1, "slack": 1}
+    calls["pagerduty"] = calls["slack"] = 0
+    page_job("ingest", False, [], [], [recent], run_at=now + pd.Timedelta(minutes=2))
+    assert calls == {"pagerduty": 1, "slack": 0}

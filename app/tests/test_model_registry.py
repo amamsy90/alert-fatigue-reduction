@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from product import model_store
-from product.model_store import SavedModel, activate_version, load_model, load_registry, register_model
+from product.model_store import SavedModel, activate_version, load_model, load_registry, register_model, save_model
 from product.pipeline import promotion_decision
 from product.store import QueueStore
 from src.config import Config
@@ -123,3 +123,52 @@ def test_rollback_through_the_api_is_audited(client, caplog):
 
 def test_model_store_paths_follow_model_path(env):
     assert model_store.models_dir() == env / "models"
+
+
+def test_saved_model_roundtrip_scores_the_same(env):
+    import numpy as np
+
+    from src.classifier import AlertClassifier
+    from src.entities import Alert
+
+    origin = pd.Timestamp("2026-01-01", tz="UTC")
+    alerts = [
+        Alert(
+            f"a{i}",
+            origin + pd.Timedelta(hours=i),
+            "web" if i % 2 == 0 else "db",
+            "log",
+            "error" if i % 3 == 0 else "info",
+            f"memory fail {i % 2}" if i % 2 == 0 else f"routine check {i % 2}",
+            "f" if i % 2 == 0 else None,
+        )
+        for i in range(12)
+    ]
+    fitted = AlertClassifier().fit(alerts)
+    save_path = env / "round.pkl"
+    save_model(
+        SavedModel(fitted, 0.4, 0.2, "real", origin.isoformat(), len(alerts), 1),
+        save_path,
+    )
+    loaded = load_model(save_path)
+    assert loaded is not None and loaded.model is not None
+    assert loaded.escalate_threshold == 0.4
+    assert np.allclose(fitted.predict_proba(alerts), loaded.model.predict_proba(alerts))
+
+
+def test_pickle_bytes_are_refused_even_with_a_matching_hash(env):
+    import hashlib
+    import pickle
+
+    path = env / "planted.pkl"
+    path.write_bytes(pickle.dumps({"run": "code"}))
+    (env / "planted.pkl.sha256").write_text(hashlib.sha256(path.read_bytes()).hexdigest() + "\n", encoding="ascii")
+    assert load_model(path) is None
+
+
+def test_corrupt_registry_is_not_treated_as_empty(env):
+    registry = model_store.models_dir()
+    registry.mkdir()
+    (registry / "registry.json").write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError, match="unreadable"):
+        load_registry()

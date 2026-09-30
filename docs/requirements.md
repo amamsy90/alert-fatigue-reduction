@@ -148,4 +148,4 @@ This document states what the system must do (functional requirements, FR), how 
 
 - `product/datasets.py` (NAB download) is excluded from coverage because it needs the network.
 - NFR-5's "under an hour" and NFR-11's load test are measured by hand, not in CI.
-- The residual risks in `docs/threat_model.md` (for example DNS rebinding between the Prometheus check and the fetch) have no test because the fix is not in place.
+- Residual risks still open are R2, R4, R5 and R6 in `docs/threat_model.md` (plain HTTP login, roles, audit shipping, secrets at rest). R1, R3, R7 and R8 are closed and tested.

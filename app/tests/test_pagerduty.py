@@ -24,6 +24,14 @@ class _Resp:
         return False
 
 
+def test_paging_errors_omit_the_exception_text():
+    alert, decision = _pair(Action.ESCALATE)
+    with patch("product.pagerduty.urlopen", side_effect=RuntimeError("routing-key-secret")):
+        out = notify_escalations([alert], [decision], key="routing-key-secret")
+    assert out["failed"] == 1
+    assert "routing-key-secret" not in str(out)
+
+
 def test_no_key_sends_nothing():
     alert, decision = _pair(Action.ESCALATE)
     out = notify_escalations([alert], [decision], key="")

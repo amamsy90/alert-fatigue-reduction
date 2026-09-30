@@ -94,6 +94,38 @@ def test_metric_edge_cases_do_not_invent_jumps():
     assert len(detect_jumps(shuffled, cfg)) == 1  # rows out of order are sorted, the step is found once
 
 
+def test_new_model_does_not_score_the_rows_it_trained_on(monkeypatch):
+    """The live queue must not page alerts from the fit that just saw them."""
+    from src.classifier import AlertClassifier
+    from src.entities import Alert
+
+    origin = pd.Timestamp("2026-01-01", tz="UTC")
+    boundary = origin + pd.Timedelta(days=7)
+    alerts = []
+    for i in range(7):
+        alerts.append(Alert(
+            f"t{i}", origin + pd.Timedelta(days=i), "web", "log", "warning",
+            f"train message number {i}", "f1" if i % 2 == 0 else None,
+        ))
+    for i in range(8):
+        alerts.append(Alert(
+            f"e{i}", origin + pd.Timedelta(days=8 + i), "web", "log", "info",
+            f"later message number {i}", "f2" if i % 2 == 0 else None,
+        ))
+    calls: list[list[str]] = []
+    original = AlertClassifier.predict_proba
+
+    def spy(self, batch, spikes=None):
+        calls.append([a.alert_id for a in batch])
+        return original(self, batch, spikes)
+
+    monkeypatch.setattr(AlertClassifier, "predict_proba", spy)
+    result = score_alerts(alerts, budget_k=20, use_saved_detector=False)
+    train_ids = {a.alert_id for a in alerts if a.timestamp < boundary}
+    assert result.model_used == "trained"
+    assert calls and train_ids.isdisjoint(calls[-1])
+
+
 def test_labels_of_one_class_fall_back_to_rules():
     t0 = pd.Timestamp("2026-01-01", tz="UTC")
     rows = [dict(GOOD, timestamp=(t0 + pd.Timedelta(minutes=i)).isoformat(), fault_id=None) for i in range(30)]

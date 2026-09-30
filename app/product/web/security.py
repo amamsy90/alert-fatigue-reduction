@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import secrets
+import threading
+import time
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, Request
@@ -43,6 +45,71 @@ def _credentials_ok(header: str | None, user: str, password: str) -> bool:
     user_ok = secrets.compare_digest(given_user.encode(), user.encode())
     password_ok = secrets.compare_digest(given_password.encode(), password.encode())
     return user_ok and password_ok
+
+
+_LOGIN_LOCK = threading.Lock()
+_LOGIN_FAILS: dict[str, list[float]] = {}
+_LOGIN_UNTIL: dict[str, float] = {}
+
+
+def _login_limits() -> tuple[int, float]:
+    """Failed attempts inside the window, then a lock of the same length in seconds."""
+    try:
+        fails = int(os.environ.get("LOGIN_MAX_FAILS", "5"))
+    except ValueError:
+        fails = 5
+    try:
+        seconds = float(os.environ.get("LOGIN_LOCK_SECONDS", "60"))
+    except ValueError:
+        seconds = 60.0
+    return max(1, fails), max(1.0, seconds)
+
+
+def reset_login_attempts() -> None:
+    """Clear the in-memory counters. Tests use this; the process otherwise keeps them."""
+    with _LOGIN_LOCK:
+        _LOGIN_FAILS.clear()
+        _LOGIN_UNTIL.clear()
+
+
+def _login_wait(client: str) -> float:
+    """Seconds left on this client's lock, or 0."""
+    with _LOGIN_LOCK:
+        until = _LOGIN_UNTIL.get(client, 0.0)
+        wait = until - time.monotonic()
+        if wait <= 0:
+            _LOGIN_UNTIL.pop(client, None)
+            return 0.0
+        return wait
+
+
+def _note_login_failure(client: str) -> float:
+    """Record one bad password. Returns the new lock length when this attempt starts one."""
+    fails, seconds = _login_limits()
+    now = time.monotonic()
+    with _LOGIN_LOCK:
+        recent = [stamp for stamp in _LOGIN_FAILS.get(client, []) if now - stamp < seconds]
+        recent.append(now)
+        if len(recent) >= fails:
+            _LOGIN_FAILS.pop(client, None)
+            _LOGIN_UNTIL[client] = now + seconds
+            return seconds
+        _LOGIN_FAILS[client] = recent
+        return 0.0
+
+
+def _note_login_success(client: str) -> None:
+    with _LOGIN_LOCK:
+        _LOGIN_FAILS.pop(client, None)
+        _LOGIN_UNTIL.pop(client, None)
+
+
+def _locked_response(wait: float) -> Response:
+    return Response(
+        "Too many login attempts",
+        status_code=429,
+        headers={"Retry-After": str(max(1, int(wait)))},
+    )
 
 
 def _ingest_token_ok(request: Request) -> bool | None:
@@ -139,12 +206,20 @@ async def require_login(request: Request, call_next):
         return await call_next(request)
     if request.url.path in OPEN_PATHS:
         return await call_next(request)
+    client = request.client.host if request.client else "-"
+    wait = _login_wait(client)
+    if wait:
+        return _locked_response(wait)
     if not _credentials_ok(request.headers.get("authorization"), *settings):
+        locked = _note_login_failure(client)
+        if locked:
+            return _locked_response(locked)
         return Response(
             "Login required",
             status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="On-call alert queue"'},
         )
+    _note_login_success(client)
     return await call_next(request)
 
 
