@@ -24,6 +24,11 @@ def routing_key() -> str:
     return get_routing_key()
 
 
+def spike_key(spike: Spike) -> str:
+    """Stable id for one shown episode. Paging remembers these, not a clock time."""
+    return f"{spike.kind}:{spike.service}:{spike.start.isoformat()}"[:255]
+
+
 def spike_event(spike: Spike, key: str) -> dict:
     """PagerDuty event for a shown metric jump or monitoring gap.
 
@@ -45,7 +50,7 @@ def spike_event(spike: Spike, key: str) -> dict:
     return {
         "routing_key": key,
         "event_action": "trigger",
-        "dedup_key": f"{spike.kind}:{spike.service}:{spike.start.isoformat()}"[:255],
+        "dedup_key": spike_key(spike),
         "payload": {
             "summary": summary[:1024],
             "severity": severity,
@@ -95,7 +100,7 @@ def notify_escalations(
             sent += 1
         except Exception as exc:  # noqa: BLE001 — keep going if one page fails
             failed += 1
-            errors.append(f"{spike.kind}:{spike.service}: {exc}")
+            errors.append(f"{spike.kind}:{spike.service}: {type(exc).__name__}")
     for alert, decision in zip(alerts, decisions):
         if decision.action is not Action.ESCALATE:
             continue
@@ -121,7 +126,7 @@ def notify_escalations(
             sent += 1
         except Exception as exc:  # noqa: BLE001 — keep scoring even if paging fails
             failed += 1
-            errors.append(f"{alert.alert_id}: {exc}")
+            errors.append(f"{alert.alert_id}: {type(exc).__name__}")
     return {"sent": sent, "failed": failed, "errors": errors[:5]}
 
 

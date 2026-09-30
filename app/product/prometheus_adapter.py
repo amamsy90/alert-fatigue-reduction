@@ -1,14 +1,19 @@
 """Fetch container memory series from Prometheus into the spike DataFrame shape."""
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import os
 import re
+import socket
+import ssl
+from email.message import Message
+from io import BytesIO
 from datetime import datetime, timezone
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
-from urllib.request import HTTPRedirectHandler, build_opener
+from urllib.request import HTTPRedirectHandler
 
 import pandas as pd
 
@@ -24,12 +29,88 @@ class _RefuseRedirect(HTTPRedirectHandler):
         raise HTTPError(req.full_url, code, "Prometheus redirects are refused (SSRF)", headers, fp)
 
 
-_OPENER = build_opener(_RefuseRedirect)
+class _PinnedHTTP(http.client.HTTPConnection):
+    """Dial the IP the safety check approved, with the original host in Host."""
+
+    def __init__(self, host: str, port: int, ip: str, timeout: float) -> None:
+        super().__init__(host, port, timeout=timeout)
+        self._ip = ip
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection((self._ip, self.port), self.timeout)
+
+
+class _PinnedHTTPS(http.client.HTTPSConnection):
+    def __init__(self, host: str, port: int, ip: str, timeout: float, context: ssl.SSLContext) -> None:
+        super().__init__(host, port, timeout=timeout, context=context)
+        self._ip = ip
+        self._ssl_context = context
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self._ip, self.port), self.timeout)
+        self.sock = self._ssl_context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _BoundResponse:
+    """Response plus the connection it came from, so `with urlopen` closes both."""
+
+    def __init__(self, conn: http.client.HTTPConnection, resp: http.client.HTTPResponse) -> None:
+        self._conn = conn
+        self._resp = resp
+        self.status = resp.status
+
+    def read(self) -> bytes:
+        return self._resp.read()
+
+    def __enter__(self) -> _BoundResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._resp.close()
+        self._conn.close()
+
+
+def _host_header(host: str, port: int, scheme: str) -> str:
+    name = f"[{host}]" if ":" in host else host
+    if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+        return name
+    return f"{name}:{port}"
 
 
 def urlopen(url: str, timeout: float | None = None):
-    """Open a Prometheus URL without following redirects."""
-    return _OPENER.open(url, timeout=timeout)
+    """Open a Prometheus URL. Dials the IP from the safety check; does not follow redirects."""
+    from product.ops import pinned_prom_address
+
+    parsed = urlparse(url)
+    scheme = parsed.scheme or "http"
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if scheme == "https" else 80)
+    ip = pinned_prom_address(url)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    timeout = 60.0 if timeout is None else timeout
+    conn: http.client.HTTPConnection
+    if scheme == "https":
+        conn = _PinnedHTTPS(host, port, ip, timeout, ssl.create_default_context())
+    else:
+        conn = _PinnedHTTP(host, port, ip, timeout)
+    try:
+        conn.request("GET", path, headers={"Host": _host_header(host, port, scheme), "Accept": "application/json"})
+        resp = conn.getresponse()
+    except Exception:
+        conn.close()
+        raise
+    if 300 <= resp.status < 400:
+        code = resp.status
+        payload = BytesIO(resp.read())
+        resp.close()
+        conn.close()
+        raise HTTPError(url, code, "Prometheus redirects are refused (SSRF)", Message(), payload)
+    return _BoundResponse(conn, resp)
 
 
 def service_from_labels(metric: dict[str, str], label: str | None = None) -> str:

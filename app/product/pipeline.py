@@ -50,6 +50,57 @@ def _spike_flags(alerts: list[Alert], spikes: list, config: Config) -> list[bool
     return [bool(v) for v in frame["during_memory_spike"]]
 
 
+def _apply_model(
+    model: AlertClassifier,
+    alerts: list[Alert],
+    jumps: list,
+    flags: list[bool],
+    config: Config,
+    escalate_threshold: float,
+    review_threshold: float,
+) -> list[Decision]:
+    proba = model.predict_proba(alerts, jumps)
+    return spike_review_decisions(alerts, proba, config, escalate_threshold, review_threshold, flags)
+
+
+def _decisions_holding_out_train(
+    alerts: list[Alert],
+    jumps: list,
+    flags: list[bool],
+    config: Config,
+    split_at: pd.Timestamp,
+    model: AlertClassifier,
+    escalate_threshold: float,
+    review_threshold: float,
+    saved: SavedModel | None,
+) -> list[Decision]:
+    """Score the held-out window with the model just fit; not the rows it trained on."""
+    decisions: list[Decision | None] = [None] * len(alerts)
+    early = [i for i, alert in enumerate(alerts) if alert.timestamp < split_at]
+    later = [i for i, alert in enumerate(alerts) if alert.timestamp >= split_at]
+    if later:
+        subset = [alerts[i] for i in later]
+        scored = _apply_model(
+            model, subset, jumps, [flags[i] for i in later], config, escalate_threshold, review_threshold
+        )
+        for index, decision in zip(later, scored):
+            decisions[index] = decision
+    if early:
+        subset = [alerts[i] for i in early]
+        sub_flags = [flags[i] for i in early]
+        if saved is not None and saved.model is not None and saved.label_source != "weak_severity":
+            scored = _apply_model(
+                saved.model, subset, jumps, sub_flags, config, saved.escalate_threshold, saved.review_threshold
+            )
+        else:
+            scored = baseline_decisions(subset, config)
+        for index, decision in zip(early, scored):
+            decisions[index] = decision
+    if any(decision is None for decision in decisions):
+        raise RuntimeError("an alert was left unscored")
+    return decisions  # type: ignore[return-value]
+
+
 def _jump_items(
     spikes: list[Spike],
     alerts: list[Alert],
@@ -237,8 +288,14 @@ def score_alerts(
         )
         split_at = None
 
-    flags = [bool(v) for v in build_feature_frame(alerts, config, jumps)["during_memory_spike"]] if alerts else []
-    if model is not None and alerts:
+    flags = _spike_flags(alerts, jumps, config) if alerts else []
+    if model is not None and alerts and model_used == "trained" and split_at is not None:
+        # The fit just saw the early rows. Score those with the previous model
+        # or with severity rules, and use this fit only on the later window.
+        decisions = _decisions_holding_out_train(
+            alerts, jumps, flags, config, split_at, model, escalate_threshold, review_threshold, saved
+        )
+    elif model is not None and alerts:
         proba = model.predict_proba(alerts, jumps)
         decisions = spike_review_decisions(alerts, proba, config, escalate_threshold, review_threshold, flags)
         if model_used == "saved":
@@ -354,7 +411,8 @@ def _train(alerts: list[Alert], metrics: pd.DataFrame | None, config: Config,
             "model_used": "trained",
             "note": (
                 "Fit on the early window; the threshold is frozen before the later window. "
-                "Every alert is in the queue, but only the later window is an honest test."
+                "Only the later window is scored with this fit. The early window uses the "
+                "previous model, or severity rules when there is none."
             ),
             "threshold": round(float(escalate_threshold), 4),
             "train": _class_report(train_alerts, train_proba, escalate_threshold),

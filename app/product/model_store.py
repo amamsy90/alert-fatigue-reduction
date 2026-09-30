@@ -1,7 +1,8 @@
 """Model versions: every trained model is kept with a model card; one is active.
 
-`model.pkl` is the active model (what live batches are scored with). Every
-trained model is also written to `models/vNNNN.pkl` with a SHA-256 and an
+The active file is still named `model.pkl` so existing paths keep working, but
+it is a zip of JSON plus a scikit-learn file written by skops. Nothing in that
+file is unpickled. Every version is `models/vNNNN.pkl` with a SHA-256 and an
 entry in `models/registry.json` (the model card: when, on what data, with
 which code, how it scored on its held-out window, and whether it passed the
 promotion gate). `activate_version` rolls back to any earlier version.
@@ -9,27 +10,35 @@ promotion gate). `activate_version` rolls back to any earlier version.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import joblib
 import pandas as pd
+import skops.io as sio
 
 from src.classifier import AlertClassifier
 
 DEFAULT_PATH = Path(__file__).resolve().parent / "data" / "model.pkl"
 RETRAIN_AFTER_DAYS = 7
+# Zip of meta.json and, when a classifier was fit, pipe.skops. Not a pickle.
+MODEL_FORMAT = "oncall-model-v1"
+# numpy.ravel is the FunctionTransformer inside the text branch. Anything else
+# beside skops' own sklearn types is refused, so a file cannot name os.system.
+TRUSTED_TYPES = frozenset({"numpy.ravel"})
 
 
 @dataclass
 class SavedModel:
-    model: AlertClassifier
+    model: AlertClassifier | None
     escalate_threshold: float
     review_threshold: float
     label_source: str
@@ -73,37 +82,104 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _meta(saved: SavedModel, has_pipeline: bool) -> dict:
+    return {
+        "format": MODEL_FORMAT,
+        "has_pipeline": has_pipeline,
+        "escalate_threshold": saved.escalate_threshold,
+        "review_threshold": saved.review_threshold,
+        "label_source": saved.label_source,
+        "trained_at": saved.trained_at,
+        "train_alerts": saved.train_alerts,
+        "feedback_real": saved.feedback_real,
+    }
+
+
+def _pipeline_bytes(pipe: object) -> bytes:
+    with tempfile.NamedTemporaryFile(suffix=".skops", delete=False) as handle:
+        skops_path = Path(handle.name)
+    try:
+        sio.dump(pipe, skops_path)
+        return skops_path.read_bytes()
+    finally:
+        skops_path.unlink(missing_ok=True)
+
+
+def _load_pipeline(blob: bytes) -> object | None:
+    with tempfile.NamedTemporaryFile(suffix=".skops", delete=False) as handle:
+        handle.write(blob)
+        skops_path = Path(handle.name)
+    try:
+        unknown = set(sio.get_untrusted_types(file=skops_path))
+        extra = unknown - TRUSTED_TYPES
+        if extra:
+            log.error("Refusing model: unexpected types %s", sorted(extra))
+            return None
+        return sio.load(skops_path, trusted=sorted(TRUSTED_TYPES & unknown))
+    finally:
+        skops_path.unlink(missing_ok=True)
+
+
 def save_model(saved: SavedModel, path: Path | None = None) -> None:
-    """Write the model with joblib and a SHA-256 next to it (model.pkl.sha256)."""
+    """Write a zip (JSON plus skops) and a SHA-256 next to it. Never pickle."""
     path = path or model_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    pipe = None if saved.model is None else getattr(saved.model, "_pipe", None)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("meta.json", json.dumps(_meta(saved, pipe is not None)))
+        if pipe is not None:
+            archive.writestr("pipe.skops", _pipeline_bytes(pipe))
     tmp = path.with_suffix(".tmp")
-    joblib.dump(saved, tmp)
+    tmp.write_bytes(buf.getvalue())
     digest = _sha256(tmp)
     tmp.replace(path)
     _digest_path(path).write_text(digest + "\n", encoding="ascii")
 
 
 def load_model(path: Path | None = None) -> SavedModel | None:
-    """Load the model this app wrote. Refuses a file whose SHA-256 does not match
-    the one saved with it (a replaced or corrupted file is never unpickled).
-
-    Unpickling runs code, so never point MODEL_PATH at a file from elsewhere.
-    A model saved before hashes were written is loaded once and given a hash.
-    """
+    """Load a model this app wrote. Refuses a missing or mismatched SHA-256,
+    a pickle, or a skops file whose types are not on the allowlist."""
     path = path or model_path()
     if not path.exists():
         return None
     digest_file = _digest_path(path)
-    if digest_file.exists():
-        expected = digest_file.read_text(encoding="ascii").strip()
-        if _sha256(path) != expected:
-            log.error("Refusing %s: SHA-256 does not match %s", path, digest_file.name)
-            return None
-    saved = joblib.load(path)
     if not digest_file.exists():
-        digest_file.write_text(_sha256(path) + "\n", encoding="ascii")
-    return saved
+        log.error("Refusing %s: no SHA-256 file beside it", path)
+        return None
+    expected = digest_file.read_text(encoding="ascii").strip()
+    if _sha256(path) != expected:
+        log.error("Refusing %s: SHA-256 does not match %s", path, digest_file.name)
+        return None
+    raw = path.read_bytes()
+    if not raw.startswith(b"PK"):
+        log.error("Refusing %s: not a model archive", path)
+        return None
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            meta = json.loads(archive.read("meta.json"))
+            if meta.get("format") != MODEL_FORMAT:
+                log.error("Refusing %s: unknown model format", path)
+                return None
+            model = None
+            if meta.get("has_pipeline"):
+                pipe = _load_pipeline(archive.read("pipe.skops"))
+                if pipe is None:
+                    return None
+                model = AlertClassifier()
+                model._pipe = pipe
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+        log.error("Refusing %s: model archive could not be read", path)
+        return None
+    return SavedModel(
+        model=model,
+        escalate_threshold=float(meta["escalate_threshold"]),
+        review_threshold=float(meta["review_threshold"]),
+        label_source=str(meta["label_source"]),
+        trained_at=str(meta["trained_at"]),
+        train_alerts=int(meta["train_alerts"]),
+        feedback_real=int(meta["feedback_real"]),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +203,10 @@ def load_registry() -> dict:
         return {"active": None, "versions": []}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {"active": None, "versions": []}
+    except (OSError, ValueError) as exc:
+        # An empty registry would look like "no active model" and the next
+        # train would promote itself. A job that cannot read the registry fails.
+        raise ValueError(f"model registry {path.name} is unreadable; refusing to treat it as empty") from exc
     data.setdefault("active", None)
     data.setdefault("versions", [])
     return data

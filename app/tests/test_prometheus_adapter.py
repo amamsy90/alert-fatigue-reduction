@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import socket
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 from product.prometheus_adapter import (
     MAX_POINTS,
@@ -14,6 +17,13 @@ from product.prometheus_adapter import (
     service_from_labels,
     step_seconds,
 )
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    """Fake hostnames in these tests are not on the real DNS."""
+    fake = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+    monkeypatch.setattr("product.ops.socket.getaddrinfo", lambda *_a, **_k: fake)
 
 
 class _Resp:

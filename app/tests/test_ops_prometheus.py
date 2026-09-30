@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +16,12 @@ os.environ["QUEUE_DB"] = str(Path(tempfile.mkdtemp()) / "import_queue.db")
 
 from product.ops import get_prom_url, set_prom_url  # noqa: E402
 from product.store import QueueStore  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    fake = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+    monkeypatch.setattr("product.ops.socket.getaddrinfo", lambda *_a, **_k: fake)
 
 
 class _Resp:
