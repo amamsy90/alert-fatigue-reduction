@@ -13,4 +13,4 @@ The target user is one team on one server, often in a pilot. A database server w
 ## Consequences
 - `docker compose up` is the whole install; backups are one volume.
 - The locks are in-process, so running several workers or replicas is not supported. Scaling out would need a real database and a shared lock (for example PostgreSQL advisory locks).
-- Secrets in `ops.json` are protected by file permissions, not encryption.
+- Paging secrets live in `secrets.json` (or a Docker secret file), not in `ops.json`. The file is owner-only where the OS allows.

@@ -4,6 +4,7 @@
 __pycache__/
 data/nab/
 data/smd/
+data/rcaeval/
 data/sample_product/
 examples/shop/
 product/data/

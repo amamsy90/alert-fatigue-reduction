@@ -79,7 +79,11 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 |---|---|---|
 | `PAGE_LOOKBACK_MINUTES` | `60` | First ingest job only: how far back metric items may be paged (later jobs page only what is new since the last one) |
 | `SHADOW_MODE` | `1` | Bootstrap default; UI Live override is saved in `ops.json`. `0` = Live |
-| `APP_PASSWORD` / `APP_USER` | none / `oncall` | Basic-auth login for everything except `/health`. Required before Live mode can be turned on, and behind a reverse proxy |
+| `APP_PASSWORD` / `APP_USER` | none / `oncall` | Operator login. `POST /login` sets an HttpOnly session cookie; basic auth still works for scripts. Required before Live mode, and behind a reverse proxy |
+| `APP_VIEWER_PASSWORD` / `APP_VIEWER_USER` | none / `viewer` | Read-only login. Writes (Live, keys, settings, jobs) return 403 |
+| `COOKIE_SECURE` | off | `1` marks the session cookie Secure. Also set when the proxy sends `X-Forwarded-Proto: https` |
+| `AUDIT_LOG_PATH` | `audit.log` beside the ops file | Extra copy of the audit log. `off` keeps stdout only |
+| `SECRETS_PATH` / `SECRETS_DIR` | `secrets.json` beside the ops file / `/run/secrets` | Paging keys. A saved key is not written into `ops.json` |
 | `INGEST_TOKEN` | none | Bearer token for `/ingest/*` (header only; `?token=` is refused) |
 | `ALLOWED_HOSTS` | none | Extra `Host` names the app answers from this machine without a password (DNS-rebinding guard) |
 | `MAX_INGEST_MB` | `10` | Largest JSON body `/ingest/*` and other JSON routes accept; bigger bodies get 413 while they stream in |

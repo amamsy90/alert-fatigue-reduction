@@ -1,0 +1,10 @@
+dataset,kind,chosen,label,train_cost,train_caught,train_false,train_incidents,test_no_budget,test_spikes,chance,median_rise_gb,confirm_series,series_sizes
+online-boutique,jump,False,"jump window=288 pts, z=12, points=3, up",679.0,12,679,12,1.0,744,0.2846,0.51,3,0
+online-boutique,delta,True,"delta window=1 pts, z=3, points=2, up",120.0,0,0,12,0.0,0,0.0,0.51,0,0
+online-boutique,static,False,"static q=0.999, up",144.0,0,24,12,0.7692,70,0.2738,0.51,0,0
+sock-shop,jump,False,"jump window=288 pts, z=12, points=3, up",220.0,12,220,12,0.9231,235,0.4708,0.3,4,0
+sock-shop,delta,True,"delta window=1 pts, z=3, points=2, up",120.0,0,0,12,0.0,0,0.0,0.3,0,0
+sock-shop,static,False,"static q=0.999, up",124.0,0,4,12,0.5385,32,0.2892,0.3,0,0
+train-ticket,jump,False,"jump window=288 pts, z=12, points=3, up",1323.0,12,1323,12,0.6154,1512,0.4092,0.33,4,0
+train-ticket,delta,True,"delta window=1 pts, z=3, points=2, up",120.0,0,0,12,0.0,0,0.0,0.33,0,0
+train-ticket,static,False,"static q=0.999, up",131.0,0,11,12,0.3846,54,0.1985,0.33,0,0

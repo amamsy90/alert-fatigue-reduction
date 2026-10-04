@@ -135,10 +135,11 @@ def test_busy_job_returns_409(client, monkeypatch):
 def test_ops_file_chmod_best_effort(tmp_path, monkeypatch):
     monkeypatch.setenv("OPS_PATH", str(tmp_path / "ops.json"))
     ops.set_routing_key("rk_secret_abcd")
-    path = tmp_path / "ops.json"
-    assert path.exists()
-    raw = path.read_text(encoding="utf-8")
-    assert "rk_secret_abcd" in raw  # stored for the app
+    ops_file = tmp_path / "ops.json"
+    secret_file = tmp_path / "secrets.json"
+    assert secret_file.exists()
+    assert "rk_secret_abcd" in secret_file.read_text(encoding="utf-8")
+    assert "rk_secret_abcd" not in ops_file.read_text(encoding="utf-8")
     # On Unix the mode should be owner-only; on Windows just ensure save worked.
     if os.name == "posix":
-        assert (path.stat().st_mode & 0o777) == 0o600
+        assert (secret_file.stat().st_mode & 0o777) == 0o600

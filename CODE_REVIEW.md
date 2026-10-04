@@ -1,5 +1,7 @@
 # Project review — Alert Fatigue Reduction (A to Z)
 
+> **Historical review.** This file records the first review. Do not treat section 2 as the current code. The high bugs there (half-batch scoring, jumps never paged, drain-before-score, open bind) were fixed before September 2026. Models are a skops archive: `load_model` refuses pickle (`docs/threat_model.md` R8). Residual risks R1 through R8 are closed. The current security and result claims are in `FINAL_REPORT.md` and `docs/threat_model.md`.
+
 > **Status (branch `review-fixes`):** every item in sections 1–3 is done (except removing your runtime `product/data/queue.db` and the editor index `.git/cursor/`, which were left alone on purpose), and the Phase 3 ideas in section 4 were implemented and measured (see `ROADMAP.md`). Only the second dataset remains future work. Test faults are 1,223 (not 1,226) because alerts, faults and metrics now share one split time.
 
 **Scope:** every file in `project_SW` — docs, `app/src`, `app/run_*.py`, `app/product`, tests, results.

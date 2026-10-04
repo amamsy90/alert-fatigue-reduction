@@ -81,7 +81,7 @@ On the main queue **Connectors** panel:
 3. Optional: **Send test page** (only when Live + key).
 4. Switch back to **Shadow** any time.
 
-Overrides persist in `product/data/ops.json` (or `OPS_PATH`). Env `SHADOW_MODE` / `PAGERDUTY_ROUTING_KEY` are the bootstrap defaults when no override is saved.
+Shadow/Live and the Prometheus URL persist in `product/data/ops.json` (or `OPS_PATH`). A paging key saved from the UI goes to `secrets.json`, not into `ops.json`. Env `SHADOW_MODE` / `PAGERDUTY_ROUTING_KEY`, or a file under `SECRETS_DIR`, are the bootstrap defaults when nothing is saved.
 
 ### When a page is actually sent
 
