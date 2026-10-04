@@ -345,3 +345,37 @@ def test_prometheus_error_status_raises_http_error(monkeypatch):
         assert caught.value.code == 503
     finally:
         server.shutdown()
+
+
+def test_prometheus_fetch_goes_through_http_proxy_when_configured(monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from product import prometheus_adapter
+
+    seen: dict[str, str] = {}
+
+    class _Proxy(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            seen["target"] = self.path
+            seen["host"] = self.headers.get("Host", "")
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"status": "success"}')
+
+        def log_message(self, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), _Proxy)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.setattr("product.ops.pinned_prom_address", lambda url: "93.184.216.34")
+    try:
+        with prometheus_adapter.urlopen("http://prom.example.com:9090/api/v1/query?query=up", timeout=5) as resp:
+            assert resp.read() == b'{"status": "success"}'
+    finally:
+        server.shutdown()
+    assert seen["target"] == "http://prom.example.com:9090/api/v1/query?query=up"
+    assert seen["host"] == "prom.example.com:9090"
