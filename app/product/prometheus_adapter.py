@@ -13,7 +13,7 @@ from email.message import Message
 from io import BytesIO
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
-from urllib.request import HTTPRedirectHandler
+from urllib.request import HTTPRedirectHandler, getproxies, proxy_bypass
 
 import pandas as pd
 
@@ -80,8 +80,20 @@ def _host_header(host: str, port: int, scheme: str) -> str:
     return f"{name}:{port}"
 
 
+def _proxy_for(scheme: str, host: str) -> tuple[str, int] | None:
+    """(host, port) of the HTTP(S)_PROXY for this scheme, unless NO_PROXY covers the host."""
+    raw = getproxies().get(scheme)
+    if not raw or proxy_bypass(host):
+        return None
+    parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+    if not parsed.hostname:
+        return None
+    return parsed.hostname, parsed.port or 80
+
+
 def urlopen(url: str, timeout: float | None = None):
-    """Open a Prometheus URL. Dials the IP from the safety check; does not follow redirects."""
+    """Open a Prometheus URL. Dials the IP from the safety check, or the configured
+    HTTP(S)_PROXY; does not follow redirects."""
     from product.ops import pinned_prom_address
 
     parsed = urlparse(url)
@@ -94,12 +106,24 @@ def urlopen(url: str, timeout: float | None = None):
         path = f"{path}?{parsed.query}"
     timeout = 60.0 if timeout is None else timeout
     conn: http.client.HTTPConnection
-    if scheme == "https":
+    target = path
+    proxy = _proxy_for(scheme, host)
+    if proxy is not None:
+        # The operator's proxy resolves and dials the host. The safety check above
+        # still ran on the URL, and the proxy address itself is operator config.
+        proxy_host, proxy_port = proxy
+        if scheme == "https":
+            conn = http.client.HTTPSConnection(proxy_host, proxy_port, timeout=timeout, context=ssl.create_default_context())
+            conn.set_tunnel(host, port)
+        else:
+            conn = http.client.HTTPConnection(proxy_host, proxy_port, timeout=timeout)
+            target = f"{scheme}://{_host_header(host, port, scheme)}{path}"
+    elif scheme == "https":
         conn = _PinnedHTTPS(host, port, ip, timeout, ssl.create_default_context())
     else:
         conn = _PinnedHTTP(host, port, ip, timeout)
     try:
-        conn.request("GET", path, headers={"Host": _host_header(host, port, scheme), "Accept": "application/json"})
+        conn.request("GET", target, headers={"Host": _host_header(host, port, scheme), "Accept": "application/json"})
         resp = conn.getresponse()
     except Exception:
         conn.close()
