@@ -5,7 +5,7 @@
 **Final report**
 **Author:** Aishah Mohamed Alyammahi
 **Course:** Software Engineering and Programming
-**Date:** [Date]
+**Date:** 30 September 2026
 
 Numbers come from scripts under `app/` and are checked by `python run_validate.py` against the *Checked numbers* table at the end. Part A follows the thirteen sections of the course brief; Part B holds the measured results; Part C says how to reproduce them.
 
@@ -60,10 +60,10 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 236/236, 90%, 0.32 s (§8) |
-| O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB and SMD results reported, including failures (§B5) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 240/240, 90%, 0.32 s (§8) |
+| O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 236 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 240 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ## 4. Target users and use case
 
@@ -166,7 +166,7 @@ Measured capacity: 50 concurrent users at 228 requests/s with p95 0.32 s; a 400-
 |---|---|---|
 | Unit | Detectors, queue, policy, scoring, settings | first come beats biggest first; a jump is confirmed at its second point |
 | Integration | Frontend routes ↔ backend ↔ database, with outbound calls mocked | webhook → buffer → job → queue; Live fans out to every channel; model rollback through the API |
-| System | The whole pipeline on GAIA, NAB and SMD; `experiment.py` on a synthetic run | walk-forward over 8 weeks; later data changes nothing |
+| System | The whole pipeline on GAIA, NAB, SMD and RCAEval; `experiment.py` on a synthetic run | walk-forward over 8 weeks; later data changes nothing |
 | AI-specific | Wrong or poor outputs, unexpected input, edge cases | a malformed webhook row is rejected instead of blocking every later job; one-class labels fall back to rules; a worse model is not activated; hidden alerts stay visible |
 | Security | Login, SSRF, CSRF, DNS rebinding, secrets, body limits | loopback tricks refused; forwarded requests need a password |
 | Performance | Latency, concurrent users, throughput | `perf/load_test.py`: 20 and 50 users |
@@ -175,12 +175,12 @@ Hallucination and prompt injection do not apply (no generative model), but the e
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% | 236 / 236 (Python 3.10 and 3.12) |
+| Tests passing | 100% | 240 / 240 (Python 3.10 and 3.12) |
 | Line coverage | ≥ 85% | 90% |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
-| Report numbers match results | 51 / 51 | 51 / 51 |
+| Report numbers match results | every checked number | 69 / 69 |
 
 CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py` and a Docker build with a health check on every push. Details: `docs/test_plan.md`.
 
@@ -215,30 +215,30 @@ Evaluation criteria with measured values, justification for each target and exam
 
 ## 12. Project scope and limitations
 
-**In scope (built):** the causal budgeted queue (jumps, leaks, gaps, alerts); the alert classifier with a model registry, promotion gate and rollback; the web app, API and CLI; Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie connectors; *Evaluate my data*; shadow mode and marks; security hardening; monitoring endpoints; Docker and per-environment settings; CI; the GAIA, NAB and SMD evaluations.
+**In scope (built):** the causal budgeted queue (jumps, leaks, gaps, alerts); the alert classifier with a model registry, promotion gate and rollback; the web app, API and CLI; Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie connectors; *Evaluate my data*; shadow mode and marks; security hardening; monitoring endpoints; Docker and per-environment settings; CI; the GAIA, NAB, SMD and RCAEval evaluations.
 
 **Out of scope (not built):** automatic remediation; multi-tenant hosting and user roles; LLM summaries of incidents; CPU, disk or network fault detection inside microservices (measured only on SMD servers); a managed cloud deployment; browser UI tests; a live pilot with a real team (the next step).
 
 **Limitations** (say these if asked):
 
-1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (§B3) tests other sizes and shapes; §B5 tests other domains (NAB, a shop, SMD servers), with small test sets and a chance line.
+1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (§B3) tests other sizes and shapes. §B5 tests other domains (NAB, a shop, SMD servers) and the same memory injection on three other microservice applications (RCAEval), with small test sets and a chance line.
 2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
 4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels; the per-series confirm levels (§B4) are measured but not in the headline.
 5. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
 
-**Future work.** Microservice benchmarks with other fault types (for example RCAEval or TrainTicket-based sets); a pilot with one team in shadow mode, measuring precision from marks; residual risks R1–R8 in `docs/threat_model.md`.
+**Future work.** RCAEval's CPU, disk, delay and packet-loss injections (only the memory injection is scored, in §B5); a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out, paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
 
 ## 13. Success criteria
 
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 236 / 236 | Yes |
+| At least 90% of predefined test cases pass | 240 / 240 | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it | Partly: the detector, yes; the full queue, a tie |
-| No critical security vulnerabilities in testing | 0 critical; 8 residual risks documented | Yes |
+| No critical security vulnerabilities in testing | 0 critical. R1 through R8 are closed and tested | Yes |
 | Deployable from documented instructions | `docker compose up`, `docs/deployment.md`, CI Docker job | Yes |
 | Another person can reproduce the environment | `uv sync`, lock files, `run_validate.py` | Yes |
 | The agreed functional requirements are met | 20 FR, each traced to tests (`docs/requirements.md`) | Yes |
@@ -386,6 +386,18 @@ On the shop data the monitoring view catches 10 of 11 problems where the notific
 
 An incident counts once and is caught if any metric that moved was shown while it lasted; the movement column counts every flagged metric on its own. Half of the incidents are found at 20 items a day per machine on real mixed-metric faults, well above the 12.4% chance line, but with low precision: SMD labels only some of the 38 metrics per incident, so a correlated movement on an unlabelled metric counts as false. Where a series had three or more tuning incidents the jump rule learned its own size (Section 4 of `USE_YOUR_DATA.md`). This is a harder benchmark than GAIA and it is reported as it is.
 
+**Same memory fault, three applications (RCAEval RE1).** RE1 injects one memory fault, five times on each of five services, into Online Boutique, Sock Shop and Train Ticket (75 recordings; [RCAEval](https://huggingface.co/datasets/phamquiluan/RCAEval)). Each recording is scored on its own. The first 12 recordings of an application tune the queue; the later 13 are scored once. Those later recordings are then laid end to end, about one day, and the daily cap is applied. Thresholds come from that application's own training recordings (`run_rcaeval.py`, `results/rcaeval_mem.csv`).
+
+The labelled service's memory series does move: median rise 0.51 GB, 0.30 GB and 0.33 GB. With the cap off, the jump rule overlaps 100%, 92.3% and 61.5% of the later injections, each above that rule's chance line (28.5%, 47.1%, 40.9%).
+
+| Application | Memory series | Median rise | Jump episodes on the test recordings | Jump, no cap | Chance | Queue at K = 5 |
+|---|---|---|---|---|---|---|
+| Online Boutique | 12 | 0.51 GB | 744 | 100% | 28.5% | 0% |
+| Sock Shop | 15 | 0.30 GB | 235 | 92.3% | 47.1% | 0% |
+| Train Ticket | 64 | 0.33 GB | 1,512 | 61.5% | 40.9% | 0% |
+
+The queue that would page someone catches 0 of 13 faults on every application at K = 2, 5 and 10. On the training recordings the jump rule caught all 12 faults and also raised 679, 220 and 1,323 other episodes. At the usual cost (a miss counts 10, a false episode counts 1) that is more expensive than a rate rule which raises nothing, so the tuner keeps the rate rule. Under the same cap the jump rule still misses: the test day contains hundreds of episodes and five slots, and the slots go to episodes that miss the injection. The fault is visible on all three applications. This budget and this cost leave it off the page.
+
 ---
 
 ## B6. What "success" means on this data
@@ -449,6 +461,8 @@ python ../tools/fetch_nab.py      # needs internet, ~15 MB
 python run_nab.py
 python ../tools/fetch_smd.py      # needs internet, ~240 MB
 python run_smd.py                # 28 machines, about 15 min; resumes if interrupted
+python ../tools/fetch_rcaeval_mem.py   # needs internet; RE1 memory cases only
+python run_rcaeval.py            # three applications, a few minutes
 python make_figures.py
 python run_validate.py
 ```
@@ -541,6 +555,24 @@ A faster check without GAIA: `cd app && uv sync --group dev && uv run pytest -q 
 | `smd.K5.movements` | 10.1% | §B5 |
 | `smd.K10.movements` | 19.3% | §B5 |
 | `smd.K20.movements` | 33.9% | §B5 |
+| `rcaeval.online-boutique.rise_gb` | 0.51 | §B5 |
+| `rcaeval.online-boutique.jump_spikes` | 744 | §B5 |
+| `rcaeval.online-boutique.jump_open` | 100% | §B5 |
+| `rcaeval.online-boutique.jump_chance` | 28.5% | §B5 |
+| `rcaeval.online-boutique.jump_train_false` | 679 | §B5 |
+| `rcaeval.online-boutique.K5` | 0% | §B5 |
+| `rcaeval.sock-shop.rise_gb` | 0.30 | §B5 |
+| `rcaeval.sock-shop.jump_spikes` | 235 | §B5 |
+| `rcaeval.sock-shop.jump_open` | 92.3% | §B5 |
+| `rcaeval.sock-shop.jump_chance` | 47.1% | §B5 |
+| `rcaeval.sock-shop.jump_train_false` | 220 | §B5 |
+| `rcaeval.sock-shop.K5` | 0% | §B5 |
+| `rcaeval.train-ticket.rise_gb` | 0.33 | §B5 |
+| `rcaeval.train-ticket.jump_spikes` | 1512 | §B5 |
+| `rcaeval.train-ticket.jump_open` | 61.5% | §B5 |
+| `rcaeval.train-ticket.jump_chance` | 40.9% | §B5 |
+| `rcaeval.train-ticket.jump_train_false` | 1323 | §B5 |
+| `rcaeval.train-ticket.K5` | 0% | §B5 |
 | `stats.jump_rate_with_data` | 99.6% | §B6 |
 | `stats.chance_overlap` | 2.6% | §B1 |
 | `stats.confirm_minutes_median` | 0.72 | §B1 |

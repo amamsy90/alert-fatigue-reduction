@@ -62,10 +62,10 @@ flowchart LR
 | # | Risk | Why it remains | Plan |
 |---|---|---|---|
 | R1 | Closed: the fetch dials the address from the same lookup that passed the SSRF check | | |
-| R2 | Basic auth over plain HTTP sends the password in every request | TLS is expected at a reverse proxy; the app does not terminate TLS | Document TLS as required when sharing; consider sessions with secure cookies |
+| R2 | Closed: `POST /login` sets an HttpOnly session cookie for 12 hours. `COOKIE_SECURE=1`, or `X-Forwarded-Proto: https` at the proxy, marks it Secure. Later requests send the cookie. Basic auth remains for scripts | | |
 | R3 | Closed: five failed logins from one client lock that client for 60 seconds (`LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`). `/health` stays open | | |
-| R4 | One shared password, no roles | Single-team tool | Separate viewer and operator roles if needed |
-| R5 | Audit log goes to stdout only | Kept simple | Ship container logs to the team's log store |
-| R6 | Secrets in `ops.json` are not encrypted at rest | File permissions only | Read keys from a secret manager or Docker secrets |
+| R4 | Closed: `APP_VIEWER_PASSWORD` (user `APP_VIEWER_USER`, default `viewer`) can read the queue. Any write other than login and logout returns 403. `APP_PASSWORD` is the operator | | |
+| R5 | Closed: the audit log is appended to `audit.log` next to the ops file (mode 0600 where the OS allows), and still copied to stdout. `AUDIT_LOG_PATH` moves the file; `off` keeps stdout only | | |
+| R6 | Closed: paging keys are stored in `secrets.json` (owner-only), or read from a file in `SECRETS_DIR` (Docker secrets) or from the environment. Saving strips those fields out of `ops.json` | |
 | R7 | Closed: paging remembers item keys, so a late point with a new key is still paged | | |
 | R8 | Closed: model files are a JSON plus skops archive. `load_model` never calls pickle or joblib | | |

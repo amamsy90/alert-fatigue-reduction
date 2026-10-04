@@ -1,7 +1,7 @@
 """Check that the result files still match the numbers printed in FINAL_REPORT.md.
 
 Run after run_queue_eval.py, run_walkforward.py, run_stats.py, run_robustness.py
-(and run_nab.py / run_smd.py when their data is present).
+(and run_nab.py / run_smd.py / run_rcaeval.py when their data is present).
 
 The report's "Checked numbers" table is the contract: every row names a key and
 the value the report prints. Each key is recomputed from app/results/ and must
@@ -103,6 +103,21 @@ def computed_numbers() -> dict[str, float]:
             yq = frame[(frame["queue"] == "your_queue") & (frame["budget_k"] == k)]
             out[f"smd.K{k}.incidents"] = float(yq["incidents_caught"].sum() / yq["incidents"].sum())
             out[f"smd.K{k}.movements"] = float(yq["faults_caught"].sum() / yq["faults"].sum())
+
+    rca = ROOT / "rcaeval_mem.csv"
+    if rca.exists():  # only after tools/fetch_rcaeval_mem.py + run_rcaeval.py
+        frame = pd.read_csv(rca)
+        settings = pd.read_csv(ROOT / "rcaeval_mem_settings.csv")
+        for dataset in frame["dataset"].unique():
+            jump = frame[(frame["dataset"] == dataset) & (frame["queue"] == "jump_rule") & (frame["budget_k"] == 5)].iloc[0]
+            yours = frame[(frame["dataset"] == dataset) & (frame["queue"] == "your_queue") & (frame["budget_k"] == 5)].iloc[0]
+            fit = settings[(settings["dataset"] == dataset) & (settings["kind"] == "jump")].iloc[0]
+            out[f"rcaeval.{dataset}.rise_gb"] = float(jump["median_rise_gb"])
+            out[f"rcaeval.{dataset}.jump_spikes"] = float(fit["test_spikes"])
+            out[f"rcaeval.{dataset}.jump_open"] = float(jump["detection_no_budget"])
+            out[f"rcaeval.{dataset}.jump_chance"] = float(jump["chance"])
+            out[f"rcaeval.{dataset}.jump_train_false"] = float(fit["train_false"])
+            out[f"rcaeval.{dataset}.K5"] = float(yours["detection_rate"])
     return out
 
 
@@ -130,6 +145,15 @@ def claims_still_hold() -> None:
         tweets = n[(n["queue"] == "your_queue") & (n["budget_k"] == 2) & (n["dataset"] == "realTweets")].iloc[0]
         if float(tweets["detection_rate"]) > float(tweets["chance"]) + 0.05:
             _fail("NAB tweets now beats chance; update the 'no better than chance' sentence")
+    rca = ROOT / "rcaeval_mem.csv"
+    if rca.exists():
+        frame = pd.read_csv(rca)
+        yours = frame[frame["queue"] == "your_queue"]
+        if (yours["detection_rate"] > 0).any():
+            _fail("RCAEval queue now catches a test fault; update the §B5 paragraph")
+        jump = frame[(frame["queue"] == "jump_rule") & (frame["budget_k"] == 5)]
+        if (jump["detection_no_budget"] <= jump["chance"]).any():
+            _fail("RCAEval jump rule is no longer above its chance line; update §B5")
 
 
 def main() -> None:

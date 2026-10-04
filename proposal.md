@@ -2,33 +2,60 @@
 
 **Author:** Aishah Mohamed Alyammahi
 **Course:** Software Engineering and Programming
-**Date:** [Date]
+**Date:** 30 September 2026
 **Sector:** Cloud microservice operations (online platforms)
+
+The five sections below are the proposal. Section 6 keeps the measured method and the GAIA numbers. The full course brief is answered in `FINAL_REPORT.md`.
 
 ---
 
-## 1. Summary
+## 1. Motivation
 
-This project focuses on **one sector: cloud microservice operations** — the on-call queue behind an online platform built from many small services (login, database, cache, web front ends). Those services raise a constant stream of alerts; most are noise — duplicates, or many symptoms of a single underlying fault. The on-call engineer can check only a few at a time, so genuine incidents get missed and users of the platform pay the delay. The system builds one daily queue of at most K items. **Memory jumps** (a service's memory suddenly rising well above its own recent level) and **monitoring gaps** are shown as soon as they are confirmed; log alerts may use a quarter of the slots and are **escalated**, sent to a person to **ask**, or **suppressed**. It is evaluated on the open GAIA MicroSS dataset, which records every injected fault, against the rules a team already runs: log severity with duplicate suppression, and Prometheus-style static and rate rules on memory.
+An on-call engineer for a cloud platform sees thousands of alerts a day and can check only a few. Most alerts are duplicates or several symptoms of one fault. The usual tools escalate by log severity and delete exact duplicates. They do not treat a sudden memory rise as one incident, and they do not stop when the engineer's attention runs out. Real faults are then missed because the queue is full, not because monitoring was silent. On the GAIA microservice data used here, most injected faults never write a log line at all, so a severity rule alone catches none of them.
 
-## 2. Problem and motivation
+**Problem statement.** On-call engineers lack a queue that stays inside a fixed daily budget and still surfaces confirmed memory faults ahead of log noise, so genuine incidents wait while duplicates are read.
 
-- A cloud microservice platform emits thousands of alerts per day; the large majority require no action.
-- Alerts about the same underlying fault (often a short memory anomaly on one service) arrive as many separate items.
-- On-call attention is a hard budget: an engineer can meaningfully review only a handful of alerts per hour.
-- Consequence: **alert fatigue** — real incidents are missed or acknowledged late, not because detection failed, but because attention ran out. Users of the platform see slowdowns or outages.
-- Today's common practice — fixed severity thresholds plus deleting exact duplicates — does not understand alert content, cannot recognize a memory jump as one incident, and does not adapt to how much attention is available.
+## 2. Expected impact
 
-**Goal:** on a cloud microservice on-call queue, given a fixed review budget, catch more injected faults than severity + exact-duplicate grouping. Success is a clear win on a frozen train window, a held-out test, and a walk-forward check — not a 95% recall target. That 95% figure assumed every fault leaves a log line. On this data most do not.
+A platform team can open one queue of at most K items for the day, see a memory jump as a single confirmed item, and leave paging off until they choose Live. Users of the platform benefit when a fault is noticed in about a minute instead of after the log noise has been cleared. The value depends on the budget being real, on shadow mode sending nothing, and on the evaluation using later days than the week the thresholds were learned from. This project does not replace the engineer: the queue ranks items, and a person decides what to act on.
 
-## 3. Objectives
+## 3. Proposed approach
 
-1. **Classify** each alert: does it correspond to a real fault, and is it urgent enough to interrupt a person now?
-2. **Detect memory jumps.** A jump is memory rising more than 0.5 GB above the median of the previous 15 minutes on the same service, for at least two points. One jump is one incident, and the logs from that service during the jump belong to it.
-3. **Decide under a budget**: rank and route alerts so the few items a human can check are the ones that matter most.
-4. **Evaluate honestly** against ground truth, across a range of attention budgets, against the standard baseline.
+The working system is a Python service. FastAPI serves the queue, the API, and the connectors. SQLite holds alerts, jobs, and marks. Rules detect a memory jump (0.5 GB above the previous 15-minute median, two confirming points), a slow leak, and a monitoring gap. A cost-sensitive logistic regression ranks log alerts only, because a rule already finds the jump and most faults have no log line. Missing a fault costs ten times one extra item. The model is stored as a skops archive with a hash, a model card, a promotion gate, and rollback. Docker runs the app on the engineer's machine. Shadow mode is the default.
 
-## 4. Data — GAIA
+The four build milestones are done:
+
+- **M1 — Data and baseline.** GAIA alerts, logs, and memory are aligned to UTC. The severity-plus-duplicates baseline and the Prometheus static and rate rules run on the same time split.
+- **M2 — Alert classification.** The classifier is trained on the first week only. It does not score the rows it just trained on.
+- **M3 — Memory jumps.** One jump is one incident. One-point blips are not shown. The jump is shown at its confirming point, not at the end of the day.
+- **M4 — Budget.** The queue is first-come, at most K items a day, with log alerts capped at a quarter of K. K is reported at 5, 10, 20, and 50.
+
+Human marks (Real or Noise) are collected in shadow mode and can retrain the classifier. They are not required for the GAIA result, which uses the injected-fault labels.
+
+## 4. Deliverables and success criteria
+
+Deliverables: this repository, setup in the root `README.md`, the design specification, automated tests, Docker, and `FINAL_REPORT.md`.
+
+Success is a task someone can watch:
+
+- An engineer opens the queue and sees at most K items for the day.
+- A memory jump is one item, and it appears only after the second confirming point.
+- Shadow mode sends nothing. Live paging happens only when the password, a channel, and the typed word Live are all set.
+- On the later GAIA window, at K = 20, the jump detector beats the Prometheus rate rule, and the walk-forward weeks stay near that result. The numbers are in section 6 and are checked by `python run_validate.py`.
+
+There were no human usability sessions. GAIA records every injected fault, which is the check used instead.
+
+## 5. Timeline and feasibility
+
+The core queue, the detectors, shadow mode, the tests, and the GAIA evaluation are built. What remains before the December presentation is the demo and the viva notes. The Word copies in `submission/` were regenerated from these Markdown files on 30 September 2026.
+
+**Out of scope, and acceptable to leave limited:** automatic remediation, browser tests, the load test inside CI, a hosted cloud deployment, and an LLM summary of incidents. Sign-in sets a session cookie, a second password can read the queue but cannot change it, the audit log is also written to a file, and paging secrets are stored outside `ops.json`.
+
+Synthetic or public data is enough for the submission. A pilot on a real team's alerts would need their permission and is not part of this semester.
+
+## 6. Method and measured results
+
+### Data — GAIA
 
 The project uses **GAIA (Generic AIOps Atlas)**, a free public dataset:
 
@@ -38,9 +65,9 @@ The project uses **GAIA (Generic AIOps Atlas)**, a free public dataset:
 
 The span supports a realistic time-based evaluation: learn from the first week (3,630 alerts, 144 faults), test on the following 55 days (31,233 alerts, 1,223 faults). The logs are in China time and the memory files in UTC, so both are aligned to UTC on loading.
 
-## 5. Method
+### Method (as built)
 
-The work proceeds in four milestones, each with a clear "done when" condition.
+These are the checks each milestone had to meet. They are built.
 
 ### M1 — Data pipeline and baseline
 - Ingest GAIA alerts/logs/metrics; align alerts with the injected-fault records.
@@ -66,7 +93,7 @@ The work proceeds in four milestones, each with a clear "done when" condition.
 - Only uncertain alerts inside a memory jump are routed to a person, instead of every uncertain alert; report how decisions change when staff can handle more or fewer items.
 - An on-call web app runs the queue in shadow mode (nothing is paged). People mark items Real or Noise, and those marks become labels for retraining on the company's own data.
 
-## 6. Evaluation plan
+### Evaluation plan
 
 **Protocol**
 - Time-based split: train on the first week, test on the following 55 days — never random-shuffle.
@@ -116,25 +143,14 @@ Cautions. Every GAIA fault is the same memory program, so this data favours a me
 | Marker still grades the old 95% table | Proposal and report now state the measured claim; `run_validate.py` checks the csv files |
 | Changing to a second public dataset late | Do not. All 1,367 injections here are memory programs; extra metric types are not in the local files |
 
-## 8. Timeline
-
-Core build (M1–M4, walk-forward, local app) is done. One month remains to make the mark safe.
-
-| Remaining weeks | Work |
-|---|---|
-| This week | Frozen claim + stats (interval, 8/8 test, per-service, silent faults). Done: `run_stats.py` |
-| Next week | Fill name / course / date; turn `FINAL_REPORT.md` into the course Word/PDF if required |
-| Week after | Viva answers from section 8 of the report; 3-minute demo of the local queue |
-| Last week | `python run_validate.py`; freeze; submit. No new dataset |
-
-## 9. Tools and resources
+## 8. Tools and resources
 
 - Python (pandas, scikit-learn), Jupyter for analysis
 - GAIA dataset (github.com/CloudWise-OpenSource/GAIA-DataSet)
 - GAIA memory metric csv files (timestamp, value), one series per service
 - Git for version control; all experiments reproducible from scripts
 
-## 10. Expected outcome
+## 9. Expected outcome
 
 A working, evaluated prototype that, at a fixed daily budget, catches more injected memory faults than severity + exact-duplicate grouping, with a walk-forward interval and a stated ceiling (faults that never move memory and never write a log). Alongside it, a local on-call web app that runs the same queue in shadow mode, so a platform team can collect its own labels before trusting it.
 

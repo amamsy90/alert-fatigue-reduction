@@ -15,10 +15,11 @@ import os
 import secrets
 import threading
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import HTTPException, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 
 from product.web.uploads import _max_upload_bytes
 
@@ -27,24 +28,39 @@ INGEST_PATHS = {"/ingest/alerts", "/ingest/alertmanager"}
 
 
 def _auth_settings() -> tuple[str, str] | None:
-    """Login is on when APP_PASSWORD is set; APP_USER defaults to "oncall"."""
+    """Operator login is on when APP_PASSWORD is set; APP_USER defaults to "oncall"."""
     password = os.environ.get("APP_PASSWORD")
     if not password:
         return None
     return os.environ.get("APP_USER", "oncall"), password
 
 
-def _credentials_ok(header: str | None, user: str, password: str) -> bool:
-    if not header or not header.lower().startswith("basic "):
-        return False
-    try:
-        decoded = base64.b64decode(header[6:].strip()).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError):
-        return False
-    given_user, _, given_password = decoded.partition(":")
-    user_ok = secrets.compare_digest(given_user.encode(), user.encode())
-    password_ok = secrets.compare_digest(given_password.encode(), password.encode())
-    return user_ok and password_ok
+def _viewer_settings() -> tuple[str, str] | None:
+    """Read-only login. Unset means there is no viewer account."""
+    password = os.environ.get("APP_VIEWER_PASSWORD")
+    if not password:
+        return None
+    return os.environ.get("APP_VIEWER_USER", "viewer"), password
+
+
+def _accounts() -> list[tuple[str, str, str]]:
+    accounts = []
+    operator = _auth_settings()
+    if operator:
+        accounts.append((operator[0], operator[1], "operator"))
+    viewer = _viewer_settings()
+    if viewer:
+        accounts.append((viewer[0], viewer[1], "viewer"))
+    return accounts
+
+
+def _match_password(user: str, password: str) -> tuple[str, str] | None:
+    for account_user, account_password, role in _accounts():
+        user_ok = secrets.compare_digest(user.encode(), account_user.encode())
+        password_ok = secrets.compare_digest(password.encode(), account_password.encode())
+        if user_ok and password_ok:
+            return account_user, role
+    return None
 
 
 _LOGIN_LOCK = threading.Lock()
@@ -65,11 +81,19 @@ def _login_limits() -> tuple[int, float]:
     return max(1, fails), max(1.0, seconds)
 
 
+_SESSION_LOCK = threading.Lock()
+_SESSIONS: dict[str, tuple[str, str]] = {}
+SESSION_COOKIE = "oncall_session"
+_ROLE_FREE_POSTS = {"/login", "/logout"}
+
+
 def reset_login_attempts() -> None:
-    """Clear the in-memory counters. Tests use this; the process otherwise keeps them."""
+    """Clear the in-memory counters and sessions. Tests use this; the process otherwise keeps them."""
     with _LOGIN_LOCK:
         _LOGIN_FAILS.clear()
         _LOGIN_UNTIL.clear()
+    with _SESSION_LOCK:
+        _SESSIONS.clear()
 
 
 def _login_wait(client: str) -> float:
@@ -176,6 +200,62 @@ def _is_loopback(host: str | None) -> bool:
         return False
 
 
+def _cookie_token(header: str | None) -> str | None:
+    if not header:
+        return None
+    for part in header.split(";"):
+        name, _, value = part.strip().partition("=")
+        if name == SESSION_COOKIE and value:
+            return value
+    return None
+
+
+def _session_identity(cookie_header: str | None) -> tuple[str, str] | None:
+    token = _cookie_token(cookie_header)
+    if not token:
+        return None
+    with _SESSION_LOCK:
+        return _SESSIONS.get(token)
+
+
+def _basic_identity(header: str | None) -> tuple[str, str] | None:
+    if not header or not header.lower().startswith("basic "):
+        return None
+    try:
+        decoded = base64.b64decode(header[6:].strip()).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return None
+    user, _, password = decoded.partition(":")
+    return _match_password(user, password)
+
+
+def _cookie_secure(request: Request) -> bool:
+    if os.environ.get("COOKIE_SECURE") == "1":
+        return True
+    forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    return forwarded == "https"
+
+
+def _stamp_session(response: Response, token: str, request: Request) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=_cookie_secure(request),
+        path="/",
+        max_age=12 * 60 * 60,
+    )
+
+
+def _drop_session(cookie_header: str | None) -> None:
+    token = _cookie_token(cookie_header)
+    if not token:
+        return
+    with _SESSION_LOCK:
+        _SESSIONS.pop(token, None)
+
+
 async def require_login(request: Request, call_next):
     if request.method in UNSAFE_METHODS and _cross_site(request):
         return Response("Cross-site request refused", status_code=403)
@@ -204,13 +284,14 @@ async def require_login(request: Request, call_next):
             if _is_loopback(client) and _host_name(request.headers.get("host")) not in _allowed_hosts():
                 return Response("Unknown Host header (set ALLOWED_HOSTS)", status_code=403)
         return await call_next(request)
-    if request.url.path in OPEN_PATHS:
+    if request.url.path in OPEN_PATHS or (request.url.path == "/login" and request.method == "POST"):
         return await call_next(request)
     client = request.client.host if request.client else "-"
     wait = _login_wait(client)
     if wait:
         return _locked_response(wait)
-    if not _credentials_ok(request.headers.get("authorization"), *settings):
+    identity = _session_identity(request.headers.get("cookie")) or _basic_identity(request.headers.get("authorization"))
+    if identity is None:
         locked = _note_login_failure(client)
         if locked:
             return _locked_response(locked)
@@ -220,7 +301,15 @@ async def require_login(request: Request, call_next):
             headers={"WWW-Authenticate": 'Basic realm="On-call alert queue"'},
         )
     _note_login_success(client)
-    return await call_next(request)
+    request.state.user = identity[0]
+    request.state.role = identity[1]
+    if identity[1] == "viewer" and request.method in UNSAFE_METHODS and request.url.path not in _ROLE_FREE_POSTS:
+        return Response("Operator role required", status_code=403)
+    response = await call_next(request)
+    if request.url.path == "/logout" and request.method == "POST":
+        _drop_session(request.headers.get("cookie"))
+        response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
 
 
 MULTIPART_PATHS = {"/jobs/upload", "/evaluate"}
@@ -311,11 +400,50 @@ class BodyLimit:
 
 
 AUDIT = logging.getLogger("oncall.audit")
-if not AUDIT.handlers:  # uvicorn configures only its own loggers
-    _audit_handler = logging.StreamHandler()
-    _audit_handler.setFormatter(logging.Formatter("%(asctime)s audit %(message)s"))
-    AUDIT.addHandler(_audit_handler)
+_AUDIT_FORMAT = logging.Formatter("%(asctime)s audit %(message)s")
+
+
+def _audit_log_path() -> Path | None:
+    """File copy of the audit log. AUDIT_LOG_PATH=off leaves stdout only."""
+    raw = os.environ.get("AUDIT_LOG_PATH")
+    if raw is not None and raw.strip().lower() in {"", "0", "off", "-"}:
+        return None
+    if raw and raw.strip():
+        return Path(raw.strip())
+    from product.ops import ops_path
+
+    return ops_path().parent / "audit.log"
+
+
+class _AuditFileHandler(logging.Handler):
+    """Append-only audit file, opened on each record so tests can point it at a temp path."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        path = _audit_log_path()
+        if path is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as out:
+                out.write(self.format(record) + "\n")
+            os.chmod(path, 0o600)
+        except OSError:
+            return
+
+
+def _ensure_audit_handlers() -> None:
+    if not any(type(handler) is logging.StreamHandler for handler in AUDIT.handlers):
+        stream = logging.StreamHandler()
+        stream.setFormatter(_AUDIT_FORMAT)
+        AUDIT.addHandler(stream)
+    if not any(isinstance(handler, _AuditFileHandler) for handler in AUDIT.handlers):
+        file_handler = _AuditFileHandler()
+        file_handler.setFormatter(_AUDIT_FORMAT)
+        AUDIT.addHandler(file_handler)
     AUDIT.setLevel(logging.INFO)
+
+
+_ensure_audit_handlers()
 AUDITED_PREFIXES = ("/ops/", "/settings", "/models")
 
 
@@ -333,12 +461,54 @@ async def audit_changes(request: Request, call_next):
     outcome (refused attempts too). Bodies are never logged: they hold secrets."""
     response = await call_next(request)
     if request.method in UNSAFE_METHODS and request.url.path.startswith(AUDITED_PREFIXES):
+        user = getattr(request.state, "user", None) or _login_user(request.headers.get("authorization")) or "-"
         AUDIT.info(
             "%s %s status=%s user=%s client=%s",
             request.method,
             request.url.path,
             response.status_code,
-            _login_user(request.headers.get("authorization")) or "-",
+            user,
             request.client.host if request.client else "-",
         )
     return response
+
+
+router = APIRouter()
+
+
+@router.post("/login")
+async def login(request: Request):
+    """One sign-in. The response sets an HttpOnly session cookie; later requests send that, not the password."""
+    client = request.client.host if request.client else "-"
+    wait = _login_wait(client)
+    if wait:
+        return _locked_response(wait)
+    identity = _basic_identity(request.headers.get("authorization"))
+    if identity is None:
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        identity = _match_password(str(body.get("username") or ""), str(body.get("password") or ""))
+    if identity is None:
+        if not _accounts():
+            return {"user": None, "role": "open"}
+        locked = _note_login_failure(client)
+        if locked:
+            return _locked_response(locked)
+        return Response("Login required", status_code=401)
+    _note_login_success(client)
+    token = secrets.token_urlsafe(32)
+    with _SESSION_LOCK:
+        _SESSIONS[token] = identity
+    request.state.user = identity[0]
+    response = JSONResponse({"user": identity[0], "role": identity[1]})
+    _stamp_session(response, token, request)
+    return response
+
+
+@router.post("/logout")
+async def logout() -> dict:
+    return {"ok": True}

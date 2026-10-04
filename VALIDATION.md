@@ -105,6 +105,18 @@ Script: `python ../tools/fetch_smd.py && python run_smd.py` → `app/results/smd
 
 *Incident caught* = any metric that moved during the incident was shown while it lasted. *Metric movements* is the stricter count (each flagged metric on its own). "False" items are shown metrics that no label covers; SMD labels only some of the 38 metrics per incident, so correlated movements on unlabelled metrics count as false here. On 11 of 28 machines the detector picked on the tuning half was also the best on the test half; on the others the static rule usually was. This is a harder benchmark than GAIA (many small, mixed-metric incidents, one machine = 38 series) and the numbers are reported as they are.
 
+## Same memory fault on three applications (RCAEval RE1)
+
+Script: `python ../tools/fetch_rcaeval_mem.py` then `python run_rcaeval.py` → `app/results/rcaeval_mem.csv`, `rcaeval_mem_settings.csv`. RE1 memory injections only: 25 recordings each on Online Boutique, Sock Shop and Train Ticket. Each recording is scored alone. The first 12 recordings tune; the later 13 are the test. The test recordings are laid end to end (one day) before the daily cap. The GAIA threshold is not used.
+
+| Application | Median rise | Jump episodes | Jump, no cap | Chance | Queue at K = 5 |
+|---|---|---|---|---|---|
+| Online Boutique | 0.51 GB | 744 | 100% | 28.5% | 0% |
+| Sock Shop | 0.30 GB | 235 | 92.3% | 47.1% | 0% |
+| Train Ticket | 0.33 GB | 1,512 | 61.5% | 40.9% | 0% |
+
+The jump rule overlaps the injection above chance on all three. The paging queue catches none: the training cost prefers a rate rule that stays silent (the jump rule's extra training episodes cost 679, 220 and 1,323), and a forced jump rule spends the five daily slots on episodes that miss the injection.
+
 ## Older scripts (alerts only)
 
 The scripts in `app/experiments/legacy_alerts_only/` (`run_m1`, `run_m2`, `run_m4`, `run_stretch`, `run_memory_clf`) score log alerts only and do not count a jump as a catch. Do not quote them as the system result.
@@ -120,6 +132,8 @@ python run_queue_eval.py
 python run_walkforward.py
 python run_stats.py
 python run_robustness.py
+python ../tools/fetch_rcaeval_mem.py
+python run_rcaeval.py
 python make_figures.py
 python run_validate.py
 ```

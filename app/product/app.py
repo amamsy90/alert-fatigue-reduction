@@ -12,6 +12,7 @@ from product.monitoring import metrics_middleware
 from product.store import QueueStore
 from product.web import context, evaluate_routes, job_routes, ops_routes
 from product.web.security import BodyLimit, _is_private, audit_changes, require_login  # noqa: F401
+from product.web.security import router as login_router
 
 app = FastAPI(
     title="On-call alert queue",
@@ -29,6 +30,7 @@ app.middleware("http")(metrics_middleware)  # outermost: times everything, refus
 
 context.STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(context.STATIC_DIR)), name="static")
+app.include_router(login_router)
 app.include_router(ops_routes.router)
 app.include_router(job_routes.router)
 app.include_router(evaluate_routes.router)
