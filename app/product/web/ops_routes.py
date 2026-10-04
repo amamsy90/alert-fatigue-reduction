@@ -18,7 +18,7 @@ from product.web.schemas import (
     ShadowModeRequest,
     SlackWebhookRequest,
 )
-from product.web.security import _auth_settings
+from product.web.security import _accounts, _auth_settings
 
 router = APIRouter()
 
@@ -48,7 +48,7 @@ def _connector_status() -> dict:
         "shadow_mode": shadow,
         "live": not shadow,
         "shadow": shadow_info,
-        "login_required": _auth_settings() is not None,
+        "login_required": bool(_accounts()),
         "ingest_token_required": bool(os.environ.get("INGEST_TOKEN")),
         "webhook": {
             "ready": True,
@@ -100,7 +100,7 @@ def health():
         "status": "ok" if db_ok else "degraded",
         "db_ok": db_ok,
         "shadow_mode": ops_mod.get_shadow_mode(),
-        "login_required": _auth_settings() is not None,
+        "login_required": bool(_accounts()),
         "pagerduty_configured": ops_mod.routing_key_status()["configured"],
         "channels": ops_mod.configured_channels(),
     }

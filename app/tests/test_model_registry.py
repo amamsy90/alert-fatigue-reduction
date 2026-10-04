@@ -172,3 +172,26 @@ def test_corrupt_registry_is_not_treated_as_empty(env):
     (registry / "registry.json").write_text("{", encoding="utf-8")
     with pytest.raises(ValueError, match="unreadable"):
         load_registry()
+
+
+@pytest.mark.parametrize(
+    "meta",
+    [
+        ["not", "a", "dict"],
+        {"format": "oncall-model-v1", "has_pipeline": False},
+        {"format": "oncall-model-v1", "has_pipeline": False, "escalate_threshold": None},
+    ],
+)
+def test_malformed_model_metadata_is_refused_not_raised(env, meta):
+    import hashlib
+    import io
+    import json
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr("meta.json", json.dumps(meta))
+    path = env / "bad.pkl"
+    path.write_bytes(buf.getvalue())
+    (env / "bad.pkl.sha256").write_text(hashlib.sha256(buf.getvalue()).hexdigest() + "\n", encoding="ascii")
+    assert load_model(path) is None
