@@ -82,7 +82,9 @@ def _login_limits() -> tuple[int, float]:
 
 
 _SESSION_LOCK = threading.Lock()
-_SESSIONS: dict[str, tuple[str, str]] = {}
+_SESSIONS: dict[str, tuple[str, str, float]] = {}
+SESSION_SECONDS = 12 * 60 * 60
+MAX_SESSIONS = 200
 SESSION_COOKIE = "oncall_session"
 _ROLE_FREE_POSTS = {"/login", "/logout"}
 
@@ -215,7 +217,13 @@ def _session_identity(cookie_header: str | None) -> tuple[str, str] | None:
     if not token:
         return None
     with _SESSION_LOCK:
-        return _SESSIONS.get(token)
+        entry = _SESSIONS.get(token)
+        if entry is None:
+            return None
+        if entry[2] <= time.monotonic():
+            _SESSIONS.pop(token, None)
+            return None
+        return entry[0], entry[1]
 
 
 def _basic_identity(header: str | None) -> tuple[str, str] | None:
@@ -244,7 +252,7 @@ def _stamp_session(response: Response, token: str, request: Request) -> None:
         samesite="lax",
         secure=_cookie_secure(request),
         path="/",
-        max_age=12 * 60 * 60,
+        max_age=SESSION_SECONDS,
     )
 
 
@@ -265,8 +273,7 @@ async def require_login(request: Request, call_next):
             return Response("Bad ingest token", status_code=401)
         if ok is True:
             return await call_next(request)
-    settings = _auth_settings()
-    if settings is None:
+    if not _accounts():
         # No password: serve this machine and private networks only, unless the
         # operator says otherwise. A public address must never reach an open queue.
         # Behind a reverse proxy every client looks private, so a forwarded
@@ -292,15 +299,17 @@ async def require_login(request: Request, call_next):
         return _locked_response(wait)
     identity = _session_identity(request.headers.get("cookie")) or _basic_identity(request.headers.get("authorization"))
     if identity is None:
-        locked = _note_login_failure(client)
-        if locked:
-            return _locked_response(locked)
+        # Only a wrong password counts. A request with no credentials, or a stale
+        # cookie, is just "sign in": counting it would lock a shared (proxy) IP.
+        if request.headers.get("authorization"):
+            locked = _note_login_failure(client)
+            if locked:
+                return _locked_response(locked)
         return Response(
             "Login required",
             status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="On-call alert queue"'},
         )
-    _note_login_success(client)
     request.state.user = identity[0]
     request.state.role = identity[1]
     if identity[1] == "viewer" and request.method in UNSAFE_METHODS and request.url.path not in _ROLE_FREE_POSTS:
@@ -501,8 +510,13 @@ async def login(request: Request):
         return Response("Login required", status_code=401)
     _note_login_success(client)
     token = secrets.token_urlsafe(32)
+    now = time.monotonic()
     with _SESSION_LOCK:
-        _SESSIONS[token] = identity
+        for stale in [t for t, entry in _SESSIONS.items() if entry[2] <= now]:
+            del _SESSIONS[stale]
+        while len(_SESSIONS) >= MAX_SESSIONS:
+            del _SESSIONS[min(_SESSIONS, key=lambda t: _SESSIONS[t][2])]
+        _SESSIONS[token] = (identity[0], identity[1], now + SESSION_SECONDS)
     request.state.user = identity[0]
     response = JSONResponse({"user": identity[0], "role": identity[1]})
     _stamp_session(response, token, request)

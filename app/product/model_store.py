@@ -148,17 +148,18 @@ def load_model(path: Path | None = None) -> SavedModel | None:
         log.error("Refusing %s: no SHA-256 file beside it", path)
         return None
     expected = digest_file.read_text(encoding="ascii").strip()
-    if _sha256(path) != expected:
+    # Read once: the bytes that are hashed are the bytes that are parsed.
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected:
         log.error("Refusing %s: SHA-256 does not match %s", path, digest_file.name)
         return None
-    raw = path.read_bytes()
     if not raw.startswith(b"PK"):
         log.error("Refusing %s: not a model archive", path)
         return None
     try:
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             meta = json.loads(archive.read("meta.json"))
-            if meta.get("format") != MODEL_FORMAT:
+            if not isinstance(meta, dict) or meta.get("format") != MODEL_FORMAT:
                 log.error("Refusing %s: unknown model format", path)
                 return None
             model = None
@@ -168,18 +169,18 @@ def load_model(path: Path | None = None) -> SavedModel | None:
                     return None
                 model = AlertClassifier()
                 model._pipe = pipe
-    except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+        return SavedModel(
+            model=model,
+            escalate_threshold=float(meta["escalate_threshold"]),
+            review_threshold=float(meta["review_threshold"]),
+            label_source=str(meta["label_source"]),
+            trained_at=str(meta["trained_at"]),
+            train_alerts=int(meta["train_alerts"]),
+            feedback_real=int(meta["feedback_real"]),
+        )
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, zipfile.BadZipFile):
         log.error("Refusing %s: model archive could not be read", path)
         return None
-    return SavedModel(
-        model=model,
-        escalate_threshold=float(meta["escalate_threshold"]),
-        review_threshold=float(meta["review_threshold"]),
-        label_source=str(meta["label_source"]),
-        trained_at=str(meta["trained_at"]),
-        train_alerts=int(meta["train_alerts"]),
-        feedback_real=int(meta["feedback_real"]),
-    )
 
 
 # ---------------------------------------------------------------------------
