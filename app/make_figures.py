@@ -1,6 +1,9 @@
-"""Draw the two report figures from the result csv files (no plotting library).
+"""Draw the report figures from the result csv files.
 
-    python make_figures.py   ->  ../figures/detection_vs_k.svg, ../figures/walkforward.svg
+    python make_figures.py
+
+Writes the SVG figures (no extra library) and, when matplotlib and seaborn
+are installed, the same two plots as PNG.
 """
 from __future__ import annotations
 
@@ -118,8 +121,76 @@ def walkforward() -> None:
     (OUT / "walkforward.svg").write_text(_svg(W, H, "Walk-forward detection by later week", "; ".join(lines), body), encoding="utf-8")
 
 
+def publication_pngs() -> None:
+    """Same two comparisons, drawn with seaborn from the result tables."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    sns.set_theme(style="whitegrid")
+    labels = {
+        "proposed": "Full queue",
+        "delta_5m": "Rate rule",
+        "logs_severity": "Log severity",
+    }
+    colors = {"Full queue": BLUE, "Rate rule": ORANGE, "Log severity": AQUA, "Best possible": MUTED}
+
+    q = pd.read_csv("results/queue_eval_gaia.csv")
+    shown = q[q["queue"].isin(labels)].copy()
+    shown["queue"] = shown["queue"].map(labels)
+    oracle = q[q["queue"] == "proposed"][["budget_k", "oracle_ceiling"]].copy()
+    oracle["queue"] = "Best possible"
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    sns.lineplot(data=shown, x="budget_k", y="detection_rate", hue="queue",
+                 hue_order=["Log severity", "Rate rule", "Full queue"],
+                 palette=colors, marker="o", ax=ax)
+    ax.plot(oracle["budget_k"], oracle["oracle_ceiling"], color=MUTED, linestyle="--",
+            label="Best possible")
+    ax.legend(title=None)
+    ax.set(xlabel="Daily budget K", ylabel="Faults caught",
+           title="Faults caught versus daily budget K")
+    ax.set_ylim(0, 1)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _p: f"{v:.0%}"))
+    ax.set_xticks(sorted(shown["budget_k"].unique()))
+    fig.text(0.01, 0.01, "Test period, 1,223 faults. Each point is that budget, not a confidence interval.",
+             fontsize=8, color=MUTED)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.savefig(OUT / "detection_vs_k.png", dpi=150)
+    plt.close(fig)
+
+    w = pd.read_csv("results/walkforward_gaia.csv")
+    week = w[w["queue"].isin(["proposed", "delta_5m"])].copy()
+    week["queue"] = week["queue"].map(labels)
+    week["week_start"] = pd.to_datetime(week["train_until"])
+    week["week"] = week["week_start"].dt.strftime("%d %b")
+    order = week.sort_values("week_start")["week"].drop_duplicates().tolist()
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    sns.barplot(data=week, x="week", y="detection_rate", hue="queue",
+                order=order, palette=colors, ax=ax)
+    ax.set(xlabel="Week starting", ylabel="Faults caught",
+           title="Walk-forward detection by later week (K = 20)")
+    ax.set_ylim(0, 1)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _p: f"{v:.0%}"))
+    fig.text(0.01, 0.01,
+             "Each bar is that week's detection rate. The spread is week-to-week variation, not a confidence interval.",
+             fontsize=8, color=MUTED)
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.savefig(OUT / "walkforward.png", dpi=150)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     detection_vs_k()
     walkforward()
-    print(f"Wrote {OUT / 'detection_vs_k.svg'} and {OUT / 'walkforward.svg'}")
+    written = [OUT / "detection_vs_k.svg", OUT / "walkforward.svg"]
+    try:
+        publication_pngs()
+    except ImportError as exc:
+        print(f"SVG only; PNG needs matplotlib and seaborn ({exc})")
+    else:
+        written.extend([OUT / "detection_vs_k.png", OUT / "walkforward.png"])
+    print("Wrote " + ", ".join(str(p) for p in written))

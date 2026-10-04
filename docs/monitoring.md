@@ -56,12 +56,12 @@ groups:
 | Successful requests under load | ≥ 99% | 100% (3,000 requests) | load tests at 20 and 50 users |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s | `oncall_job_duration_seconds` |
 | Full GAIA month (34,863 alerts) | ≤ 5 min | 27 s | manual timing, `docs/test_plan.md` |
-| Automated tests passing | 100% | 236 / 236 | CI |
+| Automated tests passing | 100% | 240 / 240 | CI |
 | Line coverage | ≥ 85% | 90% | CI |
 | Faults caught at K = 20 (detector vs Prometheus rate rule) | beats it | 72.6% vs 68.9%, 8/8 weeks | `run_validate.py` |
 | False items a day at K = 20 | fewer than the rate rule | 1.0 (detector), 1.8 (full queue) vs 2.1 | same |
 | Time from fault start to confirmation | ≤ 1 min | 0.72 min median | same |
 | Precision from on-call marks (in production) | ≥ 0.70 | to be measured in a pilot | `/monitoring` |
-| Critical security issues | 0 | 0 open; 8 residual risks rated non-critical | `docs/threat_model.md` |
+| Critical security issues | 0 | 0 critical. R1 through R8 are closed and tested | `docs/threat_model.md` |
 
 Targets are set for a student prototype that could run a pilot: tight enough to catch a real problem, loose enough not to page the team about the monitor itself.

@@ -8,9 +8,9 @@ import os
 import re
 import socket
 import ssl
+from datetime import datetime, timezone
 from email.message import Message
 from io import BytesIO
-from datetime import datetime, timezone
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
 from urllib.request import HTTPRedirectHandler

@@ -1,7 +1,8 @@
-"""Persisted ops overrides: shadow/live mode, PagerDuty routing key, Prometheus URL.
+"""Persisted ops overrides: shadow/live mode, paging secrets, Prometheus URL.
 
-Env vars are the bootstrap default when no override is saved. Secrets in the
-ops file are never returned in full by the API (configured bool + last4 only).
+Env vars and Docker secret files are the bootstrap default when nothing is saved.
+A key saved from the UI goes to secrets.json (owner-only), never to ops.json.
+The API returns a secret as configured + last4 only.
 """
 from __future__ import annotations
 
@@ -32,8 +33,17 @@ _BLOCKED_PROM_HOSTS = frozenset(
 _PRIVATE_PROM_HOSTNAMES = frozenset({"localhost", "localhost.localdomain"})
 
 
+# Paging secrets. Kept out of ops.json; see docs/threat_model.md R6.
+SECRET_FIELDS = ("pagerduty_routing_key", "slack_webhook", "opsgenie_api_key")
+
+
 def ops_path() -> Path:
     return Path(os.environ.get("OPS_PATH") or DEFAULT_OPS_PATH)
+
+
+def secrets_path() -> Path:
+    explicit = (os.environ.get("SECRETS_PATH") or "").strip()
+    return Path(explicit) if explicit else ops_path().with_name("secrets.json")
 
 
 def _load() -> dict:
@@ -47,8 +57,7 @@ def _load() -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _save(data: dict) -> dict:
-    path = ops_path()
+def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # A unique temp name per write, so two writers never share one file.
     fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
@@ -60,12 +69,47 @@ def _save(data: dict) -> dict:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    # Secrets live here (routing keys, Slack webhook, Opsgenie key). Best-effort
-    # owner-only mode on Unix; Windows may ignore or raise — never fail the save.
     try:
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def _load_secrets() -> dict:
+    path = secrets_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_secrets(data: dict) -> None:
+    _write_json(secrets_path(), data)
+
+
+def _docker_secret(name: str) -> str:
+    """A file mounted by Docker or another secret store (SECRETS_DIR, default /run/secrets)."""
+    directory = (os.environ.get("SECRETS_DIR") or "/run/secrets").strip()
+    path = Path(directory) / name
+    try:
+        if path.is_file():
+            return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return ""
+
+
+def _save(data: dict) -> dict:
+    # Any secret still sitting in the ops dict is moved out before the file is written.
+    moved = {name: str(data.pop(name)).strip() for name in SECRET_FIELDS if str(data.get(name) or "").strip()}
+    if moved:
+        secrets = _load_secrets()
+        secrets.update(moved)
+        _save_secrets(secrets)
+    _write_json(ops_path(), data)
     return data
 
 
@@ -138,13 +182,26 @@ def env_routing_key() -> str:
     return (os.environ.get("PAGERDUTY_ROUTING_KEY") or "").strip()
 
 
-def get_routing_key() -> str:
-    """Effective key: saved ops key first, else PAGERDUTY_ROUTING_KEY env."""
-    data = _load()
-    saved = (data.get("pagerduty_routing_key") or "").strip()
+def _placed_secret(name: str, env_name: str) -> tuple[str, str | None]:
+    """Saved secrets file, then a mounted secret file, then a legacy ops.json copy, then the env var."""
+    saved = str(_load_secrets().get(name) or "").strip()
     if saved:
-        return saved
-    return env_routing_key()
+        return saved, "secrets"
+    mounted = _docker_secret(name)
+    if mounted:
+        return mounted, "docker"
+    legacy = str(_load().get(name) or "").strip()
+    if legacy:
+        return legacy, "ops"
+    env = (os.environ.get(env_name) or "").strip()
+    if env:
+        return env, "env"
+    return "", None
+
+
+def get_routing_key() -> str:
+    """Effective key: secrets file, Docker secret, legacy ops.json, then PAGERDUTY_ROUTING_KEY."""
+    return _placed_secret("pagerduty_routing_key", "PAGERDUTY_ROUTING_KEY")[0]
 
 
 def set_routing_key(key: str) -> dict:
@@ -157,18 +214,18 @@ def set_routing_key(key: str) -> dict:
 
 
 def clear_routing_key() -> dict:
-    """Remove the saved key (env key still applies if set)."""
-    with _edit() as data:
-        data.pop("pagerduty_routing_key", None)
+    """Remove the saved key (env key and a mounted secret still apply)."""
+    with _LOCK:
+        secrets = _load_secrets()
+        secrets.pop("pagerduty_routing_key", None)
+        _save_secrets(secrets)
+        with _edit() as data:
+            data.pop("pagerduty_routing_key", None)
     return routing_key_status()
 
 
 def routing_key_status() -> dict:
-    data = _load()
-    saved = (data.get("pagerduty_routing_key") or "").strip()
-    env = env_routing_key()
-    effective = saved or env
-    source = "ops" if saved else ("env" if env else None)
+    effective, source = _placed_secret("pagerduty_routing_key", "PAGERDUTY_ROUTING_KEY")
     return {
         "configured": bool(effective),
         "last4": effective[-4:] if len(effective) >= 4 else (effective or None),
@@ -177,7 +234,7 @@ def routing_key_status() -> dict:
 
 
 # --- Slack and Opsgenie ------------------------------------------------------
-# Same pattern as the PagerDuty key: saved in ops.json first, else the env var.
+# Same pattern as the PagerDuty key: secrets file, mounted file, legacy ops.json, env.
 
 _SECRETS = {
     "slack_webhook": "SLACK_WEBHOOK_URL",
@@ -186,8 +243,7 @@ _SECRETS = {
 
 
 def _get_secret(name: str) -> str:
-    saved = (_load().get(name) or "").strip()
-    return saved or (os.environ.get(_SECRETS[name]) or "").strip()
+    return _placed_secret(name, _SECRETS[name])[0]
 
 
 def _set_secret(name: str, value: str) -> dict:
@@ -200,19 +256,21 @@ def _set_secret(name: str, value: str) -> dict:
 
 
 def _clear_secret(name: str) -> dict:
-    with _edit() as data:
-        data.pop(name, None)
+    with _LOCK:
+        secrets = _load_secrets()
+        secrets.pop(name, None)
+        _save_secrets(secrets)
+        with _edit() as data:
+            data.pop(name, None)
     return _secret_status(name)
 
 
 def _secret_status(name: str) -> dict:
-    saved = (_load().get(name) or "").strip()
-    env = (os.environ.get(_SECRETS[name]) or "").strip()
-    effective = saved or env
+    effective, source = _placed_secret(name, _SECRETS[name])
     return {
         "configured": bool(effective),
         "last4": effective[-4:] if len(effective) >= 4 else (effective or None),
-        "source": "ops" if saved else ("env" if env else None),
+        "source": source,
     }
 
 

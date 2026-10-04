@@ -200,7 +200,7 @@ def test_ingest_token_in_query_string_is_refused(client, monkeypatch):
     assert ok.status_code == 200
 
 
-def test_ops_changes_are_audited_without_secrets(client, monkeypatch, caplog):
+def test_ops_changes_are_audited_without_secrets(client, monkeypatch, caplog, tmp_path):
     monkeypatch.setenv("APP_PASSWORD", "pw")
     c = TestClient(client)
     with caplog.at_level(logging.INFO, logger="oncall.audit"):
@@ -210,3 +210,61 @@ def test_ops_changes_are_audited_without_secrets(client, monkeypatch, caplog):
     assert any("POST /ops/pagerduty/key status=200 user=oncall" in line for line in lines)
     assert any("POST /ops/shadow status=401 user=mallory" in line for line in lines)
     assert not any("rk_secret_value" in line for line in lines)
+    written = (tmp_path / "audit.log").read_text(encoding="utf-8")
+    assert "user=oncall" in written
+    assert "rk_secret_value" not in written
+
+
+def test_login_cookie_replaces_the_password(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    first = TestClient(client, base_url="http://localhost")
+    signed = first.post("/login", json={"username": "oncall", "password": "pw"})
+    assert signed.status_code == 200
+    assert signed.json()["role"] == "operator"
+    cookie = signed.headers["set-cookie"].lower()
+    assert "oncall_session=" in cookie
+    assert "httponly" in cookie
+    token = signed.cookies["oncall_session"]
+    later = TestClient(client, base_url="http://localhost", cookies={"oncall_session": token})
+    assert later.get("/connectors").status_code == 200
+    assert "authorization" not in {k.lower() for k in later.get("/connectors").request.headers}
+
+
+def test_session_cookie_is_secure_behind_tls(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    monkeypatch.setenv("COOKIE_SECURE", "1")
+    http = TestClient(client, base_url="http://localhost")
+    signed = http.post("/login", json={"username": "oncall", "password": "pw"})
+    assert "secure" in signed.headers["set-cookie"].lower()
+
+
+def test_viewer_cannot_change_operator_settings(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    monkeypatch.setenv("APP_VIEWER_PASSWORD", "look")
+    http = TestClient(client, base_url="http://localhost")
+    assert http.get("/connectors", auth=("viewer", "look")).status_code == 200
+    refused = http.post("/ops/pagerduty/key", json={"routing_key": "rk_viewer"}, auth=("viewer", "look"))
+    assert refused.status_code == 403
+    saved = http.post("/ops/pagerduty/key", json={"routing_key": "rk_operator"}, auth=("oncall", "pw"))
+    assert saved.status_code == 200
+
+
+def test_docker_secret_file_is_read_and_ops_json_stays_clear(client, monkeypatch, tmp_path):
+    secret_dir = tmp_path / "run-secrets"
+    secret_dir.mkdir()
+    (secret_dir / "pagerduty_routing_key").write_text("rk_from_docker\n", encoding="utf-8")
+    monkeypatch.setenv("SECRETS_DIR", str(secret_dir))
+    from product.ops import get_routing_key
+
+    assert get_routing_key() == "rk_from_docker"
+    ops_file = tmp_path / "ops.json"
+    assert not ops_file.exists() or "rk_from_docker" not in ops_file.read_text(encoding="utf-8")

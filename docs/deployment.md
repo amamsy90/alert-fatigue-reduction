@@ -26,7 +26,7 @@ Infrastructure is local (on-premises or the team's cloud VM). No managed cloud A
 | **Paging** | Never (no channel keys) | Never (shadow); every job records *would have paged* | After a shadow period and a deliberate Live switch |
 | **Login** | None (loopback only) | Test password | `APP_PASSWORD`, `INGEST_TOKEN`, TLS at the proxy |
 | **Settings** | `deploy/dev.env` | `deploy/test.env` | `deploy/prod.env.example` → `deploy/prod.env` (not in git) |
-| **Promotion** | — | A PR merges only when CI is green (lint, types, 236 tests on two Python versions, coverage ≥ 85%, report check, Docker health) | A release tag; the image is rebuilt from the lock file |
+| **Promotion** | — | A PR merges only when CI is green (lint, types, 240 tests on two Python versions, coverage ≥ 85%, report check, Docker health) | A release tag; the image is rebuilt from the lock file |
 
 The same image runs in every environment. Only environment variables differ, and every variable is listed in `app/README.md`.
 
