@@ -268,3 +268,80 @@ def test_docker_secret_file_is_read_and_ops_json_stays_clear(client, monkeypatch
     assert get_routing_key() == "rk_from_docker"
     ops_file = tmp_path / "ops.json"
     assert not ops_file.exists() or "rk_from_docker" not in ops_file.read_text(encoding="utf-8")
+
+
+def test_viewer_password_alone_still_requires_login(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.delenv("APP_PASSWORD", raising=False)
+    monkeypatch.setenv("APP_VIEWER_PASSWORD", "look")
+    http = TestClient(client, base_url="http://localhost")
+    assert http.get("/connectors").status_code == 401
+    assert http.get("/connectors", auth=("viewer", "look")).status_code == 200
+
+
+def test_requests_without_credentials_do_not_lock_the_client(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    http = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    for _ in range(6):
+        assert http.get("/connectors").status_code == 401
+    assert http.post("/login", json={"username": "oncall", "password": "s3cret"}).status_code == 200
+
+
+def test_a_good_request_does_not_reset_the_failure_count(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    http = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    assert http.get("/connectors", auth=("oncall", "no")).status_code == 401
+    assert http.get("/connectors", auth=("oncall", "s3cret")).status_code == 200
+    assert http.get("/connectors", auth=("oncall", "no")).status_code == 401
+    assert http.get("/connectors", auth=("oncall", "no")).status_code == 429
+
+
+def test_session_cookie_expires_on_the_server(client, monkeypatch):
+    from product.web import security
+
+    security.reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    http = TestClient(client, base_url="http://localhost")
+    assert http.post("/login", json={"username": "oncall", "password": "pw"}).status_code == 200
+    assert http.get("/connectors").status_code == 200
+    monkeypatch.setattr(security, "SESSION_SECONDS", -1)
+    # Re-sign in with a lifetime already over; the cookie must not be accepted.
+    http.cookies.clear()
+    assert http.post("/login", json={"username": "oncall", "password": "pw"}).status_code == 200
+    assert http.get("/connectors").status_code == 401
+
+
+def test_prometheus_error_status_raises_http_error(monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from product import prometheus_adapter
+
+    class _Down(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(503)
+            self.end_headers()
+            self.wfile.write(b"<html>bad gateway</html>")
+
+        def log_message(self, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), _Down)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("PROM_ALLOW_PRIVATE", "1")
+    try:
+        with pytest.raises(HTTPError) as caught:
+            prometheus_adapter.urlopen(f"http://127.0.0.1:{server.server_port}/api/v1/query", timeout=5)
+        assert caught.value.code == 503
+    finally:
+        server.shutdown()

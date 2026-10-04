@@ -104,12 +104,13 @@ def urlopen(url: str, timeout: float | None = None):
     except Exception:
         conn.close()
         raise
-    if 300 <= resp.status < 400:
+    if resp.status >= 300:
         code = resp.status
         payload = BytesIO(resp.read())
         resp.close()
         conn.close()
-        raise HTTPError(url, code, "Prometheus redirects are refused (SSRF)", Message(), payload)
+        reason = "Prometheus redirects are refused (SSRF)" if code < 400 else "Prometheus returned an error"
+        raise HTTPError(url, code, reason, Message(), payload)
     return _BoundResponse(conn, resp)
 
 
