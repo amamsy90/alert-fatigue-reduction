@@ -131,6 +131,103 @@ def client(tmp_path, monkeypatch):
     return app_mod.app
 
 
+def test_login_lock_uses_forwarded_client_only_behind_a_trusted_proxy(client, monkeypatch):
+    """Two browsers behind one proxy lock independently when TRUSTED_PROXIES is set."""
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    monkeypatch.setenv("LOGIN_LOCK_SECONDS", "60")
+    monkeypatch.setenv("TRUSTED_PROXIES", "127.0.0.1/32")
+    proxy = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    a = {"X-Forwarded-For": "10.0.0.1"}
+    b = {"X-Forwarded-For": "10.0.0.2"}
+    try:
+        assert proxy.get("/connectors", auth=("oncall", "no"), headers=a).status_code == 401
+        assert proxy.get("/connectors", auth=("oncall", "no"), headers=a).status_code == 401
+        assert proxy.get("/connectors", auth=("oncall", "no"), headers=a).status_code == 429
+        assert proxy.get("/connectors", auth=("oncall", "s3cret"), headers=b).status_code == 200
+    finally:
+        reset_login_attempts()
+
+
+def test_untrusted_x_forwarded_for_does_not_split_the_login_lock(client, monkeypatch):
+    """Without TRUSTED_PROXIES a client cannot dodge the lock by changing X-Forwarded-For."""
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    monkeypatch.delenv("TRUSTED_PROXIES", raising=False)
+    http = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    try:
+        assert http.get("/connectors", auth=("oncall", "no"), headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 401
+        assert http.get("/connectors", auth=("oncall", "no"), headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 401
+        locked = http.get("/connectors", auth=("oncall", "no"), headers={"X-Forwarded-For": "9.9.9.9"})
+        assert locked.status_code == 429
+        assert http.get("/connectors", auth=("oncall", "s3cret"), headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 429
+    finally:
+        reset_login_attempts()
+
+
+def test_ingest_batch_cap_returns_429(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("INGEST_MAX_BATCHES", "2")
+    monkeypatch.setenv("INGEST_WINDOW_SECONDS", "60")
+    http = TestClient(client)
+    row = {"timestamp": "2026-02-01T10:00:00Z", "source": "web", "severity": "error", "message": "x"}
+    assert http.post("/ingest/alerts", json={"alerts": [row]}).status_code == 200
+    assert http.post("/ingest/alerts", json={"alerts": [{**row, "message": "y"}]}).status_code == 200
+    limited = http.post("/ingest/alerts", json={"alerts": [{**row, "message": "z"}]})
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"]
+    reset_login_attempts()
+
+
+def test_ingest_alert_count_cap_returns_413(client, monkeypatch):
+    monkeypatch.setenv("INGEST_MAX_ALERTS", "2")
+    http = TestClient(client)
+    rows = [
+        {"timestamp": "2026-02-01T10:00:00Z", "source": "web", "severity": "error", "message": f"m{i}"}
+        for i in range(3)
+    ]
+    refused = http.post("/ingest/alerts", json={"alerts": rows})
+    assert refused.status_code == 413
+    assert "INGEST_MAX_ALERTS" in refused.text
+
+
+def test_audit_log_rotates_when_it_grows_past_the_cap(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    monkeypatch.setenv("AUDIT_LOG_MAX_BYTES", "80")
+    http = TestClient(client)
+    for i in range(8):
+        http.post("/ops/pagerduty/key", json={"routing_key": f"rk_{i}"}, auth=("oncall", "pw"))
+    log = tmp_path / "audit.log"
+    rotated = tmp_path / "audit.log.1"
+    assert rotated.exists() or log.stat().st_size <= 200
+    if rotated.exists():
+        assert "user=oncall" in rotated.read_text(encoding="utf-8")
+
+
+def test_json_log_line_is_one_object(monkeypatch):
+    import json
+    import logging
+
+    from product.logging_config import JsonFormatter
+
+    record = logging.LogRecord(
+        "oncall.audit", logging.INFO, __file__, 0, "POST /ops/shadow status=200 user=oncall client=10.0.0.1", (), None
+    )
+    payload = json.loads(JsonFormatter().format(record))
+    assert payload["logger"] == "oncall.audit"
+    assert payload["level"] == "INFO"
+    assert "rk_secret" not in payload["msg"]
+    assert "POST /ops/shadow" in payload["msg"]
+
+
 def test_repeated_bad_logins_lock_the_client(client, monkeypatch):
     from product.web.security import reset_login_attempts
 
@@ -379,3 +476,35 @@ def test_prometheus_fetch_goes_through_http_proxy_when_configured(monkeypatch):
         server.shutdown()
     assert seen["target"] == "http://prom.example.com:9090/api/v1/query?query=up"
     assert seen["host"] == "prom.example.com:9090"
+
+
+def test_https_prometheus_fetch_tunnels_through_https_proxy(monkeypatch):
+    from product import prometheus_adapter
+
+    seen: dict[str, object] = {}
+
+    class _FakeHTTPS:
+        def __init__(self, host, port, timeout=None, context=None):
+            seen["proxy"] = (host, port)
+
+        def set_tunnel(self, host, port=None):
+            seen["tunnel"] = (host, port)
+
+        def request(self, method, target, headers=None):
+            seen["target"] = target
+            raise OSError("stop after CONNECT")
+
+        def close(self):
+            return None
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.internal:8080")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.setattr("product.prometheus_adapter.getproxies", lambda: {"https": "http://proxy.internal:8080"})
+    monkeypatch.setattr("product.prometheus_adapter.proxy_bypass", lambda _host: False)
+    monkeypatch.setattr("product.prometheus_adapter.http.client.HTTPSConnection", _FakeHTTPS)
+    monkeypatch.setattr("product.ops.pinned_prom_address", lambda url: "93.184.216.34")
+    with pytest.raises(OSError, match="stop after CONNECT"):
+        prometheus_adapter.urlopen("https://prom.example.com:9090/api/v1/query", timeout=5)
+    assert seen["proxy"] == ("proxy.internal", 8080)
+    assert seen["tunnel"] == ("prom.example.com", 9090)

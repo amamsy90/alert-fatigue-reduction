@@ -4,6 +4,14 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased] — toward 1.0.0
 
+### Added (submission hardening)
+- `TRUSTED_PROXIES`: login lock and ingest rate limits key on the first forwarded client only when the socket is a listed proxy.
+- Ingest batch cap (`INGEST_MAX_BATCHES` / `INGEST_WINDOW_SECONDS` → 429) and alert-count cap (`INGEST_MAX_ALERTS` → 413).
+- `POST /models/reset` quarantines a corrupt `registry.json`; `GET /models` returns 503 until then.
+- Metric-median drift on `/monitoring` (same 0.5–2 band as alert volume).
+- Backup/restore (`python -m product.backup`), JSON logs (`LOG_FORMAT=json`), audit-log rotation, paging-key cap (`PAGE_KEY_MAX`).
+- CI `pip-audit` (critical), Dependabot, tag-triggered image publish, `.gitattributes` (LF).
+
 ### Added (Phase 3, from the course brief review)
 - Model registry: every trained model kept as a version with a card; promotion gate on held-out cost; rollback API (`/models`).
 - Experiment log `app/results/experiments.jsonl` written by every experiment script.

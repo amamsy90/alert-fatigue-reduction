@@ -89,6 +89,24 @@ SESSION_COOKIE = "oncall_session"
 _ROLE_FREE_POSTS = {"/login", "/logout"}
 
 
+_INGEST_LOCK = threading.Lock()
+_INGEST_HITS: dict[str, list[float]] = {}
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
 def reset_login_attempts() -> None:
     """Clear the in-memory counters and sessions. Tests use this; the process otherwise keeps them."""
     with _LOGIN_LOCK:
@@ -96,6 +114,42 @@ def reset_login_attempts() -> None:
         _LOGIN_UNTIL.clear()
     with _SESSION_LOCK:
         _SESSIONS.clear()
+    with _INGEST_LOCK:
+        _INGEST_HITS.clear()
+
+
+def ingest_alert_cap() -> int:
+    """Largest number of alerts in one ingest POST (413 when exceeded)."""
+    return max(1, _int_env("INGEST_MAX_ALERTS", 400))
+
+
+def _ingest_batch_limits() -> tuple[int, float]:
+    return max(1, _int_env("INGEST_MAX_BATCHES", 60)), max(1.0, _float_env("INGEST_WINDOW_SECONDS", 60.0))
+
+
+def _note_ingest_batch(client: str) -> float:
+    """Record one ingest POST. Returns the window length when this client is over the cap."""
+    n, window = _ingest_batch_limits()
+    now = time.monotonic()
+    with _INGEST_LOCK:
+        recent = [stamp for stamp in _INGEST_HITS.get(client, []) if now - stamp < window]
+        if len(recent) >= n:
+            _INGEST_HITS[client] = recent
+            return window
+        recent.append(now)
+        _INGEST_HITS[client] = recent
+        return 0.0
+
+
+def _ingest_rate_response(request: Request) -> Response | None:
+    wait = _note_ingest_batch(login_client_id(request))
+    if not wait:
+        return None
+    return Response(
+        "Too many ingest batches",
+        status_code=429,
+        headers={"Retry-After": str(max(1, int(wait)))},
+    )
 
 
 def _login_wait(client: str) -> float:
@@ -202,6 +256,55 @@ def _is_loopback(host: str | None) -> bool:
         return False
 
 
+def _trusted_proxy_networks():
+    nets = []
+    for raw in os.environ.get("TRUSTED_PROXIES", "").split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(raw, strict=False))
+        except ValueError:
+            continue
+    return nets
+
+
+def _is_trusted_proxy(host: str | None) -> bool:
+    try:
+        ip = ipaddress.ip_address(host or "")
+    except ValueError:
+        return False
+    return any(ip in net for net in _trusted_proxy_networks())
+
+
+def _forwarded_client(request: Request) -> str | None:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        first = xff.split(",")[0].strip()
+        return first or None
+    forwarded = request.headers.get("forwarded")
+    if forwarded:
+        for item in forwarded.split(","):
+            for part in item.split(";"):
+                key, _, value = part.strip().partition("=")
+                if key.lower() == "for" and value:
+                    return value.strip().strip('"').lstrip("[").rstrip("]")
+    real = (request.headers.get("x-real-ip") or "").strip()
+    return real or None
+
+
+def login_client_id(request: Request) -> str:
+    """Socket IP, or the first forwarded client when that socket is in TRUSTED_PROXIES.
+
+    Without TRUSTED_PROXIES, X-Forwarded-For is ignored so a client cannot split
+    the login lock by spoofing the header.
+    """
+    host = request.client.host if request.client else "-"
+    if _is_trusted_proxy(host):
+        return _forwarded_client(request) or host
+    return host or "-"
+
+
 def _cookie_token(header: str | None) -> str | None:
     if not header:
         return None
@@ -272,7 +375,8 @@ async def require_login(request: Request, call_next):
         if ok is False:
             return Response("Bad ingest token", status_code=401)
         if ok is True:
-            return await call_next(request)
+            limited = _ingest_rate_response(request)
+            return limited if limited is not None else await call_next(request)
     if not _accounts():
         # No password: serve this machine and private networks only, unless the
         # operator says otherwise. A public address must never reach an open queue.
@@ -290,10 +394,14 @@ async def require_login(request: Request, call_next):
                 )
             if _is_loopback(client) and _host_name(request.headers.get("host")) not in _allowed_hosts():
                 return Response("Unknown Host header (set ALLOWED_HOSTS)", status_code=403)
+        if request.url.path in INGEST_PATHS:
+            limited = _ingest_rate_response(request)
+            if limited is not None:
+                return limited
         return await call_next(request)
     if request.url.path in OPEN_PATHS or (request.url.path == "/login" and request.method == "POST"):
         return await call_next(request)
-    client = request.client.host if request.client else "-"
+    client = login_client_id(request)
     wait = _login_wait(client)
     if wait:
         return _locked_response(wait)
@@ -314,6 +422,10 @@ async def require_login(request: Request, call_next):
     request.state.role = identity[1]
     if identity[1] == "viewer" and request.method in UNSAFE_METHODS and request.url.path not in _ROLE_FREE_POSTS:
         return Response("Operator role required", status_code=403)
+    if request.url.path in INGEST_PATHS:
+        limited = _ingest_rate_response(request)
+        if limited is not None:
+            return limited
     response = await call_next(request)
     if request.url.path == "/logout" and request.method == "POST":
         _drop_session(request.headers.get("cookie"))
@@ -433,11 +545,25 @@ class _AuditFileHandler(logging.Handler):
             return
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
+            _rotate_audit_log(path)
             with path.open("a", encoding="utf-8") as out:
                 out.write(self.format(record) + "\n")
             os.chmod(path, 0o600)
         except OSError:
             return
+
+
+def _rotate_audit_log(path: Path) -> None:
+    """Keep one previous file when the log grows past AUDIT_LOG_MAX_BYTES (default 1 MB)."""
+    max_bytes = _int_env("AUDIT_LOG_MAX_BYTES", 1_000_000)
+    if max_bytes <= 0 or not path.exists() or path.stat().st_size < max_bytes:
+        return
+    rotated = path.with_name(path.name + ".1")
+    try:
+        rotated.unlink(missing_ok=True)
+        path.replace(rotated)
+    except OSError:
+        return
 
 
 def _ensure_audit_handlers() -> None:
@@ -477,7 +603,7 @@ async def audit_changes(request: Request, call_next):
             request.url.path,
             response.status_code,
             user,
-            request.client.host if request.client else "-",
+            login_client_id(request),
         )
     return response
 
@@ -488,7 +614,7 @@ router = APIRouter()
 @router.post("/login")
 async def login(request: Request):
     """One sign-in. The response sets an HttpOnly session cookie; later requests send that, not the password."""
-    client = request.client.host if request.client else "-"
+    client = login_client_id(request)
     wait = _login_wait(client)
     if wait:
         return _locked_response(wait)
