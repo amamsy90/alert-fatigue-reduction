@@ -8,11 +8,14 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from product.logging_config import configure_logging
 from product.monitoring import metrics_middleware
 from product.store import QueueStore
 from product.web import context, evaluate_routes, job_routes, ops_routes
 from product.web.security import BodyLimit, _is_private, audit_changes, require_login  # noqa: F401
 from product.web.security import router as login_router
+
+configure_logging()
 
 app = FastAPI(
     title="On-call alert queue",

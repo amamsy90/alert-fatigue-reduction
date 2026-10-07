@@ -53,3 +53,7 @@ class IngestRequest(BaseModel):
     alerts: list[IngestAlert]
     score_now: bool = False
     budget_k: int = 20
+
+
+class ResetRequest(BaseModel):
+    confirm: str = Field(..., description="Must be exactly RESET")

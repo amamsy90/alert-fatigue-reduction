@@ -12,7 +12,7 @@ This page explains how the AI part of the system is versioned, reproduced, updat
 | **Dependencies** | `app/pyproject.toml` (ranges) + `app/uv.lock` (exact, every Python 3.10–3.12) + `app/requirements.lock` (hashes, for Docker); CI fails if the two locks disagree | `app/` |
 | **Configuration** | Defaults in `src/config.py` (reviewed like code); per-environment values in `app/deploy/*.env`; settings chosen on *Evaluate my data* saved to `settings.json` with the evaluation id and time they came from | `app/src/config.py`, `app/deploy/`, `product/data/settings.json` |
 | **Data** | Public benchmarks (GAIA, NAB, SMD) are downloaded by scripts, not stored in git; each experiment run records a **fingerprint** of its input files. Each trained model records a fingerprint of its training alerts and labels | `results/experiments.jsonl`, `models/registry.json` |
-| **Models** | Every trained model is kept as `models/vNNNN.pkl` (a zip of JSON and a skops file, not a pickle) with a SHA-256 and a **model card** in `models/registry.json`; one version is active (`model.pkl`) | `product/data/models/` (Docker volume) |
+| **Models** | Every trained model is kept as `models/vNNNN.pkl` (a zip of JSON and a skops file, not a pickle) with a SHA-256 and a **model card** in `models/registry.json`; one version is active (`model.pkl`). A corrupt registry is refused (503); `POST /models/reset` with `confirm=RESET` quarantines it | `product/data/models/` (Docker volume) |
 | **Prompts** | Not applicable: no LLM is used | — |
 
 A model card records: version, training time, label source (real labels, on-call marks), number of training alerts, thresholds, training-data fingerprint, code version (git commit), held-out precision / recall / false positives / misses, the active model's result on the same held-out alerts, and the promotion decision with its reason.
@@ -24,7 +24,7 @@ If another team member receives the project tomorrow:
 ```bash
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
-uv run pytest -q                      # 240 tests, no network needed
+uv run pytest -q                      # 262 tests, no network needed
 uv run python run_validate.py         # the report's 51 numbers match the committed results
 docker compose up -d                  # the app, built from the hash-pinned lock (dev settings)
 ```
@@ -43,7 +43,7 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 | **Detector settings change** (jump size, window) | Tuned on *Evaluate my data* against the team's past incidents with a held-out part and a chance line; applying them is an explicit action recorded with the evaluation id. |
 | **The knowledge base / an external AI API changes** | Not applicable: no knowledge base or external model API. |
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, 240 tests on two Python versions, coverage ≥ 85%, report check, Docker health). Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, 262 tests on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 

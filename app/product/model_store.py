@@ -213,6 +213,22 @@ def load_registry() -> dict:
     return data
 
 
+def reset_registry(*, confirm: str) -> dict:
+    """Quarantine a corrupt registry.json and start empty. confirm must be RESET."""
+    if confirm != "RESET":
+        raise ValueError("confirm must be exactly RESET")
+    with _REGISTRY_LOCK:
+        path = _registry_path()
+        quarantined = None
+        if path.exists():
+            stamp = pd.Timestamp.now("UTC").strftime("%Y%m%dT%H%M%S")
+            quarantined = path.with_name(f"{path.name}.broken-{stamp}")
+            path.replace(quarantined)
+        empty: dict = {"active": None, "versions": [], "history": []}
+        _write_registry(empty)
+        return {"ok": True, "active": None, "quarantined": str(quarantined) if quarantined else None}
+
+
 def _write_registry(data: dict) -> None:
     path = _registry_path()
     path.parent.mkdir(parents=True, exist_ok=True)

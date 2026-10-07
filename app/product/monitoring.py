@@ -28,6 +28,8 @@ TARGETS: dict[str, float] = {
 }
 # Last ingest batch size vs the median of earlier ones: outside this band is drift.
 ALERT_VOLUME_BAND = (0.5, 2.0)
+# Last job metric median vs the median of earlier jobs: same band as alert volume.
+METRIC_VALUE_BAND = (0.5, 2.0)
 
 _ID = re.compile(r"/(v\d{4}|[0-9a-f]{12,}|\d+)(?=/|$)")
 _SKIP = {"/metrics", "/health", "/favicon.ico"}
@@ -177,8 +179,19 @@ def health(store) -> dict:
         base = _median([float(c) for c in ingest_counts[1:]])
         if base:
             volume_ratio = ingest_counts[0] / base
+    metric_medians = [
+        j["meta"].get("metric_median")
+        for j in jobs
+        if j["meta"].get("metric_median") is not None
+    ]
+    metric_ratio = None
+    if len(metric_medians) >= 4:
+        metric_base = _median([float(m) for m in metric_medians[1:]])
+        if metric_base:
+            metric_ratio = float(metric_medians[0]) / metric_base
     pages_failed = METRICS.total("oncall_pages_total", lambda lab: lab.get("outcome") == "failed")
     low, high = ALERT_VOLUME_BAND
+    m_low, m_high = METRIC_VALUE_BAND
     checks = {
         "latency": _check(p95, lambda v: v <= TARGETS["p95_latency_seconds"]),
         "errors": _check(error_rate, lambda v: v <= TARGETS["error_rate"]),
@@ -186,6 +199,7 @@ def health(store) -> dict:
             precision if marked >= TARGETS["min_marks_for_precision"] else None,
             lambda v: v >= TARGETS["precision_from_marks_min"]),
         "alert_volume_drift": _check(volume_ratio, lambda v: low <= v <= high),
+        "metric_value_drift": _check(metric_ratio, lambda v: m_low <= v <= m_high),
         "monitoring_gaps": _check(last.get("gap_items") if last else None, lambda v: v <= TARGETS["gap_items_max"]),
         "paging": _check(pages_failed, lambda v: v == 0),
     }
@@ -198,8 +212,10 @@ def health(store) -> dict:
                   "alert_precision": marks["alert"]["precision"], "jump_precision": marks["jump"]["precision"],
                   "last_model_used": last.get("model_used"), "last_label_source": last.get("label_source")},
         "data": {"last_job_alerts": last.get("alert_count"), "alert_volume_ratio": volume_ratio,
+                 "metric_median_ratio": metric_ratio, "last_job_metric_median": last.get("metric_median"),
                  "last_job_gap_items": last.get("gap_items"), "last_job_has_metrics": last.get("has_metrics")},
-        "targets": {**TARGETS, "alert_volume_band": list(ALERT_VOLUME_BAND)},
+        "targets": {**TARGETS, "alert_volume_band": list(ALERT_VOLUME_BAND),
+                    "metric_value_band": list(METRIC_VALUE_BAND)},
     }
 
 
@@ -218,6 +234,7 @@ def gauges(store) -> str:
         "oncall_feedback_marks": (h["model"]["marks"], "Real and Noise marks recorded"),
         "oncall_precision_from_marks": (h["model"]["precision_from_marks"], "Share of marked items that were Real"),
         "oncall_alert_volume_ratio": (h["data"]["alert_volume_ratio"], "Last ingest batch size / median of earlier ones"),
+        "oncall_metric_median_ratio": (h["data"]["metric_median_ratio"], "Last job metric median / median of earlier jobs"),
         "oncall_last_job_gap_items": (h["data"]["last_job_gap_items"], "Monitoring gaps shown in the last job"),
         "oncall_health_ok": (1 if h["status"] == "ok" else 0, "1 when every /monitoring check passes"),
     }

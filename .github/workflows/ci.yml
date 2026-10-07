@@ -57,6 +57,15 @@ jobs:
       - name: Report numbers match the result files
         run: uv run python run_validate.py
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Known critical vulnerabilities
+        working-directory: app
+        run: uvx pip-audit -r requirements.lock --severity critical
+
   docker:
     runs-on: ubuntu-latest
     steps:

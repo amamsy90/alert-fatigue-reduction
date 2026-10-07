@@ -26,15 +26,20 @@ Infrastructure is local (on-premises or the team's cloud VM). No managed cloud A
 | **Paging** | Never (no channel keys) | Never (shadow); every job records *would have paged* | After a shadow period and a deliberate Live switch |
 | **Login** | None (loopback only) | Test password | `APP_PASSWORD`, `INGEST_TOKEN`, TLS at the proxy |
 | **Settings** | `deploy/dev.env` | `deploy/test.env` | `deploy/prod.env.example` → `deploy/prod.env` (not in git) |
-| **Promotion** | — | A PR merges only when CI is green (lint, types, 240 tests on two Python versions, coverage ≥ 85%, report check, Docker health) | A release tag; the image is rebuilt from the lock file |
+| **Promotion** | — | A PR merges only when CI is green (lint, types, tests on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health) | A `v*` tag: CHANGELOG must list the version; the image is pushed to GHCR |
 
 The same image runs in every environment. Only environment variables differ, and every variable is listed in `app/README.md`.
 
 ## 3. Scalability and reliability
 
 - **Measured capacity** (`perf/load_test.py`, one container on a laptop): 50 concurrent users, 228 requests/s, p95 0.32 s, no errors. A scoring job over a 400-alert webhook batch takes 0.2 s; the full GAIA month (34,863 alerts, 1,438 jumps, with training) takes 27 s. One on-call team sends far less than this.
-- **Scaling path:** the job lock, evaluation lock and `ops.json` lock are in-process, so the app runs one worker. To serve many teams, run one container per team (each with its own volume). For a shared deployment, the store moves to PostgreSQL and the locks to database advisory locks (ADR 0003).
+- **Scaling path:** the job lock, evaluation lock, `ops.json` lock, login sessions and login/ingest counters are in-process, so the app runs **one uvicorn worker in one container per team**. A second worker would not see the other's sessions. To serve many teams, run one container per team (each with its own volume). For a shared deployment, the store moves to PostgreSQL, the locks to database advisory locks, and sessions to a shared store (ADR 0003).
 - **Reliability:** a busy job returns 409 and keeps the alerts buffered; failed scoring keeps the buffer; duplicates are not re-buffered; a failed page is retried on the next job only for the channel that failed; bad webhook rows are rejected instead of blocking the queue.
+- **Backup:** `uv run python -m product.backup backup /path/to/copy` copies `queue.db`, `ops.json`, `secrets.json`, `settings.json`, `model.pkl`, `models/` and `audit.log`. Restore with `uv run python -m product.backup restore /path/to/copy` onto a stopped container, then start it. The Docker volume `queue-data` is the live copy.
+
+## 3a. Sessions and workers
+
+Login sessions live in the process (`product/web/security.py`). That matches ADR 0003 (one worker). Do not raise `--workers` or run replicas in front of one SQLite file: a request that hits another worker gets 401 for a valid cookie, and two jobs can race. Put TLS and `TRUSTED_PROXIES` on the reverse proxy in front of this single container.
 
 ## 4. AI governance
 

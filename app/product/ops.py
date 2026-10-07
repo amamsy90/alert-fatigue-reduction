@@ -416,9 +416,17 @@ def seen_spike_keys() -> set[str] | None:
     return set(data.get("paged_item_keys") or [])
 
 
+def _page_key_max() -> int:
+    try:
+        return max(1, int(os.environ.get("PAGE_KEY_MAX", "10000")))
+    except ValueError:
+        return 10_000
+
+
 def set_seen_spike_keys(keys: set[str]) -> None:
+    capped = sorted(keys)[-_page_key_max():]
     with _edit() as data:
-        data["paged_item_keys"] = sorted(keys)
+        data["paged_item_keys"] = capped
 
 
 def channel_delivered_keys(channel: str) -> set[str]:
@@ -432,7 +440,7 @@ def add_channel_delivered_keys(channel: str, keys: set[str]) -> None:
     with _edit() as data:
         marks = data.setdefault("paged_item_keys_by_channel", {})
         current = set(marks.get(channel) or [])
-        marks[channel] = sorted(current | keys)
+        marks[channel] = sorted(current | keys)[-_page_key_max():]
 
 
 def channel_cutoff(channel: str, now=None):
