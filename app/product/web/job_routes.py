@@ -9,11 +9,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 
 from product.alertmanager import looks_like_alertmanager, normalize_ingest, validate_rows
-from product.model_store import activate_version, load_model, load_registry
+from product.model_store import activate_version, load_model, load_registry, reset_registry
 from product.monitoring import record_ingest
 from product.pipeline import JobBusy, run_job
 from product.web import context as ctx
-from product.web.schemas import FeedbackRequest, RunRequest
+from product.web.schemas import FeedbackRequest, ResetRequest, RunRequest
+from product.web.security import ingest_alert_cap
 from product.web.uploads import _budget, _save_upload
 
 router = APIRouter()
@@ -97,14 +98,33 @@ def model_status():
     saved = load_model()
     if saved is None:
         return {"saved": False}
-    return {"saved": True, "version": load_registry()["active"], **saved.status(ctx.STORE.feedback_summary()["real"])}
+    return {"saved": True, "version": _registry_or_503()["active"], **saved.status(ctx.STORE.feedback_summary()["real"])}
+
+
+def _registry_or_503() -> dict:
+    try:
+        return load_registry()
+    except ValueError as exc:
+        raise HTTPException(
+            503,
+            f"{exc}. POST /models/reset with confirm=RESET to quarantine the file.",
+        ) from exc
 
 
 @router.get("/models")
 def list_models():
     """Every kept model version with its model card; `active` scores live batches."""
-    registry = load_registry()
+    registry = _registry_or_503()
     return {"active": registry["active"], "versions": registry["versions"], "history": registry.get("history", [])}
+
+
+@router.post("/models/reset")
+def reset_models(body: ResetRequest):
+    """Quarantine a corrupt registry.json and start empty. confirm must be RESET."""
+    try:
+        return reset_registry(confirm=body.confirm)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/models/{version}/activate")
@@ -183,6 +203,9 @@ async def ingest_alerts(request: Request):
         raise HTTPException(400, f"Invalid JSON: {exc}") from exc
     if not rows:
         return {"buffered_batches": 0, "received": 0, "note": "no firing alerts"}
+    cap = ingest_alert_cap()
+    if len(rows) > cap:
+        raise HTTPException(413, f"batch has {len(rows)} alerts; INGEST_MAX_ALERTS is {cap}")
     received = len(rows)
     rows, rejected = validate_rows(rows)
     if not rows:

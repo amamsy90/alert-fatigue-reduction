@@ -125,3 +125,40 @@ def test_failed_channel_retries_only_that_channel(ops_env, monkeypatch):
     calls["pagerduty"] = calls["slack"] = 0
     page_job("ingest", False, [], [], [recent], run_at=now + pd.Timedelta(minutes=2))
     assert calls == {"pagerduty": 1, "slack": 0}
+
+
+def test_failed_slack_is_resent_and_pagerduty_is_not(ops_env, monkeypatch):
+    from product.paging import page_job
+
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    ops.set_routing_key("rk")
+    ops.set_slack_webhook("https://hooks.slack.com/x")
+    ops.set_shadow_mode(shadow=False, confirm="LIVE")
+    now = pd.Timestamp("2026-09-27 12:00", tz="UTC")
+    recent = _spike(10, now)
+    calls = {"pagerduty": 0, "slack": 0}
+
+    def pd_ok(*_a, **_k):
+        calls["pagerduty"] += 1
+        return {"sent": 1, "failed": 0}
+
+    def slack_fail(items, count, **_k):
+        calls["slack"] += 1
+        return {"sent": 0, "failed": 1}
+
+    monkeypatch.setattr("product.paging.notify_escalations", pd_ok)
+    monkeypatch.setattr("product.paging.notify_slack", slack_fail)
+    page_job("ingest", False, [], [], [recent], run_at=now)
+    assert calls == {"pagerduty": 1, "slack": 1}
+    calls["pagerduty"] = calls["slack"] = 0
+    page_job("ingest", False, [], [], [recent], run_at=now + pd.Timedelta(minutes=2))
+    assert calls == {"pagerduty": 0, "slack": 1}
+
+
+def test_paged_item_keys_are_capped(ops_env, monkeypatch):
+    monkeypatch.setenv("PAGE_KEY_MAX", "3")
+    ops.set_seen_spike_keys({f"k{i}" for i in range(5)})
+    kept = ops.seen_spike_keys()
+    assert kept == {"k2", "k3", "k4"}
+    ops.add_channel_delivered_keys("slack", {f"s{i}" for i in range(5)})
+    assert ops.channel_delivered_keys("slack") == {"s2", "s3", "s4"}

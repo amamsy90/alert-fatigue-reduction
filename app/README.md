@@ -85,8 +85,14 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `AUDIT_LOG_PATH` | `audit.log` beside the ops file | Extra copy of the audit log. `off` keeps stdout only |
 | `SECRETS_PATH` / `SECRETS_DIR` | `secrets.json` beside the ops file / `/run/secrets` | Paging keys. A saved key is not written into `ops.json` |
 | `INGEST_TOKEN` | none | Bearer token for `/ingest/*` (header only; `?token=` is refused) |
+| `TRUSTED_PROXIES` | none | CIDRs of reverse proxies. Only then is the first `X-Forwarded-For` / `Forwarded` client used for the login lock and ingest rate limit |
 | `ALLOWED_HOSTS` | none | Extra `Host` names the app answers from this machine without a password (DNS-rebinding guard) |
 | `MAX_INGEST_MB` | `10` | Largest JSON body `/ingest/*` and other JSON routes accept; bigger bodies get 413 while they stream in |
+| `INGEST_MAX_ALERTS` | `400` | Largest number of alerts in one ingest POST; bigger batches get 413 |
+| `INGEST_MAX_BATCHES` / `INGEST_WINDOW_SECONDS` | `60` / `60` | Ingest POSTs per client in the window; over the cap gets 429 |
+| `PAGE_KEY_MAX` | `10000` | Oldest paging keys are dropped so `ops.json` cannot grow without bound |
+| `AUDIT_LOG_MAX_BYTES` | `1000000` | Audit file is rotated to `audit.log.1` when it grows past this size |
+| `LOG_FORMAT` | text | `json` writes one JSON object per log line (stdout and the audit file) |
 | `INGEST_DEDUP_HOURS` | `24` | An alert with the same content seen within this window is not buffered again |
 | `PROM_ALLOW_PRIVATE` | `0` | `1` allows a private / loopback Prometheus (in-cluster); metadata addresses are always refused |
 | `JUMP_MODE` | `absolute` | `relative` for metrics that are not bytes |

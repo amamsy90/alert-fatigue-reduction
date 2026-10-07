@@ -50,7 +50,7 @@ def test_monitoring_reports_every_check(client):
     client.get("/connectors")
     body = client.get("/monitoring").json()
     assert set(body["checks"]) == {"latency", "errors", "precision_from_marks", "alert_volume_drift",
-                                   "monitoring_gaps", "paging"}
+                                   "metric_value_drift", "monitoring_gaps", "paging"}
     assert body["checks"]["precision_from_marks"]["status"] == "n/a"  # no marks yet: not judged
     assert body["status"] in ("ok", "warn")
 
@@ -73,6 +73,34 @@ def test_alert_volume_drift_warns(tmp_path):
     _save_ingest_job(store, 50)  # five times the usual batch
     report = health(store)
     assert report["checks"]["alert_volume_drift"]["status"] == "warn"
+    assert report["status"] == "warn"
+
+
+def test_metric_median_drift_warns(tmp_path):
+    store = QueueStore(tmp_path / "q.db")
+    t = "2026-02-01T10:00:00Z"
+    import pandas as pd
+
+    def _job(median: float) -> None:
+        alerts = [Alert("a0", pd.Timestamp(t), "web", "log", "info", "m")]
+        store.save_job(
+            source="ingest",
+            budget_k=20,
+            escalate_threshold=1.0,
+            review_threshold=1.0,
+            shadow_mode=True,
+            alerts=alerts,
+            decisions=[Decision(alerts[0].alert_id, Action.SUPPRESS, 0.1, "")],
+            spike_flags=[False],
+            meta={"alert_count": 1, "gap_items": 0, "metric_median": median},
+        )
+
+    for med in (100.0, 110.0, 90.0, 100.0):
+        _job(med)
+    assert health(store)["checks"]["metric_value_drift"]["status"] == "ok"
+    _job(500.0)
+    report = health(store)
+    assert report["checks"]["metric_value_drift"]["status"] == "warn"
     assert report["status"] == "warn"
 
 

@@ -21,6 +21,7 @@ Counters are per process and reset on restart; model and data signals are read f
 | **System performance** | Pages by channel and outcome | `oncall_pages_total`; `/monitoring` → `paging` | 0 failed | A failed page is an unseen incident |
 | **Availability** | `/health` (database reachable, no external calls) | Docker health check, load balancer | > 99% during a pilot | Checked every 30 s by Docker |
 | **Data** | Alert volume of the last ingest batch ÷ median of the earlier ones | `oncall_alert_volume_ratio`; `/monitoring` → `alert_volume_drift` | between 0.5 and 2 | A batch twice or half the usual size means an alert storm or a broken sender, and the model's inputs have shifted |
+| **Data** | Median metric value of the last job ÷ median of earlier jobs | `oncall_metric_median_ratio`; `/monitoring` → `metric_value_drift` | between 0.5 and 2 | A series that jumps to a new scale (units change, scrape broken, memory leak across the fleet) is input drift the alert-count check would miss |
 | **Data** | Monitoring gaps shown in the last job | `oncall_last_job_gap_items`; `/monitoring` → `monitoring_gaps` | ≤ 3 | 11% of GAIA faults fell in monitoring gaps; several gaps at once means the metric pipeline is broken |
 | **Data** | Rejected ingest rows, duplicates | `/ingest` response (`rejected`, `duplicates`); `oncall_ingest_alerts_total{result}` | Rejected rows investigated | Bad rows are refused instead of blocking the queue |
 | **Data** | Ingest buffer waiting to be scored | `oncall_ingest_buffer_batches` | Near 0 between jobs | A growing buffer means jobs are not running |
@@ -56,7 +57,7 @@ groups:
 | Successful requests under load | ≥ 99% | 100% (3,000 requests) | load tests at 20 and 50 users |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s | `oncall_job_duration_seconds` |
 | Full GAIA month (34,863 alerts) | ≤ 5 min | 27 s | manual timing, `docs/test_plan.md` |
-| Automated tests passing | 100% | 240 / 240 | CI |
+| Automated tests passing | 100% | 262 / 262 | CI |
 | Line coverage | ≥ 85% | 90% | CI |
 | Faults caught at K = 20 (detector vs Prometheus rate rule) | beats it | 72.6% vs 68.9%, 8/8 weeks | `run_validate.py` |
 | False items a day at K = 20 | fewer than the rate rule | 1.0 (detector), 1.8 (full queue) vs 2.1 | same |

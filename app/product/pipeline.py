@@ -513,6 +513,11 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
               page: dict, whp: dict, feedback_stats: dict) -> dict:
     decisions = result.decisions
     jumps = result.jumps
+    metric_median = None
+    if inputs.metrics is not None and not inputs.metrics.empty and "value" in inputs.metrics.columns:
+        value = inputs.metrics["value"].median()
+        if pd.notna(value):
+            metric_median = float(value)
 
     def shown(kind: str) -> int:
         return sum(1 for j in jumps if j["kind"] == kind and j["shown"])
@@ -531,6 +536,7 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         "confirm_by_series": result.confirm_by_series or {},
         "confirm_min_rise": None if result.config is None else result.config.confirm_min_rise,
         "has_metrics": inputs.metrics is not None and not inputs.metrics.empty,
+        "metric_median": metric_median,
         "label_source": result.label_source,
         "model_used": result.model_used,
         "model": saved.status(real_marks) if saved else None,

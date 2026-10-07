@@ -174,6 +174,25 @@ def test_corrupt_registry_is_not_treated_as_empty(env):
         load_registry()
 
 
+def test_corrupt_registry_returns_503_and_reset_quarantines_the_file(client, env):
+    models = model_store.models_dir()
+    models.mkdir(parents=True, exist_ok=True)
+    (models / "registry.json").write_text("{", encoding="utf-8")
+    refused = client.get("/models")
+    assert refused.status_code == 503
+    assert "RESET" in refused.json()["detail"]
+    bad = client.post("/models/reset", json={"confirm": "nope"})
+    assert bad.status_code == 400
+    ok = client.post("/models/reset", json={"confirm": "RESET"})
+    assert ok.status_code == 200
+    assert ok.json()["active"] is None
+    listed = client.get("/models")
+    assert listed.status_code == 200
+    assert listed.json()["versions"] == []
+    broken = list(models.glob("registry.json.broken-*"))
+    assert len(broken) == 1
+
+
 @pytest.mark.parametrize(
     "meta",
     [
