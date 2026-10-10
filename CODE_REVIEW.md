@@ -1,4 +1,4 @@
-# Project review — Alert Fatigue Reduction (A to Z)
+# Project review — AI-Assisted On-Call Queue (A to Z)
 
 > **Historical review.** This file records the first review. Do not treat section 2 as the current code. The high bugs there (half-batch scoring, jumps never paged, drain-before-score, open bind) were fixed before September 2026. Models are a skops archive: `load_model` refuses pickle (`docs/threat_model.md` R8). Residual risks R1 through R8 are closed. The current security and result claims are in `FINAL_REPORT.md` and `docs/threat_model.md`.
 

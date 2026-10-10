@@ -1,4 +1,4 @@
-# Speaker notes — Alert Fatigue Reduction
+# Speaker notes — AI-Assisted On-Call Queue (Alert Fatigue Reduction)
 
 **Sector:** cloud microservice operations (online platforms). Keep every answer in that lane.
 

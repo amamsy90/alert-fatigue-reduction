@@ -1,6 +1,8 @@
-# AI-Assisted On-Call Queue
+# AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices
 
-**Budgeted incident detection for cloud microservices.** An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts, pages safely, learns from Real / Noise marks, and ships as one Docker container.
+*(Alert Fatigue Reduction in Cloud Microservice Operations)*
+
+An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts, pages safely, learns from Real / Noise marks, and ships as one Docker container.
 
 [![CI](https://github.com/amamsy90/alert-fatigue-reduction/actions/workflows/ci.yml/badge.svg)](https://github.com/amamsy90/alert-fatigue-reduction/actions/workflows/ci.yml)
 
@@ -18,8 +20,8 @@ For development:
 ```bash
 cd app
 uv sync --group dev                  # exact versions from uv.lock
-uv run pytest -q                     # 262 tests
-uv run python run_validate.py        # the report's 51 numbers match app/results/
+uv run pytest -q                     # 267 tests
+uv run python run_validate.py        # the report's 75 checked numbers match app/results/
 uv run uvicorn product.app:app --reload
 ```
 
@@ -33,7 +35,7 @@ Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE
 | [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 262 automated tests |
+| [`app/tests/`](app/tests) | 267 automated tests |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
 | [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |
 | [`app/deploy/`](app/deploy) | Settings for development, test and production |
@@ -42,7 +44,8 @@ Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE
 | [`submission/`](submission/README.md) | Word / PDF copies for upload (regenerate from the Markdown first) |
 | `design_specification.md`, `project_plan.md`, `ROADMAP.md`, `VALIDATION.md`, `CODE_REVIEW.md` | Design detail, plan, roadmap, result files, the first review |
 | `DEMO_SCRIPT.md`, `VIVA_ANSWERS.md`, `Alert_Fatigue_Speaker_Notes.md` | Presentation and viva material |
-| `PROJECT_PROPOSAL.md`, `proposal.md`, `UAE_PILOT_OFFER.md` | The proposal as submitted, and a pilot offer |
+| [`submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`](submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf) | The proposal as submitted (5 October 2026), with its Word source |
+| `PROJECT_PROPOSAL.md`, `proposal.md`, `UAE_PILOT_OFFER.md` | Earlier proposal drafts in Markdown, and a pilot offer |
 
 ## Safety defaults
 

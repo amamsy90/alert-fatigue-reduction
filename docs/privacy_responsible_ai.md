@@ -1,6 +1,6 @@
 # Privacy and responsible AI
 
-**System:** Budgeted Incident Detection · **Version:** 1.0.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.0
 
 ## 1. Privacy
 
