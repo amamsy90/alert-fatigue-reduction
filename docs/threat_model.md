@@ -1,6 +1,6 @@
 # Threat model
 
-**System:** Budgeted Incident Detection web app (`app/product/`) · **Version:** 1.0.0 · **Method:** STRIDE per trust boundary
+**System:** AI-Assisted On-Call Queue web app (`app/product/`) · **Version:** 1.0.0 · **Method:** STRIDE per trust boundary
 
 The app can wake people up (PagerDuty, Slack, Opsgenie), holds the keys to do so, and can be told to call a URL (Prometheus). Those three facts drive this model.
 
@@ -62,8 +62,8 @@ flowchart LR
 | # | Risk | Why it remains | Plan |
 |---|---|---|---|
 | R1 | Closed: the fetch dials the address from the same lookup that passed the SSRF check | | |
-| R2 | Closed: `POST /login` sets an HttpOnly session cookie for 12 hours. `COOKIE_SECURE=1`, or `X-Forwarded-Proto: https` at the proxy, marks it Secure. Later requests send the cookie. Basic auth remains for scripts | | |
-| R3 | Closed: five failed logins from one client lock that client for 60 seconds (`LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`). `/health` stays open. Behind a reverse proxy set `TRUSTED_PROXIES` so the lock keys on the first forwarded client; without it, `X-Forwarded-For` is ignored | | |
+| R2 | Closed: `POST /login` sets an HttpOnly session cookie for 12 hours. `COOKIE_SECURE=1`, or `X-Forwarded-Proto: https` from a proxy listed in `TRUSTED_PROXIES`, marks it Secure. Later requests send the cookie. Basic auth remains for scripts | | |
+| R3 | Closed: five failed logins from one client lock that client for 60 seconds (`LOGIN_MAX_FAILS`, `LOGIN_LOCK_SECONDS`). `/health` stays open. Behind a reverse proxy set `TRUSTED_PROXIES` so the lock keys on the forwarded client, read from the right of `X-Forwarded-For` (the first hop that is not a trusted proxy), so a client cannot prepend fake addresses to split the lock; without it, `X-Forwarded-For` is ignored. Fixed after the instructor review, which found the leftmost value was used (`test_login_lock_cannot_be_split_by_prepending_xff`) | | |
 | R4 | Closed: `APP_VIEWER_PASSWORD` (user `APP_VIEWER_USER`, default `viewer`) can read the queue. Any write other than login and logout returns 403. `APP_PASSWORD` is the operator | | |
 | R5 | Closed: the audit log is appended to `audit.log` next to the ops file (mode 0600 where the OS allows), and still copied to stdout. `AUDIT_LOG_PATH` moves the file; `off` keeps stdout only | | |
 | R6 | Closed: paging keys are stored in `secrets.json` (owner-only), or read from a file in `SECRETS_DIR` (Docker secrets) or from the environment. Saving strips those fields out of `ops.json` | |

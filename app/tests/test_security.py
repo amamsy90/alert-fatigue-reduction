@@ -171,6 +171,74 @@ def test_untrusted_x_forwarded_for_does_not_split_the_login_lock(client, monkeyp
         reset_login_attempts()
 
 
+def test_login_lock_cannot_be_split_by_prepending_xff(client, monkeypatch):
+    """Behind a trusted proxy, a client that rotates the leftmost X-Forwarded-For
+    value is still locked: the proxy appends the real address on the right."""
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    monkeypatch.setenv("LOGIN_LOCK_SECONDS", "60")
+    monkeypatch.setenv("TRUSTED_PROXIES", "127.0.0.1/32")
+    proxy = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    try:
+        codes = [
+            proxy.get(
+                "/connectors",
+                auth=("oncall", "no"),
+                headers={"X-Forwarded-For": f"203.0.113.{i}, 10.0.0.5"},
+            ).status_code
+            for i in range(1, 6)
+        ]
+        assert codes == [401, 401, 429, 429, 429]
+        right = proxy.get(
+            "/connectors",
+            auth=("oncall", "s3cret"),
+            headers={"X-Forwarded-For": "198.51.100.7, 10.0.0.5"},
+        )
+        assert right.status_code == 429
+    finally:
+        reset_login_attempts()
+
+
+def test_forwarded_client_skips_trusted_hops_from_the_right(monkeypatch):
+    """Chains of trusted proxies are skipped; the first untrusted hop from the
+    right is the client, whatever the client wrote further left."""
+    from starlette.requests import Request
+
+    from product.web.security import login_client_id
+
+    monkeypatch.setenv("TRUSTED_PROXIES", "127.0.0.1/32,10.1.0.0/16")
+
+    def make(headers: dict[str, str], host: str = "127.0.0.1") -> Request:
+        raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+        return Request({"type": "http", "headers": raw, "client": (host, 1234)})
+
+    assert login_client_id(make({"X-Forwarded-For": "1.2.3.4, 10.0.0.5, 10.1.2.3"})) == "10.0.0.5"
+    assert login_client_id(make({"X-Forwarded-For": "10.0.0.5"})) == "10.0.0.5"
+    assert login_client_id(make({"Forwarded": 'for="1.2.3.4", for=10.0.0.9;proto=https'})) == "10.0.0.9"
+    # An untrusted socket never gets to name the client.
+    assert login_client_id(make({"X-Forwarded-For": "10.0.0.5"}, host="192.0.2.1")) == "192.0.2.1"
+
+
+def test_forwarded_proto_from_an_untrusted_client_does_not_set_secure(client, monkeypatch):
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "pw")
+    monkeypatch.delenv("COOKIE_SECURE", raising=False)
+    monkeypatch.delenv("TRUSTED_PROXIES", raising=False)
+    http = TestClient(client, base_url="http://localhost")
+    signed = http.post(
+        "/login",
+        json={"username": "oncall", "password": "pw"},
+        headers={"X-Forwarded-Proto": "https"},
+    )
+    assert signed.status_code == 200
+    assert "secure" not in signed.headers["set-cookie"].lower()
+
+
 def test_ingest_batch_cap_returns_429(client, monkeypatch):
     from product.web.security import reset_login_attempts
 

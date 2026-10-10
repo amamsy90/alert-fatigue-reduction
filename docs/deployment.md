@@ -1,6 +1,6 @@
 # Deployment, environments and AI governance
 
-**System:** Budgeted Incident Detection · **Version:** 1.0.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.0
 
 ## 1. Where it runs
 
@@ -39,7 +39,15 @@ The same image runs in every environment. Only environment variables differ, and
 
 ## 3a. Sessions and workers
 
-Login sessions live in the process (`product/web/security.py`). That matches ADR 0003 (one worker). Do not raise `--workers` or run replicas in front of one SQLite file: a request that hits another worker gets 401 for a valid cookie, and two jobs can race. Put TLS and `TRUSTED_PROXIES` on the reverse proxy in front of this single container.
+Login sessions live in the process (`product/web/security.py`). That matches ADR 0003 (one worker). Do not raise `--workers` or run replicas in front of one SQLite file: a request that hits another worker gets 401 for a valid cookie, and two jobs can race. Put TLS and `TRUSTED_PROXIES` on the reverse proxy in front of this single container. The image starts uvicorn with `--workers 1` for this reason.
+
+## 3b. Client addresses behind a reverse proxy
+
+The login lock, the ingest rate limit and the audit log key on the client address. Behind a proxy every request comes from the proxy, so the app needs the original client from a forwarded header, and must not let the client choose it.
+
+- **`TRUSTED_PROXIES` (recommended).** List the proxy's CIDRs (for example `TRUSTED_PROXIES=10.0.0.0/8`). Only when the socket is in that list does the app read `X-Forwarded-For` (or `Forwarded`). It walks the list **from the right** and takes the first address that is not itself a trusted proxy. Proxies append the address they saw on the right, so anything a client writes further left is ignored and cannot split the login lock (`test_login_lock_cannot_be_split_by_prepending_xff`). `X-Forwarded-Proto: https` is also honoured only from a trusted proxy; otherwise set `COOKIE_SECURE=1`.
+- **Alternative: uvicorn's own proxy handling.** Start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` and leave `TRUSTED_PROXIES` empty. Uvicorn then rewrites the client address before the app sees it. Do not use `--forwarded-allow-ips='*'` on a port clients can reach directly: any client could then name its own address.
+- **Without either**, forwarded headers are ignored and every client behind the proxy shares one login lock.
 
 ## 4. AI governance
 

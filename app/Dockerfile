@@ -28,4 +28,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"
 
-CMD ["uvicorn", "product.app:app", "--host", "0.0.0.0", "--port", "8080"]
+# One worker on purpose: sessions, the login lock and rate limits live in this process
+# (ADR 0003, docs/deployment.md §3a). Do not raise --workers.
+CMD ["uvicorn", "product.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
