@@ -120,6 +120,10 @@ def _load_pipeline(blob: bytes) -> object | None:
         skops_path.unlink(missing_ok=True)
 
 
+# Serializes save_model; separate from _REGISTRY_LOCK, which is held while saving.
+_SAVE_LOCK = threading.Lock()
+
+
 def save_model(saved: SavedModel, path: Path | None = None) -> None:
     """Write a zip (JSON plus skops) and a SHA-256 next to it. Never pickle."""
     path = path or model_path()
@@ -130,11 +134,35 @@ def save_model(saved: SavedModel, path: Path | None = None) -> None:
         archive.writestr("meta.json", json.dumps(_meta(saved, pipe is not None)))
         if pipe is not None:
             archive.writestr("pipe.skops", _pipeline_bytes(pipe))
-    tmp = path.with_suffix(".tmp")
-    tmp.write_bytes(buf.getvalue())
-    digest = _sha256(tmp)
-    tmp.replace(path)
-    _digest_path(path).write_text(digest + "\n", encoding="ascii")
+    blob = buf.getvalue()
+    digest = hashlib.sha256(blob).hexdigest()
+    digest_path = _digest_path(path)
+    # Both files are written to temp names first, then swapped in with
+    # os.replace back to back under one lock, so two saves cannot interleave
+    # and a crash while writing never leaves a half-written model or digest.
+    with _SAVE_LOCK:
+        tmp_model = _write_temp(path, blob)
+        try:
+            tmp_digest = _write_temp(digest_path, (digest + "\n").encode("ascii"))
+        except OSError:
+            tmp_model.unlink(missing_ok=True)
+            raise
+        os.replace(tmp_model, path)
+        os.replace(tmp_digest, digest_path)
+
+
+def _write_temp(target: Path, data: bytes) -> Path:
+    """Write `data` to a unique temp file beside `target`, flushed to disk."""
+    fd, name = tempfile.mkstemp(prefix=target.name + ".", suffix=".tmp", dir=target.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        Path(name).unlink(missing_ok=True)
+        raise
+    return Path(name)
 
 
 def load_model(path: Path | None = None) -> SavedModel | None:
