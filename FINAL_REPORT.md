@@ -5,7 +5,7 @@
 **Final report**
 **Author:** Aishah Mohamed Alyammahi
 **Course:** Software Engineering and Programming
-**Date:** 30 September 2026
+**Date:** 10 October 2026
 
 Numbers come from scripts under `app/` and are checked by `python run_validate.py` against the *Checked numbers* table at the end. Part A follows the thirteen sections of the course brief; Part B holds the measured results; Part C says how to reproduce them.
 
@@ -60,10 +60,10 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 262/262, 90%, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 267/267, 90%, 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 262 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 267 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ## 4. Target users and use case
 
@@ -110,6 +110,8 @@ flowchart TD
 **AI technology.** Supervised classification: logistic regression on TF-IDF text features, source, severity, recent alert counts and an inside-a-jump flag (scikit-learn). A second learned piece, the confirmation threshold, is a cost-minimising cut on the training window. An experimental jump ranker (logistic regression) was tried and gave no gain (§B4).
 
 **Existing model or API.** An existing, well-understood model family (scikit-learn logistic regression) trained locally; no external AI API or LLM, so no data leaves the server and there is no per-call cost.
+
+**What the classifier adds, measured.** An ablation on GAIA (`run_classifier_ablation.py`, §B4) keeps the whole queue and changes only how log alerts are chosen for their quarter of the slots. At K = 20 the queue with the classifier catches 69.6% with 1.8 false items a day; with log severity instead it catches 71.0% (1.4 false a day); with no log alerts at all, 71.2% (1.2 false a day). **On GAIA the classifier adds no catches; it costs about 1.6 points and 0.6 false items a day**, because 82% of GAIA faults write no log line and the alerts it escalates spend slots that jumps would have used. Its value is therefore not shown on this benchmark. It is kept for teams whose faults *do* log: it is the only part that learns from that team's Real / Noise marks (a Noise mark becomes a negative label at the next retrain), every new model must pass the promotion gate on held-out alerts before it is used, and alerts can never take more than a quarter of the budget. A team whose faults do not log can run rules only (no labels) and lose nothing.
 
 **Limitations of AI here.** It needs labels of both classes, so a new team starts in rules-only mode; learned thresholds do not transfer between datasets (one learned on GAIA's 1 GB faults rejects 0.5 GB faults, §B3); and 82% of GAIA faults leave no log, which caps a log-only model near 18% (§B6).
 
@@ -175,19 +177,19 @@ Hallucination and prompt injection do not apply (no generative model), but the e
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% | 262 / 262 (Python 3.10 and 3.12) |
+| Tests passing | 100% | 267 / 267 (Python 3.10 and 3.12) |
 | Line coverage | ≥ 85% | 90% |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
-| Report numbers match results | every checked number | 69 / 69 |
+| Report numbers match results | every checked number | 75 / 75 |
 
-CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py` and a Docker build with a health check on every push. Details: `docs/test_plan.md`.
+CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py`, a dependency audit (`pip-audit` on the hash-pinned lock) and a Docker build with a health check on every push. The audit step was added on 7 October with an option `pip-audit` does not have, so that job failed on that commit; it was corrected on 10 October (a hand run of the corrected command found no known vulnerabilities). Details: `docs/test_plan.md`.
 
 ## 9. MLOps
 
 - **Versioning.** Code in Git through pull requests; dependencies in `uv.lock` and a hash-pinned `requirements.lock`; configuration in `src/config.py` and per-environment files; data by fingerprint in the experiment log; **models as numbered versions with model cards** in `models/registry.json` (training time, data fingerprint, code version, held-out results, gate decision). No prompts (no LLM).
-- **Reproducibility.** `uv sync --group dev`, `uv run pytest`, `uv run python run_validate.py`, `docker compose up`; every environment variable is documented; the public datasets are fetched by scripts.
+- **Reproducibility.** `uv sync --group dev`, `uv run pytest`, `uv run python run_validate.py`, `docker compose up`; every environment variable is documented; the public datasets are fetched by scripts (`tools/fetch_gaia.py`, `fetch_nab.py`, `fetch_smd.py`, `fetch_rcaeval_mem.py`), and `fetch_gaia.py` checks the SHA-256 of every GAIA file used.
 - **Model updates.** A new model is trained when a batch has labels of both classes. It becomes active only if its held-out cost is no higher than the active model's on the same held-out alerts. A worse model stays a candidate. The operator can roll back to any version (`POST /models/{version}/activate`, hash-checked, audited). Precision from engineers' marks and alert-volume drift are monitored, and a retrain is suggested after 7 days or new Real marks.
 - **Testing before release.** CI for code; the promotion gate and shadow mode for models.
 - **Experiment tracking.** Every experiment script appends to `app/results/experiments.jsonl`: commit, library versions, configuration, data fingerprint, output hashes, headline metrics and the reason for the run.
@@ -225,19 +227,20 @@ Evaluation criteria with measured values, justification for each target and exam
 2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
 4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels; the per-series confirm levels (§B4) are measured but not in the headline.
-5. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
+5. **The AI component adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The classifier is kept for teams whose faults log and who mark items; that benefit is argued, not measured here.
+6. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
 
-**Future work.** RCAEval's CPU, disk, delay and packet-loss injections (only the memory injection is scored, in §B5); a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out, paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
+**Future work.** RCAEval's CPU, disk, delay and packet-loss injections (only the memory injection is scored, in §B5); a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out (behind a trusted proxy the client is read from the right of `X-Forwarded-For`; the instructor review found the leftmost, client-written value was used, which let a client dodge the lock; fixed with a regression test on 10 October), paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
 
 ## 13. Success criteria
 
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 262 / 262 | Yes |
+| At least 90% of predefined test cases pass | 267 / 267 | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
-| AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it | Partly: the detector, yes; the full queue, a tie |
+| AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation) | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA |
 | No critical security vulnerabilities in testing | 0 critical. R1 through R8 are closed and tested | Yes |
 | Deployable from documented instructions | `docker compose up`, `docs/deployment.md`, CI Docker job | Yes |
 | Another person can reproduce the environment | `uv sync`, lock files, `run_validate.py` | Yes |
@@ -353,6 +356,16 @@ What this shows:
 | **Confirm level per series** (learned on week 1; off in the headline) | 69.3% | 17.6 | 70.5% | Mixed: the detector alone keeps 72.6% with fewer false items (0.8 vs 1.0 a day), but the levels reject real faults — 26 misses below threshold instead of 4, and 84.1% vs 85.8% at K = 50. The web app uses it; the published tables use the single gate |
 | **Carry over** up to 10 unused slots to the next day | **72.6%** | 18.6 | **74.8%** | Largest gain; the average stays under K. But the same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%), and the full queue then wins only 3 of 6 decided weeks (p = 0.66). Before the look-ahead fixes this row read 74.4% and 8/8 weeks; that margin did not survive |
 
+**Ablation: what the alert classifier adds** (`run_classifier_ablation.py`, `results/classifier_ablation_gaia.csv`). Same full queue, same week-1 training; only the choice of log alerts for their quarter of the slots changes. The classifier row reproduces the published full-queue numbers exactly.
+
+| Log alerts in the queue (K = 20) | Caught | Items / day | False / day | Precision |
+|---|---|---|---|---|
+| Chosen by the classifier (the full queue) | 69.6% | 17.7 | 1.8 | 90% |
+| Chosen by log severity + exact duplicates | 71.0% | 17.6 | 1.4 | 92% |
+| None (metric items only) | 71.2% | 17.4 | 1.2 | 93% |
+
+On GAIA the classifier does not earn its slots: on net, the alerts it escalates catch fewer faults than the metric items they push out of a full day. At K = 50, where slots are not scarce, all three catch 85.8%. This is why the detector alone is the first claim (§B1) and why the classifier is described as an option for teams whose faults log (§5).
+
 Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice.
 
 ---
@@ -449,11 +462,13 @@ Per service (test period):
 ## C1. How to reproduce
 
 ```powershell
+python tools/fetch_gaia.py        # needs internet, ~1.8 GB download; checks SHA-256
 cd app
 $env:PYTHONPATH = (Get-Location).Path
 python -m pytest -q
 python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --sweep
 python run_queue_eval.py
+python run_classifier_ablation.py
 python run_walkforward.py
 python run_stats.py
 python run_robustness.py
@@ -467,9 +482,13 @@ python make_figures.py
 python run_validate.py
 ```
 
-Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large). Without GAIA: `python examples/make_example.py`, then `python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv`.
+Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large). `python tools/fetch_gaia.py` (from the repository root) downloads them from the GAIA MicroSS dataset (https://github.com/CloudWise-OpenSource/GAIA-DataSet, `MicroSS/run/run.zip` and the split archive `MicroSS/metric/metric_split.*`, about 1.8 GB), extracts the two run tables and the 37 `docker_memory_usage_total` series into that layout, and checks each file's SHA-256 against the copy used for these results (`--check` verifies files already in place). Without GAIA: `python examples/make_example.py`, then `python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv`.
 
 A faster check without GAIA: `cd app && uv sync --group dev && uv run pytest -q && uv run python run_validate.py` (the result files are in git). Every experiment run is logged in `app/results/experiments.jsonl` (`docs/mlops.md`).
+
+## C1a. Use of AI tools
+
+AI coding assistants were used while building this project: for code review, refactoring, test writing and drafting documentation (visible in the repository history as the `claude/*` branches merged through pull requests #2 to #5, and in `AGENTS.md`). The runtime system uses no generative AI or external AI service. Every number in this report comes from the scripts in `app/` and is checked against `app/results/` by `run_validate.py`; the test suite, lint, type checks and the dependency audit run in CI. Design decisions, the evaluation method and the claims made here are the author's responsibility.
 
 ---
 
@@ -535,6 +554,12 @@ A faster check without GAIA: `cd app && uv sync --group dev && uv run pytest -q 
 | `robustness.step_0.25g.jump_0.5g` | 1% | §B3 |
 | `robustness.ramp_1g.jump+leak_3h` | 99% | §B3 |
 | `robustness.step_0.5g.jump_0.5g+threshold` | 0% | §B3 |
+| `ablation.K20.classifier` | 69.6% | §5, §B4 |
+| `ablation.K20.severity` | 71.0% | §5, §B4 |
+| `ablation.K20.no_alerts` | 71.2% | §5, §B4 |
+| `ablation.false.K20.classifier` | 1.8 | §5, §B4 |
+| `ablation.false.K20.severity` | 1.4 | §5, §B4 |
+| `ablation.false.K20.no_alerts` | 1.2 | §5, §B4 |
 | `queue.K20.p3_ranker` | 69.7% | §B4 |
 | `queue.K20.p3_grouped` | 70.7% | §B4 |
 | `queue.K20.p3_per_series` | 69.3% | §B4 |
