@@ -214,3 +214,36 @@ def test_malformed_model_metadata_is_refused_not_raised(env, meta):
     path.write_bytes(buf.getvalue())
     (env / "bad.pkl.sha256").write_text(hashlib.sha256(buf.getvalue()).hexdigest() + "\n", encoding="ascii")
     assert load_model(path) is None
+
+
+def test_a_failed_save_keeps_the_previous_model_loadable(env, monkeypatch):
+    """The model and its SHA-256 are written to temp files first, so a failure
+    part-way through never leaves a model whose digest does not match."""
+    save_model(_model(0.5))
+    real_write = model_store._write_temp
+    calls = {"n": 0}
+
+    def flaky(target, data):
+        calls["n"] += 1
+        if calls["n"] == 2:  # the digest file
+            raise OSError("disk full")
+        return real_write(target, data)
+
+    monkeypatch.setattr(model_store, "_write_temp", flaky)
+    with pytest.raises(OSError):
+        save_model(_model(0.9))
+    assert load_model().escalate_threshold == 0.5
+    assert not list(env.glob("*.tmp"))
+
+
+def test_concurrent_saves_leave_a_matching_digest(env):
+    import threading
+
+    threads = [threading.Thread(target=save_model, args=(_model(t / 10),)) for t in range(1, 9)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    loaded = load_model()
+    assert loaded is not None
+    assert not list(env.glob("*.tmp"))
