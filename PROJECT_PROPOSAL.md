@@ -1,4 +1,8 @@
-# Budgeted Incident Detection: an On-Call Queue That Shows the Right K Items a Day
+# AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices — Early Proposal
+
+*(Alert Fatigue Reduction in Cloud Microservice Operations)*
+
+> Early draft, kept for history. The proposal as submitted on 5 October is `submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`.
 
 **Course:** Software Engineering and Programming
 **Team member:** Aishah Mohamed Alyammahi

@@ -1,6 +1,8 @@
-﻿# Alert Fatigue Reduction — Project Plan
+﻿# AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices — Project Plan
 
-**Author:** Aishah Mohamed Alyammahi  **Course:** Software Engineering and Programming  **Date:** 30 September 2026  **Version:** 2.0
+*(Alert Fatigue Reduction in Cloud Microservice Operations)*
+
+**Author:** Aishah Mohamed Alyammahi  **Course:** Software Engineering and Programming  **Date:** 10 October 2026  **Version:** 2.1
 **Sector:** Cloud microservice operations (online platforms)
 
 ---
@@ -16,7 +18,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | D3 | Memory-jump detector vs injected faults | Done (`results/memory_gaia_jump.csv`) — 86.1% overlap |
 | D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 69.6% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
 | D5 | Local on-call app (shadow mode, marks, saved model) | Done (`app/product/`) |
-| D6 | Final report + name / course / date on documents | Report includes interval + silent-fault table; name / course / date still open |
+| D6 | Final report + name / course / date on documents | Done (`FINAL_REPORT.md`; name, course and date filled on the report, plan, design and proposal) |
 
 ## 2. Work breakdown
 
@@ -35,7 +37,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | T11 | Queue evaluation at K = 5 / 10 / 20 / 50 | M4 | Done |
 | T11b | Walk-forward: retrain each later week | M4 | Done (`results/walkforward_gaia.csv`, full queue 71.3%, rate rule 70.7%) |
 | T12 | Stretch: ask only inside a jump; Real / Noise; retrain | D5 | Done |
-| T13 | Final report; name / course / date | D6 | Report in `FINAL_REPORT.md`; fill author fields |
+| T13 | Final report; name / course / date | D6 | Done (`FINAL_REPORT.md`, author fields filled) |
 | T14 | Interval, sign test vs rate rule, signal counts incl. no-metric-data | M4 | Done (`results/stats_gaia.csv`) |
 
 ## 3. Schedule
