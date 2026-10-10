@@ -28,3 +28,12 @@ desktop.ini
 
 # Files the Claude desktop app drops here
 Claude outputs/
+
+# Course material: not ours to publish
+lectures/
+*rubric*.pdf
+Project_Proposal_Instructions.pdf
+course_project_proposal.md
+
+# Draft and duplicate Word files, kept locally only
+submission/archive/
