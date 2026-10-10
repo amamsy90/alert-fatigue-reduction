@@ -277,27 +277,60 @@ def _is_trusted_proxy(host: str | None) -> bool:
     return any(ip in net for net in _trusted_proxy_networks())
 
 
+def _strip_host(value: str) -> str:
+    """Bare IP from an X-Forwarded-For or Forwarded `for=` value (quotes,
+    IPv6 brackets and a port removed)."""
+    value = value.strip().strip('"')
+    if value.startswith("["):
+        return value[1:].split("]", 1)[0]
+    if value.count(":") == 1:
+        # IPv4 with a port; a bare IPv6 address has several colons.
+        return value.split(":", 1)[0]
+    return value
+
+
+def _rightmost_untrusted(hops: list[str]) -> str | None:
+    """Walk the proxy chain from the right and return the first hop that is
+    not a trusted proxy.
+
+    Proxies append the address they saw on the right, so everything to the
+    left of the last trusted hop was written by the client and can be forged.
+    Taking the leftmost value let a client rotate it and dodge the login lock.
+    """
+    hops = [h for h in (_strip_host(x) for x in hops) if h]
+    for hop in reversed(hops):
+        if not _is_trusted_proxy(hop):
+            return hop
+    # Every hop is a trusted proxy: the leftmost one is the closest we have.
+    return hops[0] if hops else None
+
+
 def _forwarded_client(request: Request) -> str | None:
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        first = xff.split(",")[0].strip()
-        return first or None
+        return _rightmost_untrusted(xff.split(","))
     forwarded = request.headers.get("forwarded")
     if forwarded:
+        hops = []
         for item in forwarded.split(","):
             for part in item.split(";"):
                 key, _, value = part.strip().partition("=")
                 if key.lower() == "for" and value:
-                    return value.strip().strip('"').lstrip("[").rstrip("]")
+                    hops.append(value)
+        found = _rightmost_untrusted(hops)
+        if found:
+            return found
     real = (request.headers.get("x-real-ip") or "").strip()
     return real or None
 
 
 def login_client_id(request: Request) -> str:
-    """Socket IP, or the first forwarded client when that socket is in TRUSTED_PROXIES.
+    """Socket IP, or the forwarded client when that socket is in TRUSTED_PROXIES.
 
-    Without TRUSTED_PROXIES, X-Forwarded-For is ignored so a client cannot split
-    the login lock by spoofing the header.
+    The forwarded client is the rightmost X-Forwarded-For hop that is not itself
+    a trusted proxy, so a value the client prepends is never used. Without
+    TRUSTED_PROXIES, X-Forwarded-For is ignored so a client cannot split the
+    login lock by spoofing the header.
     """
     host = request.client.host if request.client else "-"
     if _is_trusted_proxy(host):
@@ -343,7 +376,11 @@ def _basic_identity(header: str | None) -> tuple[str, str] | None:
 def _cookie_secure(request: Request) -> bool:
     if os.environ.get("COOKIE_SECURE") == "1":
         return True
-    forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    # Only a trusted proxy may tell us the original scheme.
+    host = request.client.host if request.client else None
+    if not _is_trusted_proxy(host):
+        return False
+    forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[-1].strip().lower()
     return forwarded == "https"
 
 
