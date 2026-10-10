@@ -1,6 +1,6 @@
 # MLOps and lifecycle
 
-**System:** Budgeted Incident Detection · **Version:** 1.0.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.0
 
 This page explains how the AI part of the system is versioned, reproduced, updated and tracked after it is deployed. The AI component is a cost-sensitive logistic regression that scores log alerts (scikit-learn), next to rule-based metric detectors. No external model API is used.
 
@@ -11,7 +11,7 @@ This page explains how the AI part of the system is versioned, reproduced, updat
 | **Source code** | Git; every change through a pull request with green CI; releases tagged and listed in `CHANGELOG.md` | GitHub `amamsy90/alert-fatigue-reduction` |
 | **Dependencies** | `app/pyproject.toml` (ranges) + `app/uv.lock` (exact, every Python 3.10–3.12) + `app/requirements.lock` (hashes, for Docker); CI fails if the two locks disagree | `app/` |
 | **Configuration** | Defaults in `src/config.py` (reviewed like code); per-environment values in `app/deploy/*.env`; settings chosen on *Evaluate my data* saved to `settings.json` with the evaluation id and time they came from | `app/src/config.py`, `app/deploy/`, `product/data/settings.json` |
-| **Data** | Public benchmarks (GAIA, NAB, SMD) are downloaded by scripts, not stored in git; each experiment run records a **fingerprint** of its input files. Each trained model records a fingerprint of its training alerts and labels | `results/experiments.jsonl`, `models/registry.json` |
+| **Data** | Public benchmarks (GAIA, NAB, SMD, RCAEval) are downloaded by scripts in `tools/` (GAIA with SHA-256 checks), not stored in git; each experiment run records a **fingerprint** of its input files. Each trained model records a fingerprint of its training alerts and labels | `results/experiments.jsonl`, `models/registry.json` |
 | **Models** | Every trained model is kept as `models/vNNNN.pkl` (a zip of JSON and a skops file, not a pickle) with a SHA-256 and a **model card** in `models/registry.json`; one version is active (`model.pkl`). A corrupt registry is refused (503); `POST /models/reset` with `confirm=RESET` quarantines it | `product/data/models/` (Docker volume) |
 | **Prompts** | Not applicable: no LLM is used | — |
 
@@ -24,12 +24,12 @@ If another team member receives the project tomorrow:
 ```bash
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
-uv run pytest -q                      # 262 tests, no network needed
-uv run python run_validate.py         # the report's 51 numbers match the committed results
+uv run pytest -q                      # 267 tests, no network needed
+uv run python run_validate.py         # the report's 75 checked numbers match the committed results
 docker compose up -d                  # the app, built from the hash-pinned lock (dev settings)
 ```
 
-To regenerate the published results they also need the GAIA files (`app/data/gaia_raw`, `app/data/gaia_metrics`; see `FINAL_REPORT.md` §12) and run the `run_*.py` scripts; `tools/fetch_nab.py` and `tools/fetch_smd.py` download the other benchmarks. Every environment variable is listed in `app/README.md`; containers are defined by `app/Dockerfile` and `app/docker-compose.yml`.
+To regenerate the published results they also need the GAIA files (`app/data/gaia_raw`, `app/data/gaia_metrics`), which `python tools/fetch_gaia.py` downloads from https://github.com/CloudWise-OpenSource/GAIA-DataSet and checks by SHA-256 (`FINAL_REPORT.md` §C1), and run the `run_*.py` scripts; `tools/fetch_nab.py`, `tools/fetch_smd.py` and `tools/fetch_rcaeval_mem.py` download the other benchmarks. Every environment variable is listed in `app/README.md`; containers are defined by `app/Dockerfile` and `app/docker-compose.yml`.
 
 ## 3. Model and AI updates
 
@@ -43,7 +43,7 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 | **Detector settings change** (jump size, window) | Tuned on *Evaluate my data* against the team's past incidents with a held-out part and a chance line; applying them is an explicit action recorded with the evaluation id. |
 | **The knowledge base / an external AI API changes** | Not applicable: no knowledge base or external model API. |
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, 262 tests on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, 267 tests on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 
