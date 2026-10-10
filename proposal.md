@@ -1,11 +1,13 @@
-﻿# Alert Fatigue Reduction in Cloud Microservice Operations — Project Proposal
+﻿# AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices — Project Proposal (30 September draft)
+
+*(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
 **Author:** Aishah Mohamed Alyammahi
 **Course:** Software Engineering and Programming
 **Date:** 30 September 2026
 **Sector:** Cloud microservice operations (online platforms)
 
-The five sections below are the proposal. Section 6 keeps the measured method and the GAIA numbers. The full course brief is answered in `FINAL_REPORT.md`.
+This is the Markdown draft of 30 September. The proposal as submitted on 5 October is `submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`. The five sections below are the proposal. Section 6 keeps the measured method and the GAIA numbers. The full course brief is answered in `FINAL_REPORT.md`.
 
 ---
 

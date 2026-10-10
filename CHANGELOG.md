@@ -4,13 +4,31 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased] — toward 1.0.0
 
+### Fixed (instructor review, 10 October 2026)
+- CI audit job: `pip-audit` has no `--severity` option, so the job failed on every push. It now runs `uvx pip-audit -r requirements.lock --require-hashes --disable-pip`.
+- Login lockout bypass behind a trusted proxy: the client address was the **leftmost** `X-Forwarded-For` value, which the client controls. It is now the rightmost hop that is not in `TRUSTED_PROXIES`. Regression test `test_login_lock_cannot_be_split_by_prepending_xff`.
+- `X-Forwarded-Proto` marks the session cookie Secure only when it comes from a trusted proxy.
+- `save_model` writes the model and its SHA-256 to temp files and swaps both in with `os.replace` under a lock, so a crash or two concurrent saves cannot leave a model whose digest does not match.
+- Docker CMD states `--workers 1`; `docs/deployment.md` documents `TRUSTED_PROXIES` vs `uvicorn --forwarded-allow-ips`.
+
+### Added (instructor review)
+- `tools/fetch_gaia.py`: downloads the GAIA MicroSS run tables and the 37 memory series used, without an external unzip tool, and checks each file's SHA-256.
+- `run_classifier_ablation.py` and `results/classifier_ablation_gaia.csv`: the full queue with log alerts chosen by the classifier, by severity, or not at all. At K = 20: 69.6%, 71.0%, 71.2%. The classifier adds no catches on GAIA; the report now says so (§5, §12, §B4). `run_validate.py` checks the six new numbers (75 in all).
+- Report §C1a, use of AI tools.
+
+### Changed (instructor review)
+- One title everywhere: *AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices*, with *Alert Fatigue Reduction in Cloud Microservice Operations* as the subtitle.
+- Report date, test counts (267), checked-number counts, project plan D6/T13, and the README pointer to the submitted proposal PDF.
+- Submitted proposal (PDF and its Word source), `queue_flowchart.png` and `package.json` / `package-lock.json` committed; course material and draft Word files kept out of git.
+
+
 ### Added (submission hardening)
-- `TRUSTED_PROXIES`: login lock and ingest rate limits key on the first forwarded client only when the socket is a listed proxy.
+- `TRUSTED_PROXIES`: login lock and ingest rate limits key on the forwarded client only when the socket is a listed proxy.
 - Ingest batch cap (`INGEST_MAX_BATCHES` / `INGEST_WINDOW_SECONDS` → 429) and alert-count cap (`INGEST_MAX_ALERTS` → 413).
 - `POST /models/reset` quarantines a corrupt `registry.json`; `GET /models` returns 503 until then.
 - Metric-median drift on `/monitoring` (same 0.5–2 band as alert volume).
 - Backup/restore (`python -m product.backup`), JSON logs (`LOG_FORMAT=json`), audit-log rotation, paging-key cap (`PAGE_KEY_MAX`).
-- CI `pip-audit` (critical), Dependabot, tag-triggered image publish, `.gitattributes` (LF).
+- CI `pip-audit`, Dependabot, tag-triggered image publish, `.gitattributes` (LF).
 
 ### Added (Phase 3, from the course brief review)
 - Model registry: every trained model kept as a version with a card; promotion gate on held-out cost; rollback API (`/models`).
