@@ -10,7 +10,7 @@ const {
 } = require("docx");
 
 const [, , input, output, subtitle, imageDir] = process.argv;
-const md = fs.readFileSync(input, "utf8").replace(/\r\n/g, "\n");
+const md = fs.readFileSync(input, "utf8").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
 const lines = md.split("\n");
 
 const FONT = "Calibri";
