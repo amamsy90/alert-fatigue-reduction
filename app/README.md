@@ -81,11 +81,11 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `SHADOW_MODE` | `1` | Bootstrap default; UI Live override is saved in `ops.json`. `0` = Live |
 | `APP_PASSWORD` / `APP_USER` | none / `oncall` | Operator login. `POST /login` sets an HttpOnly session cookie; basic auth still works for scripts. Required before Live mode, and behind a reverse proxy |
 | `APP_VIEWER_PASSWORD` / `APP_VIEWER_USER` | none / `viewer` | Read-only login. Writes (Live, keys, settings, jobs) return 403 |
-| `COOKIE_SECURE` | off | `1` marks the session cookie Secure. Also set when the proxy sends `X-Forwarded-Proto: https` |
+| `COOKIE_SECURE` | off | `1` marks the session cookie Secure. Also set when a proxy in `TRUSTED_PROXIES` sends `X-Forwarded-Proto: https` |
 | `AUDIT_LOG_PATH` | `audit.log` beside the ops file | Extra copy of the audit log. `off` keeps stdout only |
 | `SECRETS_PATH` / `SECRETS_DIR` | `secrets.json` beside the ops file / `/run/secrets` | Paging keys. A saved key is not written into `ops.json` |
 | `INGEST_TOKEN` | none | Bearer token for `/ingest/*` (header only; `?token=` is refused) |
-| `TRUSTED_PROXIES` | none | CIDRs of reverse proxies. Only then is the first `X-Forwarded-For` / `Forwarded` client used for the login lock and ingest rate limit |
+| `TRUSTED_PROXIES` | none | CIDRs of reverse proxies. Only then is `X-Forwarded-For` / `Forwarded` read, from the right: the first hop that is not a listed proxy is the client for the login lock, ingest rate limit and audit log. `X-Forwarded-Proto` is honoured only from these proxies |
 | `ALLOWED_HOSTS` | none | Extra `Host` names the app answers from this machine without a password (DNS-rebinding guard) |
 | `MAX_INGEST_MB` | `10` | Largest JSON body `/ingest/*` and other JSON routes accept; bigger bodies get 413 while they stream in |
 | `INGEST_MAX_ALERTS` | `400` | Largest number of alerts in one ingest POST; bigger batches get 413 |
@@ -123,14 +123,15 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 
 ## Reproduce the course results (GAIA)
 
-1. Download GAIA MicroSS: https://github.com/CloudWise-OpenSource/GAIA-DataSet
-2. Put the run tables at `data/gaia_raw/run/run` and the memory csv files at `data/gaia_metrics`.
+1. Download GAIA MicroSS: `python ../tools/fetch_gaia.py` fetches https://github.com/CloudWise-OpenSource/GAIA-DataSet (about 1.8 GB), extracts only the files used and checks each SHA-256.
+2. It puts the run tables at `data/gaia_raw/run/run` and the memory csv files at `data/gaia_metrics/metric`.
 3. Run:
 
 ```bash
 python -m pytest -q
 python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --sweep   # jump size, week 1
 python run_queue_eval.py      # headline table, K = 5/10/20/50
+python run_classifier_ablation.py  # what the alert classifier adds inside the queue
 python run_walkforward.py     # 8 later weeks, everything re-learned each week
 python run_stats.py           # intervals, sign tests, signals, chance overlap, confirm time
 python run_robustness.py      # synthetic 0.25-2 GB steps, spikes, ramps, leaks on the real series
