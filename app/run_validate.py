@@ -89,6 +89,13 @@ def computed_numbers() -> dict[str, float]:
                      ("stats.false_jumps_near_fault", "false_jumps_near_fault")):
         out[key] = float(s[col])
 
+    ablation = ROOT / "classifier_ablation_gaia.csv"
+    if ablation.exists():  # run_classifier_ablation.py
+        a = pd.read_csv(ablation)
+        for name in ("classifier", "severity", "no_alerts"):
+            out[f"ablation.K20.{name}"] = float(_row(a, name)["detection_rate"])
+            out[f"ablation.false.K20.{name}"] = float(_row(a, name)["false_items_per_day"])
+
     nab = ROOT / "nab_eval.csv"
     if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
         n = pd.read_csv(nab)
@@ -139,6 +146,14 @@ def claims_still_hold() -> None:
         _fail("weakest fold is no longer the metric outage week; rewrite the fold-7 paragraph")
     if str(s["injection_tags"]) != "memory_anomalies:1367":
         _fail("every injected fault must still be a memory anomaly")
+    ablation = ROOT / "classifier_ablation_gaia.csv"
+    if ablation.exists():
+        a = pd.read_csv(ablation)
+        for k in sorted(a["budget_k"].unique()):
+            if int(_row(a, "classifier", k)["faults_caught"]) != int(_row(q, "proposed", k)["faults_caught"]):
+                _fail(f"ablation 'classifier' row at K={k} no longer equals the published full queue")
+        if float(_row(a, "classifier")["detection_rate"]) > float(_row(a, "no_alerts")["detection_rate"]):
+            _fail("the classifier now adds catches on GAIA; rewrite the 'adds no catches' sentences (§5, §12, §B4)")
     nab = ROOT / "nab_eval.csv"
     if nab.exists():
         n = pd.read_csv(nab)
