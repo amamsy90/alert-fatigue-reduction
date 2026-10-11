@@ -53,17 +53,21 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
-## 5. Coverage by module (Phase 2 snapshot; the current suite is 267 tests, §6)
+## 5. Coverage by module (measured 11 October 2026, 273 tests)
+
+`uv run pytest -q --cov` from `app/`. Modules not listed are fully covered.
 
 | Module | Coverage | Note |
 |---|---:|---|
-| `product/app.py`, `pipeline.py`, `paging.py`, `cli.py`, `model_store.py`, `settings.py` | 95–98% | |
-| `product/labels.py`, `store.py`, `ops.py`, `web/security.py`, `web/uploads.py` | 90–93% | |
-| `product/inputs.py`, `web/evaluate_routes.py`, `web/job_routes.py`, `web/ops_routes.py` | 76–84% | untested branches are mostly error paths (GAIA folder missing, channel test pages, dataset download) |
-| `src/queue.py`, `experiment.py`, `policy.py`, `jump_ranker.py`, `classifier.py`, `ingestion.py`, `baselines_metric.py`, `scoring.py` | 93–100% | |
+| `product/app.py`, `pipeline.py`, `paging.py`, `cli.py`, `model_store.py`, `monitoring.py`, `settings.py` | 95–98% | |
+| `product/alertmanager.py`, `labels.py`, `store.py`, `ops.py`, `pagerduty.py`, `web/uploads.py` | 90–94% | |
+| `product/notifiers.py`, `prometheus_adapter.py`, `web/security.py` | 86–88% | untested branches are mostly malformed settings and network errors |
+| `product/inputs.py`, `web/evaluate_routes.py`, `web/job_routes.py`, `web/ops_routes.py`, `backup.py` | 75–84% | untested branches are mostly error paths (GAIA folder missing, channel test pages, dataset download, restore failures) |
+| `product/logging_config.py` | 52% | the JSON log format (`LOG_FORMAT=json`) is not exercised |
+| `src/queue.py`, `experiment.py`, `policy.py`, `jump_ranker.py`, `classifier.py`, `ingestion.py`, `baselines_metric.py`, `tracking.py` | 92–98% | |
 | `src/generic.py`, `memory_spikes.py` | 87% | |
 | `src/metrics.py`, `eval_stats.py`, `gaia_loader.py` | 62–75% | GAIA-only paths and alerts-only metrics |
-| **Total** | **89%** | |
+| **Total** | **89.7%** | |
 
 ## 6. Measurable test criteria
 
