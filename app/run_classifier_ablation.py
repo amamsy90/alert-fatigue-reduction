@@ -11,11 +11,18 @@ of the K slots). Only the way log alerts are chosen for those slots changes:
 Train on week 1, score the next 55 days. The `classifier` row must equal the
 `proposed` row in results/queue_eval_gaia.csv; the script checks that.
 
+It also writes results/classifier_ablation_gaia.json with two facts the report
+quotes: why the `severity` row attaches no alert at K=20 (what the severity
+rule escalates and how far those alerts are from a shown jump), and what the
+product's promotion gate decides when it trains the classifier on GAIA.
+
 Usage:
     python run_classifier_ablation.py
 """
 from __future__ import annotations
 
+import json
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
@@ -24,9 +31,10 @@ import pandas as pd
 from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
 from src.config import Config
+from src.entities import Action, Alert, Decision
 from src.experiment import load_gaia
 from src.features import build_feature_frame
-from src.memory_spikes import detect_gaps, detect_jumps, detect_leaks
+from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
 from src.queue import (
     alert_items,
@@ -41,6 +49,58 @@ from src.tracking import GAIA_INPUTS, record_run
 VARIANTS = ("classifier", "severity", "no_alerts")
 
 
+def severity_diagnosis(test_alerts: list[Alert], severity: list[Decision], shown: list) -> dict:
+    """Why the severity rule's alerts never ride on a jump (K=20 queue `shown`)."""
+    escalated = [a for a, d in zip(test_alerts, severity) if d.action == Action.ESCALATE]
+    fault_alerts = [a for a in test_alerts if a.fault_id is not None]
+    by_service: dict[str, list[Spike]] = {}
+    for item in shown:
+        if item.kind != "alert" and item.kind != "gap":
+            by_service.setdefault(item.service, []).append(item.spike)
+    minutes = [
+        min(abs((s.shown_at - a.timestamp).total_seconds()) / 60 for s in by_service[a.source])
+        for a in escalated if a.source in by_service
+    ]
+    shown_alerts = [i for i in shown if i.kind == "alert"]
+    return {
+        "test_alerts": len(test_alerts),
+        "severities": dict(Counter(a.severity for a in test_alerts).most_common()),
+        "escalated": len(escalated),
+        "escalated_with_fault": sum(a.fault_id is not None for a in escalated),
+        "escalated_days": len({a.timestamp.date() for a in escalated}),
+        "cut_by_daily_budget": sum(d.reason == "daily budget exhausted" for d in severity),
+        "fault_alerts": len(fault_alerts),
+        "fault_alert_severities": dict(Counter(a.severity for a in fault_alerts).most_common()),
+        "escalated_while_shown_jump_open": sum(
+            any(s.open_at(a.timestamp) for s in by_service.get(a.source, [])) for a in escalated
+        ),
+        "minutes_to_nearest_shown_metric_item_min": round(min(minutes)) if minutes else None,
+        "minutes_to_nearest_shown_metric_item_median": round(float(pd.Series(minutes).median())) if minutes else None,
+        "alerts_shown": len(shown_alerts),
+        "alerts_attached": sum(i.attached for i in shown_alerts),
+    }
+
+
+def promotion_gate_on_gaia(k: int = 20) -> dict:
+    """What the product does with GAIA: train, then run the promotion gate (no saved model)."""
+    from product.inputs import load_inputs
+    from product.pipeline import score_alerts
+
+    inputs = load_inputs("gaia", budget_k=k)
+    result = score_alerts(inputs.alerts, metrics=inputs.metrics, budget_k=k, saved=None, faults=inputs.faults,
+                          config=inputs.config, use_saved_detector=False)
+    training = result.training or {}
+    test = training.get("test") or {}
+    return {
+        "budget_k": k,
+        "model_used": result.model_used,
+        "promoted": bool(result.promoted),
+        "gate": training.get("gate"),
+        "held_out_alerts": {key: test.get(key) for key in ("alerts", "fault_alerts", "tp", "fp", "fn")},
+        "queue_check": training.get("queue_check"),
+    }
+
+
 def main() -> None:
     config = Config()
     data = load_gaia()
@@ -53,6 +113,7 @@ def main() -> None:
     n_days = n_days_between(train_end, test_end, config)
 
     rows = []
+    notes: dict = {}
     for k in config.budget_sweep:
         # Same per-K setup as run_queue_eval.run_window, so `classifier` == `proposed`.
         cfg = replace(config, budget_k=k)
@@ -79,7 +140,10 @@ def main() -> None:
             "no_alerts": metric_items(),
         }
         for name in VARIANTS:
-            row = score_queue(name, build_queue(queues[name], tuned), test_faults, n_days, tuned)
+            shown = build_queue(queues[name], tuned)
+            row = score_queue(name, shown, test_faults, n_days, tuned)
+            if name == "severity" and k == 20:
+                notes["severity_K20"] = severity_diagnosis(test_alerts, severity, shown)
             rows.append(row)
             print(
                 f"K={k:2d}  {name:10s} caught {row['faults_caught']:4d}/{row['faults']} "
@@ -102,12 +166,17 @@ def main() -> None:
             same = len(want) == 1 and got and int(want.iloc[0]) == int(got[0])
             print(f"K={k:2d}  classifier row matches published `proposed`: {'yes' if same else 'NO'}")
 
+    notes["promotion_gate"] = promotion_gate_on_gaia()
+    notes_path = Path("results") / "classifier_ablation_gaia.json"
+    notes_path.write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(notes, indent=2))
+
     k20 = {r["queue"]: r for r in rows if r["budget_k"] == 20}
     record_run(
         "classifier_ablation_gaia",
         config=config,
         data=GAIA_INPUTS,
-        outputs=[out],
+        outputs=[out, notes_path],
         metrics={f"K20.{q}": k20[q]["detection_rate"] for q in VARIANTS},
     )
 

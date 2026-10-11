@@ -1,0 +1,47 @@
+{
+  "severity_K20": {
+    "test_alerts": 31233,
+    "severities": {
+      "warning": 29508,
+      "info": 1667,
+      "error": 58
+    },
+    "escalated": 44,
+    "escalated_with_fault": 0,
+    "escalated_days": 4,
+    "cut_by_daily_budget": 14,
+    "fault_alerts": 507,
+    "fault_alert_severities": {
+      "warning": 471,
+      "info": 36
+    },
+    "escalated_while_shown_jump_open": 0,
+    "minutes_to_nearest_shown_metric_item_min": 199,
+    "minutes_to_nearest_shown_metric_item_median": 617,
+    "alerts_shown": 11,
+    "alerts_attached": 0
+  },
+  "promotion_gate": {
+    "budget_k": 20,
+    "model_used": "rules_only",
+    "promoted": false,
+    "gate": "queue with its alerts: 848/1223 held-out faults, 95 false items (cost 3845); without log alerts: 872/1223, 58 false items (cost 3568); kept as a candidate, rules only stays",
+    "held_out_alerts": {
+      "alerts": 31233,
+      "fault_alerts": 507,
+      "tp": 339,
+      "fp": 84,
+      "fn": 168
+    },
+    "queue_check": {
+      "faults": 1223,
+      "days": 55,
+      "caught_with_model": 848,
+      "false_items_with_model": 95,
+      "cost_with_model": 3845.0,
+      "caught_no_log_alerts": 872,
+      "false_items_no_log_alerts": 58,
+      "cost_no_log_alerts": 3568.0
+    }
+  }
+}

@@ -11,6 +11,7 @@ leaves out, is a failure too, so the text and the checks cannot drift apart.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -95,6 +96,28 @@ def computed_numbers() -> dict[str, float]:
         for name in ("classifier", "severity", "no_alerts"):
             out[f"ablation.K20.{name}"] = float(_row(a, name)["detection_rate"])
             out[f"ablation.false.K20.{name}"] = float(_row(a, name)["false_items_per_day"])
+        out["ablation.attached.K20.classifier"] = float(_row(a, "classifier")["attached_alerts"])
+
+    notes = ROOT / "classifier_ablation_gaia.json"
+    if notes.exists():  # run_classifier_ablation.py: why severity attaches nothing, and the product's gate
+        facts = json.loads(notes.read_text(encoding="utf-8"))
+        sev = facts["severity_K20"]
+        out["severity.K20.fault_alerts"] = float(sev["fault_alerts"])
+        out["severity.K20.fault_alerts_warning"] = float(sev["fault_alert_severities"].get("warning", 0))
+        out["severity.K20.fault_alerts_info"] = float(sev["fault_alert_severities"].get("info", 0))
+        for key in ("escalated", "escalated_with_fault", "escalated_days", "cut_by_daily_budget",
+                    "escalated_while_shown_jump_open", "alerts_shown"):
+            out[f"severity.K20.{key}"] = float(sev[key])
+        out["severity.K20.minutes_to_shown_metric_min"] = float(sev["minutes_to_nearest_shown_metric_item_min"])
+        out["severity.K20.minutes_to_shown_metric_median"] = float(sev["minutes_to_nearest_shown_metric_item_median"])
+        gate = facts["promotion_gate"]
+        check = gate["queue_check"]
+        out["gate.held_out.fault_alerts_found"] = float(gate["held_out_alerts"]["tp"])
+        out["gate.queue.faults"] = float(check["faults"])
+        out["gate.queue.caught_with_model"] = float(check["caught_with_model"])
+        out["gate.queue.caught_no_log_alerts"] = float(check["caught_no_log_alerts"])
+        out["gate.queue.false_with_model"] = float(check["false_items_with_model"])
+        out["gate.queue.false_no_log_alerts"] = float(check["false_items_no_log_alerts"])
 
     nab = ROOT / "nab_eval.csv"
     if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
@@ -154,6 +177,14 @@ def claims_still_hold() -> None:
                 _fail(f"ablation 'classifier' row at K={k} no longer equals the published full queue")
         if float(_row(a, "classifier")["detection_rate"]) > float(_row(a, "no_alerts")["detection_rate"]):
             _fail("the classifier now adds catches on GAIA; rewrite the 'adds no catches' sentences (§5, §12, §B4)")
+    notes = ROOT / "classifier_ablation_gaia.json"
+    if notes.exists():
+        facts = json.loads(notes.read_text(encoding="utf-8"))
+        gate = facts["promotion_gate"]
+        if gate["promoted"] or gate["model_used"] != "rules_only":
+            _fail("the promotion gate now promotes the classifier on GAIA; rewrite §5, §9, §12 and §B4")
+        if facts["severity_K20"]["alerts_attached"] != 0:
+            _fail("the severity row now attaches alerts; rewrite the 'why the severity row attaches no alerts' paragraph")
     nab = ROOT / "nab_eval.csv"
     if nab.exists():
         n = pd.read_csv(nab)
