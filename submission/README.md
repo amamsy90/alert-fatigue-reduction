@@ -1,6 +1,6 @@
 # Submission copies
 
-Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** The Word files and the two PDFs made from them below were regenerated on 10 October 2026, after the instructor-review fixes (267 tests, 75 checked numbers).
+Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** The report and design-specification copies (and the report PDF) were last regenerated on 11 October 2026, after the fixes from the code review on 10 October (273 tests, 93 checked numbers); the other generated copies on 10 October 2026.
 
 Project title on every copy: *AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices*, subtitle *Alert Fatigue Reduction in Cloud Microservice Operations*. The file names keep the older `Alert_Fatigue_` prefix so that earlier links still work.
 
