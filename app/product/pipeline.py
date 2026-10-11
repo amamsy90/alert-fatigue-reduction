@@ -591,6 +591,11 @@ def no_log_alerts_cost(report: dict | None, config: Config) -> float | None:
     return config.miss_cost * report.get("fault_alerts", 0)
 
 
+def promotion_margin(config: Config) -> float:
+    """Queue-cost saving a new model needs over both alternatives (cost units)."""
+    return max(0.0, float(config.promotion_min_saving_misses)) * float(config.miss_cost)
+
+
 def promotion_decision(training: dict | None, has_incumbent: bool, config: Config) -> tuple[bool, str]:
     """Should a newly trained model become the active one (and score this batch)?
 
@@ -598,11 +603,14 @@ def promotion_decision(training: dict | None, has_incumbent: bool, config: Confi
 
     1. Alerts: its cost (misses x miss_cost + false alarms) is strictly below
        the cost of showing no log alerts at all.
-    2. Queue: the whole queue with its alerts costs strictly less (missed
-       faults x miss_cost + false items) than both the queue with no log alerts
-       and the queue the batch falls back to if the model is refused (the
-       active model's alerts, or rules only = severity). So the gate tests the
-       model against what would actually run instead.
+    2. Queue: the whole queue with its alerts costs less (missed faults x
+       miss_cost + false items) than both the queue with no log alerts and the
+       queue the batch falls back to if the model is refused (the active
+       model's alerts, or rules only = severity), by at least the margin
+       `promotion_min_saving_misses` x miss_cost (default one missed fault).
+       So the gate tests the model against what would actually run instead,
+       and a saving one held-out case could produce on its own (RCAEval RE2
+       Online Boutique: 3 false items in 45 days) does not promote it.
        A model can pass 1 and fail 2: on GAIA it finds most fault-bearing
        alerts, but those faults are also caught by metric jumps and its alerts
        take slots the jumps needed (FINAL_REPORT.md section B4).
@@ -641,6 +649,13 @@ def promotion_decision(training: dict | None, has_incumbent: bool, config: Confi
     )
     if with_model >= without or with_model >= fallback:
         return False, f"{queue}; kept as a candidate, {keep}"
+    saving = min(without, fallback) - with_model
+    margin = promotion_margin(config)
+    if saving < margin:
+        return False, (f"{queue}; saves {saving:g}, below the margin of {margin:g} "
+                       f"({config.promotion_min_saving_misses:g} missed fault x {config.miss_cost:g}); "
+                       f"kept as a candidate, {keep}")
+    queue += f"; saves {saving:g} (margin {margin:g})"
     if not has_incumbent:
         return True, f"held-out cost {new:g} < {floor:g} for showing no log alerts; {queue}"
     old = held_out_cost(training.get("incumbent_test"), config.miss_cost, config.false_alarm_cost)

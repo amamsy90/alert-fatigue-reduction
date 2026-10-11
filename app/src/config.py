@@ -78,6 +78,14 @@ class Config:
     leak_min_points: int = 20
     # Hours added to UTC before cutting days (e.g. 8 for a China-time on-call day).
     day_offset_hours: float = 0.0
+    # Promotion gate margin, in missed faults: a newly trained model must make the
+    # held-out queue cheaper than both alternatives (no log alerts, and what runs if
+    # it is refused) by at least this many x miss_cost. One missed fault is the
+    # smallest step a single held-out case can move the queue cost, so a smaller
+    # saving could come from one case alone (RCAEval RE2 Online Boutique: 3 false
+    # items fewer in 45 days, FINAL_REPORT.md section B5). 0 = any strict saving
+    # (the rule up to v1.0.2). Env: PROMOTION_MIN_SAVING_MISSES.
+    promotion_min_saving_misses: float = 1.0
     # Reproducibility
     random_seed: int = 42
 

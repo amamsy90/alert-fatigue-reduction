@@ -142,6 +142,48 @@ def test_the_model_must_beat_the_queue_it_would_fall_back_to():
     assert promotion_decision(beats_both, has_incumbent=False, config=cfg)[0]
 
 
+def _held_out_queue(caught: int, false: int, caught_fallback: int, false_fallback: int,
+                    caught_without: int, false_without: int, faults: int) -> dict:
+    return {"test": _report(fp=1, fn=0),
+            "queue_check": _queue(caught=caught, false=false, caught_without=caught_without,
+                                  false_without=false_without, faults=faults,
+                                  caught_fallback=caught_fallback, false_fallback=false_fallback)}
+
+
+def test_a_saving_smaller_than_one_missed_fault_does_not_promote():
+    """RCAEval RE2 Online Boutique (v1.0.2 numbers): 283 against 286 for severity and
+    291 without log alerts. A 3-point saving is less than one held-out case can
+    move the cost, so the default margin (one missed fault = 10) refuses it."""
+    cfg = Config()
+    boutique = _held_out_queue(18, 23, 18, 26, 17, 21, faults=44)
+    promote, reason = promotion_decision(boutique, has_incumbent=False, config=cfg)
+    assert not promote
+    assert "saves 3, below the margin of 10 (1 missed fault x 10)" in reason
+    assert reason.endswith("kept as a candidate, rules only stays")
+    # Margin 0 is the old rule: any strict saving promotes.
+    assert promotion_decision(boutique, False, Config(promotion_min_saving_misses=0.0))[0]
+
+
+def test_a_saving_of_one_missed_fault_or_more_promotes():
+    """RCAEval RE2 Train Ticket (v1.0.2 numbers): 342 against 352 and 368, a saving
+    of exactly one missed fault, so it passes the default margin and fails a larger one."""
+    train_ticket = _held_out_queue(32, 212, 32, 222, 28, 198, faults=45)
+    promote, reason = promotion_decision(train_ticket, has_incumbent=False, config=Config())
+    assert promote and reason.endswith("saves 10 (margin 10)")
+    assert not promotion_decision(train_ticket, False, Config(promotion_min_saving_misses=1.5))[0]
+    # The margin is in missed faults, so it follows the miss cost.
+    assert not promotion_decision(train_ticket, False, Config(miss_cost=20.0))[0]
+
+
+def test_the_margin_also_applies_against_an_active_model():
+    cfg = Config()
+    small = {"test": _report(fp=3, fn=1), "incumbent_test": _report(fp=3, fn=1),
+             "queue_check": _queue(caught=9, false=5, caught_without=7, false_without=1,
+                                   caught_fallback=9, false_fallback=9)}  # 15 vs 19: saves 4
+    promote, reason = promotion_decision(small, True, cfg)
+    assert not promote and "below the margin of 10" in reason and reason.endswith("the active model stays")
+
+
 def test_a_model_that_beats_the_active_one_must_still_beat_no_log_alerts():
     cfg = Config()
     both_bad = {"test": _report(fp=70, fn=0), "incumbent_test": _report(fp=90, fn=0), "queue_check": GOOD_QUEUE}

@@ -234,7 +234,7 @@ def per_case(shown: list[QueueItem], faults: list[Fault], config: Config) -> dic
 def product_gate(alerts: list[Alert], metrics: pd.DataFrame, faults: list[Fault], split_at: pd.Timestamp,
                  config: Config, k: int) -> dict:
     """What the product decides on this application: fit, queue check, promotion gate."""
-    from product.pipeline import score_alerts
+    from product.pipeline import promotion_margin, score_alerts
 
     if not alerts:
         return {"model_used": "rules_only", "promoted": False, "gate": "no log alerts", "queue_check": None}
@@ -247,9 +247,14 @@ def product_gate(alerts: list[Alert], metrics: pd.DataFrame, faults: list[Fault]
                           use_saved_detector=False)
     training = result.training or {}
     test = training.get("test") or {}
+    check = training.get("queue_check")
+    saving = (min(check["cost_no_log_alerts"], check.get("cost_fallback", check["cost_no_log_alerts"]))
+              - check["cost_with_model"]) if check else None
     return {
         "budget_k": k,
         "split_day": split_day,
+        "margin": promotion_margin(cfg),
+        "queue_saving": saving,
         "model_used": result.model_used,
         "promoted": bool(result.promoted),
         "gate": training.get("gate") or training.get("note"),
