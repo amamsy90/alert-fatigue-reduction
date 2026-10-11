@@ -63,10 +63,10 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 289/289, 90%, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 296/296, 90%, 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 289 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 296 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ## 4. Target users and use case
 
@@ -206,7 +206,7 @@ Hallucination and prompt injection do not apply (no generative model), but the e
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% | 289 / 289 (Python 3.10 and 3.12) |
+| Tests passing | 100% | 296 / 296 (295 on Python 3.10 and 3.12, 1 in the integration job) |
 | Line coverage | ≥ 85% | 90% |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
@@ -291,7 +291,7 @@ Evaluation criteria with measured values, justification for each target and exam
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 289 / 289 | Yes |
+| At least 90% of predefined test cases pass | 296 / 296 | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds 13.3 points with an interval above zero, and the gate promotes it (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, on one of six RCAEval application suites, not on GAIA |
