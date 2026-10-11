@@ -111,3 +111,60 @@ def test_low_precision_from_marks_warns(tmp_path, monkeypatch):
     check = health(store)["checks"]["precision_from_marks"]
     assert check == {"status": "warn", "value": 0.2}
     assert monitoring.TARGETS["precision_from_marks_min"] == 0.7
+
+
+def _medians_job(store, medians: dict[str, float]) -> None:
+    import pandas as pd
+
+    alerts = [Alert("a0", pd.Timestamp("2026-02-01T10:00:00Z"), "web", "log", "info", "m")]
+    store.save_job(
+        source="ingest", budget_k=20, escalate_threshold=1.0, review_threshold=1.0, shadow_mode=True,
+        alerts=alerts, decisions=[Decision(alerts[0].alert_id, Action.SUPPRESS, 0.1, "")], spike_flags=[False],
+        meta={"alert_count": 1, "gap_items": 0, "metric_median": 100.0, "metric_medians": medians},
+    )
+
+
+def test_one_series_changing_scale_warns_when_the_fleet_median_does_not(tmp_path):
+    """Requirement: a single service whose metric moves outside 0.5-2x of its own
+    history is reported, even when the fleet-wide median stays the same."""
+    store = QueueStore(tmp_path / "q.db")
+    fleet = {f"svc{i}": 100.0 for i in range(9)}
+    for _ in range(4):
+        _medians_job(store, {**fleet, "db": 100.0})
+    assert health(store)["checks"]["metric_value_drift"]["status"] == "ok"
+    _medians_job(store, {**fleet, "db": 400.0})
+    report = health(store)
+    assert report["checks"]["metric_value_drift"]["status"] == "warn"
+    assert report["data"]["metric_drift_series"] == ["db"]
+
+
+def test_a_series_dropping_to_zero_warns(tmp_path):
+    store = QueueStore(tmp_path / "q.db")
+    for _ in range(4):
+        _medians_job(store, {"web": 100.0, "db": 100.0})
+    _medians_job(store, {"web": 100.0, "db": 0.0})
+    assert health(store)["checks"]["metric_value_drift"]["status"] == "warn"
+
+
+def test_recent_series_medians_use_the_last_hour_of_each_series():
+    import pandas as pd
+
+    from product.pipeline import _recent_series_medians
+
+    t = pd.date_range("2026-02-01", periods=24 * 60, freq="min", tz="UTC")
+    old = pd.DataFrame({"timestamp": t, "value": 100.0, "series_id": "db"})
+    old.loc[old.index[-40:], "value"] = 400.0  # most of the last hour moved up 4x
+    medians = _recent_series_medians(old)
+    assert medians["db"] == 400.0
+
+
+def test_jobs_saved_in_the_same_clock_tick_keep_their_order(tmp_path, monkeypatch):
+    """Requirement: the newest job is the one saved last, even when two jobs share a timestamp."""
+    import product.store as store_mod
+
+    store = QueueStore(tmp_path / "q.db")
+    fixed = "2026-02-01T10:00:00+00:00"
+    monkeypatch.setattr(store_mod, "pd_utcnow", lambda: fixed)
+    for n in (1, 2, 3):
+        _save_ingest_job(store, n)
+    assert [j["meta"]["alert_count"] for j in store.recent_jobs()] == [3, 2, 1]

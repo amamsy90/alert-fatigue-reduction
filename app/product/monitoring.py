@@ -161,6 +161,32 @@ def _median(values: list[float]) -> float | None:
     return s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
 
 
+def _series_drift(jobs: list[dict], low: float, high: float) -> tuple[float | None, list[str]]:
+    """Per series: the last job's recent median over the median of the same
+    series in earlier jobs (at least 3). Returns the ratio farthest from 1, and
+    the series outside [low, high]. (None, []) when no series has enough history."""
+    per_job = [j["meta"].get("metric_medians") or {} for j in jobs if j["meta"].get("metric_medians")]
+    if len(per_job) < 4:
+        return None, []
+    worst: float | None = None
+    drifted: list[str] = []
+    for series, value in per_job[0].items():
+        earlier = [float(m[series]) for m in per_job[1:] if series in m]
+        base = _median(earlier) if len(earlier) >= 3 else None
+        if not base:
+            continue
+        ratio = float(value) / base
+        # Farthest from 1 on a log scale, so halving and doubling weigh the same.
+        # A series that dropped to zero is the worst case and stays so.
+        if ratio <= 0:
+            worst = ratio
+        elif worst is None or (worst > 0 and abs(math.log(ratio)) > abs(math.log(worst))):
+            worst = ratio
+        if not low <= ratio <= high:
+            drifted.append(series)
+    return worst, sorted(drifted)
+
+
 def health(store) -> dict:
     """Service, AI and data signals with a verdict against TARGETS."""
     fast = lambda lab: not lab.get("route", "").startswith(_SLOW_ROUTES)  # noqa: E731
@@ -179,19 +205,21 @@ def health(store) -> dict:
         base = _median([float(c) for c in ingest_counts[1:]])
         if base:
             volume_ratio = ingest_counts[0] / base
-    metric_medians = [
-        j["meta"].get("metric_median")
-        for j in jobs
-        if j["meta"].get("metric_median") is not None
-    ]
-    metric_ratio = None
-    if len(metric_medians) >= 4:
-        metric_base = _median([float(m) for m in metric_medians[1:]])
-        if metric_base:
-            metric_ratio = float(metric_medians[0]) / metric_base
+    m_low, m_high = METRIC_VALUE_BAND
+    metric_ratio, drifted = _series_drift(jobs, m_low, m_high)
+    if metric_ratio is None:
+        # Jobs saved before per-series medians: one fleet-wide median.
+        metric_medians = [
+            j["meta"].get("metric_median")
+            for j in jobs
+            if j["meta"].get("metric_median") is not None
+        ]
+        if len(metric_medians) >= 4:
+            metric_base = _median([float(m) for m in metric_medians[1:]])
+            if metric_base:
+                metric_ratio = float(metric_medians[0]) / metric_base
     pages_failed = METRICS.total("oncall_pages_total", lambda lab: lab.get("outcome") == "failed")
     low, high = ALERT_VOLUME_BAND
-    m_low, m_high = METRIC_VALUE_BAND
     checks = {
         "latency": _check(p95, lambda v: v <= TARGETS["p95_latency_seconds"]),
         "errors": _check(error_rate, lambda v: v <= TARGETS["error_rate"]),
@@ -212,7 +240,8 @@ def health(store) -> dict:
                   "alert_precision": marks["alert"]["precision"], "jump_precision": marks["jump"]["precision"],
                   "last_model_used": last.get("model_used"), "last_label_source": last.get("label_source")},
         "data": {"last_job_alerts": last.get("alert_count"), "alert_volume_ratio": volume_ratio,
-                 "metric_median_ratio": metric_ratio, "last_job_metric_median": last.get("metric_median"),
+                 "metric_median_ratio": metric_ratio, "metric_drift_series": drifted,
+                 "last_job_metric_median": last.get("metric_median"),
                  "last_job_gap_items": last.get("gap_items"), "last_job_has_metrics": last.get("has_metrics")},
         "targets": {**TARGETS, "alert_volume_band": list(ALERT_VOLUME_BAND),
                     "metric_value_band": list(METRIC_VALUE_BAND)},
