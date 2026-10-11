@@ -87,3 +87,23 @@ jobs:
           done
           docker logs oq
           exit 1
+
+  integration:
+    # The app beside a real Prometheus and Alertmanager (app/integration/).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --group dev
+      - name: Start the stack
+        run: docker compose -f integration/docker-compose.yml -p oncall-integration up -d --build --wait
+      - name: Alertmanager webhook → ingest job with Prometheus series → nothing paged
+        env:
+          INTEGRATION_BASE_URL: http://127.0.0.1:18080
+        run: uv run pytest -q tests/integration
+      - name: Logs
+        if: failure()
+        run: docker compose -f integration/docker-compose.yml -p oncall-integration logs
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f integration/docker-compose.yml -p oncall-integration down -v

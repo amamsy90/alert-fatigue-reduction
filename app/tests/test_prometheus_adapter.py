@@ -156,3 +156,39 @@ def test_run_prometheus_test_missing_url(monkeypatch):
     assert out["ok"] is False
     assert out["error"] == "PROM_URL is not set"
     assert out["url_host"] is None
+
+
+def test_a_14_day_fetch_keeps_one_minute_points_so_live_jumps_are_confirmed(monkeypatch):
+    """Requirement: a jump in live Prometheus data is detected. The jump rule links
+    hot points at most `memory_gap_minutes` (2) apart, so the default 14-day fetch
+    must return points that close together, within Prometheus' point limit per query."""
+    import pandas as pd
+
+    from src.config import Config
+    from src.memory_spikes import detect_jumps
+
+    monkeypatch.setenv("PROM_URL", "http://prom.test")
+    now = pd.Timestamp.now(tz="UTC").timestamp()
+    jump_from, jump_to = now - 6 * 3600, now - 6 * 3600 + 600  # 1 GB for 10 minutes, 6 hours ago
+    queries = []
+
+    def fake_prometheus(url, timeout):
+        q = parse_qs(urlparse(url).query)
+        start, end, step = float(q["start"][0]), float(q["end"][0]), float(q["step"][0])
+        queries.append((start, end, step))
+        assert (end - start) / step + 1 <= MAX_POINTS
+        values, t = [], start
+        while t <= end:
+            values.append([t, str(2e9 + (1e9 if jump_from <= t < jump_to else 0))])
+            t += step
+        return _Resp(_payload([{"metric": {"service": "web"}, "values": values}]))
+
+    with patch("product.prometheus_adapter.urlopen", side_effect=fake_prometheus):
+        frame = fetch_memory_metrics()
+
+    assert len(queries) > 1
+    assert not frame.duplicated(["series_id", "timestamp"]).any()
+    assert frame["timestamp"].diff().max() <= pd.Timedelta(minutes=Config().memory_gap_minutes)
+    assert frame["value"].max() == 3e9  # no point summed twice where chunks meet
+    jumps = detect_jumps(frame, Config())
+    assert len(jumps) == 1
