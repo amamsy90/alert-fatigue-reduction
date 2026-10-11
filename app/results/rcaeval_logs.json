@@ -1,0 +1,930 @@
+{
+  "settings": {
+    "metric_kinds": [
+      "cpu",
+      "mem",
+      "diskio",
+      "socket",
+      "latency-90",
+      "error"
+    ],
+    "warmup_minutes": 5,
+    "collapse_seconds": 60,
+    "budgets": [
+      5,
+      10,
+      20
+    ],
+    "headline_k": 10,
+    "train_fraction": 0.5
+  },
+  "apps": [
+    {
+      "suite": "RE2",
+      "app": "Online Boutique",
+      "cases": 90,
+      "train_cases": 45,
+      "test_cases": 45,
+      "test_faults_by_type": {
+        "delay": 9,
+        "socket": 8,
+        "loss": 8,
+        "cpu": 7,
+        "disk": 7,
+        "mem": 6
+      },
+      "train_alerts": 142,
+      "test_alerts": 72,
+      "train_fault_alerts": 35,
+      "test_fault_alerts": 6,
+      "test_cases_with_fault_alert": 3,
+      "jumps": 2078,
+      "early_jumps": 600,
+      "test_jumps": 658,
+      "by_k": {
+        "5": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 73.41757622875802,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.022,
+              0.0,
+              0.067
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.089,
+              0.022,
+              0.178
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          }
+        },
+        "10": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 73.41757622875802,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.044,
+              0.0,
+              0.133
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.111,
+              0.022,
+              0.244
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          }
+        },
+        "20": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 73.41757622875802,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.044,
+              0.0,
+              0.133
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.111,
+              0.022,
+              0.244
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          }
+        }
+      },
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 44,
+        "model_used": "trained",
+        "promoted": true,
+        "gate": "held-out cost 1 < 60 for showing no log alerts; queue with its alerts: 18/44 held-out faults, 23 false items (cost 283); with rules only (severity) instead: 18/44, 26 false items (cost 286); without log alerts: 17/44, 21 false items (cost 291)",
+        "held_out_alerts": {
+          "alerts": 72,
+          "fault_alerts": 6,
+          "tp": 6,
+          "fp": 1,
+          "fn": 0
+        },
+        "queue_check": {
+          "faults": 44,
+          "days": 45,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 18,
+          "false_items_with_model": 23,
+          "cost_with_model": 283.0,
+          "caught_fallback": 18,
+          "false_items_fallback": 26,
+          "cost_fallback": 286.0,
+          "caught_no_log_alerts": 17,
+          "false_items_no_log_alerts": 21,
+          "cost_no_log_alerts": 291.0
+        }
+      }
+    },
+    {
+      "suite": "RE2",
+      "app": "Sock Shop",
+      "cases": 90,
+      "train_cases": 45,
+      "test_cases": 45,
+      "test_faults_by_type": {
+        "mem": 11,
+        "loss": 8,
+        "disk": 8,
+        "cpu": 6,
+        "socket": 6,
+        "delay": 6
+      },
+      "train_alerts": 4277,
+      "test_alerts": 4583,
+      "train_fault_alerts": 379,
+      "test_fault_alerts": 190,
+      "test_cases_with_fault_alert": 12,
+      "jumps": 2842,
+      "early_jumps": 1067,
+      "test_jumps": 913,
+      "by_k": {
+        "5": {
+          "placebo_caught": 2,
+          "confirm_min_rise": 55.34244194869705,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              0.689,
+              0.556,
+              0.822
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.844,
+              0.733,
+              0.933
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "10": {
+          "placebo_caught": 2,
+          "confirm_min_rise": 55.34244194869705,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              1.711,
+              1.489,
+              1.911
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              1.956,
+              1.867,
+              2.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "20": {
+          "placebo_caught": 2,
+          "confirm_min_rise": 55.34244194869705,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0222,
+              0.0,
+              0.0667
+            ],
+            "false_items_per_day": [
+              3.956,
+              3.422,
+              4.422
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              4.889,
+              4.667,
+              5.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        }
+      },
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 45,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 37/45 held-out faults, 145 false items (cost 225); with rules only (severity) instead: 34/45, 157 false items (cost 267); without log alerts: 34/45, 69 false items (cost 179); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 4582,
+          "fault_alerts": 190,
+          "tp": 178,
+          "fp": 553,
+          "fn": 12
+        },
+        "queue_check": {
+          "faults": 45,
+          "days": 45,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 37,
+          "false_items_with_model": 145,
+          "cost_with_model": 225.0,
+          "caught_fallback": 34,
+          "false_items_fallback": 157,
+          "cost_fallback": 267.0,
+          "caught_no_log_alerts": 34,
+          "false_items_no_log_alerts": 69,
+          "cost_no_log_alerts": 179.0
+        }
+      }
+    },
+    {
+      "suite": "RE2",
+      "app": "Train Ticket",
+      "cases": 90,
+      "train_cases": 45,
+      "test_cases": 45,
+      "test_faults_by_type": {
+        "mem": 10,
+        "socket": 9,
+        "loss": 8,
+        "delay": 7,
+        "disk": 6,
+        "cpu": 5
+      },
+      "train_alerts": 479,
+      "test_alerts": 571,
+      "train_fault_alerts": 12,
+      "test_fault_alerts": 74,
+      "test_cases_with_fault_alert": 10,
+      "jumps": 18296,
+      "early_jumps": 8200,
+      "test_jumps": 5013,
+      "by_k": {
+        "5": {
+          "placebo_caught": 2,
+          "confirm_min_rise": 68.46737175183122,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0667,
+              0.0,
+              0.1556
+            ],
+            "false_items_per_day": [
+              0.044,
+              -0.067,
+              0.156
+            ],
+            "cases_gained": 3,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0889,
+              0.0222,
+              0.1778
+            ],
+            "false_items_per_day": [
+              0.089,
+              -0.044,
+              0.222
+            ],
+            "cases_gained": 4,
+            "cases_lost": 0
+          }
+        },
+        "10": {
+          "placebo_caught": 2,
+          "confirm_min_rise": 68.46737175183122,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.1333,
+              0.0444,
+              0.2444
+            ],
+            "false_items_per_day": [
+              0.289,
+              0.133,
+              0.489
+            ],
+            "cases_gained": 6,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.1111,
+              0.0222,
+              0.2
+            ],
+            "false_items_per_day": [
+              0.6,
+              0.356,
+              0.867
+            ],
+            "cases_gained": 5,
+            "cases_lost": 0
+          }
+        },
+        "20": {
+          "placebo_caught": 2,
+          "confirm_min_rise": 68.46737175183122,
+          "series_gates": 5,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.1333,
+              0.0444,
+              0.2444
+            ],
+            "false_items_per_day": [
+              0.711,
+              0.311,
+              1.178
+            ],
+            "cases_gained": 6,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.1111,
+              0.0222,
+              0.2
+            ],
+            "false_items_per_day": [
+              1.689,
+              1.067,
+              2.334
+            ],
+            "cases_gained": 5,
+            "cases_lost": 0
+          }
+        }
+      },
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 44,
+        "model_used": "trained",
+        "promoted": true,
+        "gate": "held-out cost 403 < 740 for showing no log alerts; queue with its alerts: 32/45 held-out faults, 212 false items (cost 342); with rules only (severity) instead: 32/45, 222 false items (cost 352); without log alerts: 28/45, 198 false items (cost 368)",
+        "held_out_alerts": {
+          "alerts": 571,
+          "fault_alerts": 74,
+          "tp": 35,
+          "fp": 13,
+          "fn": 39
+        },
+        "queue_check": {
+          "faults": 45,
+          "days": 45,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 32,
+          "false_items_with_model": 212,
+          "cost_with_model": 342.0,
+          "caught_fallback": 32,
+          "false_items_fallback": 222,
+          "cost_fallback": 352.0,
+          "caught_no_log_alerts": 28,
+          "false_items_no_log_alerts": 198,
+          "cost_no_log_alerts": 368.0
+        }
+      }
+    },
+    {
+      "suite": "RE3",
+      "app": "Online Boutique",
+      "cases": 30,
+      "train_cases": 15,
+      "test_cases": 15,
+      "test_faults_by_type": {
+        "f1": 4,
+        "f3": 3,
+        "f4": 3,
+        "f5": 3,
+        "f2": 2
+      },
+      "train_alerts": 1462,
+      "test_alerts": 1785,
+      "train_fault_alerts": 587,
+      "test_fault_alerts": 344,
+      "test_cases_with_fault_alert": 10,
+      "jumps": 742,
+      "early_jumps": 349,
+      "test_jumps": 186,
+      "by_k": {
+        "5": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 59.05827398724929,
+          "series_gates": 4,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              -0.067,
+              -0.2,
+              0.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.533,
+              0.2,
+              0.8
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "10": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 59.05827398724929,
+          "series_gates": 4,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              1.067,
+              0.6,
+              1.533
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "20": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 59.05827398724929,
+          "series_gates": 4,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.067,
+              0.0,
+              0.2
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              3.0,
+              1.867,
+              4.067
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        }
+      },
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 15,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 14/14 held-out faults, 8 false items (cost 8); with rules only (severity) instead: 14/14, 24 false items (cost 24); without log alerts: 14/14, 6 false items (cost 6); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 1785,
+          "fault_alerts": 344,
+          "tp": 344,
+          "fp": 0,
+          "fn": 0
+        },
+        "queue_check": {
+          "faults": 14,
+          "days": 15,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 14,
+          "false_items_with_model": 8,
+          "cost_with_model": 8.0,
+          "caught_fallback": 14,
+          "false_items_fallback": 24,
+          "cost_fallback": 24.0,
+          "caught_no_log_alerts": 14,
+          "false_items_no_log_alerts": 6,
+          "cost_no_log_alerts": 6.0
+        }
+      }
+    },
+    {
+      "suite": "RE3",
+      "app": "Sock Shop",
+      "cases": 30,
+      "train_cases": 15,
+      "test_cases": 15,
+      "test_faults_by_type": {
+        "f3": 5,
+        "f4": 5,
+        "f1": 4,
+        "f2": 1
+      },
+      "train_alerts": 1609,
+      "test_alerts": 1460,
+      "train_fault_alerts": 341,
+      "test_fault_alerts": 232,
+      "test_cases_with_fault_alert": 15,
+      "jumps": 1092,
+      "early_jumps": 532,
+      "test_jumps": 286,
+      "by_k": {
+        "5": {
+          "placebo_caught": 1,
+          "confirm_min_rise": 55.162332464898086,
+          "series_gates": 3,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              -0.0667,
+              -0.2,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.333,
+              0.133,
+              0.6
+            ],
+            "cases_gained": 0,
+            "cases_lost": 1
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              -0.0667,
+              -0.2,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.667,
+              0.4,
+              0.867
+            ],
+            "cases_gained": 0,
+            "cases_lost": 1
+          }
+        },
+        "10": {
+          "placebo_caught": 1,
+          "confirm_min_rise": 55.162332464898086,
+          "series_gates": 3,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.6,
+              0.2,
+              1.067
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              1.333,
+              0.867,
+              1.733
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "20": {
+          "placebo_caught": 1,
+          "confirm_min_rise": 55.162332464898086,
+          "series_gates": 3,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0667,
+              0.0,
+              0.2
+            ],
+            "false_items_per_day": [
+              1.6,
+              0.867,
+              2.4
+            ],
+            "cases_gained": 1,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              5.0,
+              5.0,
+              5.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        }
+      },
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 15,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 13/15 held-out faults, 85 false items (cost 105); with rules only (severity) instead: 12/15, 99 false items (cost 129); without log alerts: 12/15, 75 false items (cost 105); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 1460,
+          "fault_alerts": 232,
+          "tp": 231,
+          "fp": 62,
+          "fn": 1
+        },
+        "queue_check": {
+          "faults": 15,
+          "days": 15,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 13,
+          "false_items_with_model": 85,
+          "cost_with_model": 105.0,
+          "caught_fallback": 12,
+          "false_items_fallback": 99,
+          "cost_fallback": 129.0,
+          "caught_no_log_alerts": 12,
+          "false_items_no_log_alerts": 75,
+          "cost_no_log_alerts": 105.0
+        }
+      }
+    },
+    {
+      "suite": "RE3",
+      "app": "Train Ticket",
+      "cases": 30,
+      "train_cases": 15,
+      "test_cases": 15,
+      "test_faults_by_type": {
+        "f3": 5,
+        "f4": 4,
+        "f1": 3,
+        "f2": 3
+      },
+      "train_alerts": 1372,
+      "test_alerts": 741,
+      "train_fault_alerts": 60,
+      "test_fault_alerts": 120,
+      "test_cases_with_fault_alert": 8,
+      "jumps": 6387,
+      "early_jumps": 2692,
+      "test_jumps": 1907,
+      "by_k": {
+        "5": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 60.39708901736891,
+          "series_gates": 2,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.733,
+              0.467,
+              0.933
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "10": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 60.39708901736891,
+          "series_gates": 2,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              1.733,
+              1.4,
+              2.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        },
+        "20": {
+          "placebo_caught": 0,
+          "confirm_min_rise": 60.39708901736891,
+          "series_gates": 2,
+          "classifier_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          },
+          "severity_minus_no_alerts": {
+            "detection": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "false_items_per_day": [
+              4.067,
+              3.333,
+              4.733
+            ],
+            "cases_gained": 0,
+            "cases_lost": 0
+          }
+        }
+      },
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 15,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 14/14 held-out faults, 61 false items (cost 61); with rules only (severity) instead: 14/14, 87 false items (cost 87); without log alerts: 14/14, 61 false items (cost 61); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 739,
+          "fault_alerts": 120,
+          "tp": 117,
+          "fp": 0,
+          "fn": 3
+        },
+        "queue_check": {
+          "faults": 14,
+          "days": 15,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 14,
+          "false_items_with_model": 61,
+          "cost_with_model": 61.0,
+          "caught_fallback": 14,
+          "false_items_fallback": 87,
+          "cost_fallback": 87.0,
+          "caught_no_log_alerts": 14,
+          "false_items_no_log_alerts": 61,
+          "cost_no_log_alerts": 61.0
+        }
+      }
+    }
+  ]
+}

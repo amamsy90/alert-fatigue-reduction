@@ -5,6 +5,7 @@ __pycache__/
 data/nab/
 data/smd/
 data/rcaeval/
+data/rcaeval_re23/
 data/sample_product/
 examples/shop/
 product/data/
