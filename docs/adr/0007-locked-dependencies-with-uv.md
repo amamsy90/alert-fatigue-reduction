@@ -14,3 +14,4 @@
 ## Consequences
 - Builds and experiment reruns are repeatable; a dependency upgrade is an explicit `uv lock --upgrade` change that CI tests.
 - A developer needs `uv` for the dev tools (`uv sync --group dev`).
+- Dependabot (`uv` updater) rewrites `uv.lock` but not `requirements.lock`. `.github/workflows/dependabot-lock.yml` regenerates `requirements.lock` on Dependabot's branches and reruns CI on the new commit. Once it has pushed, Dependabot no longer rebases that PR by itself; comment `@dependabot recreate` if it falls behind `master`.
