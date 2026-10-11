@@ -9,9 +9,9 @@
   },
   "alerts": 34863,
   "days": 62,
-  "wall_seconds": 35.7,
-  "peak_rss_mb_before_job": 172,
-  "peak_rss_mb": 500,
+  "wall_seconds": 54.9,
+  "peak_rss_mb_before_job": 173,
+  "peak_rss_mb": 505,
   "db_mb": 13.0,
   "db_kb_per_day": 215,
   "models_mb": 0.02

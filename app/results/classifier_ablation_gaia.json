@@ -25,6 +25,7 @@
     "budget_k": 20,
     "model_used": "rules_only",
     "promoted": false,
+    "margin": 10.0,
     "gate": "queue with its alerts: 848/1223 held-out faults, 95 false items (cost 3845); with rules only (severity) instead: 871/1223, 70 false items (cost 3590); without log alerts: 872/1223, 58 false items (cost 3568); kept as a candidate, rules only stays",
     "held_out_alerts": {
       "alerts": 31233,
