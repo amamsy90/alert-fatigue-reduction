@@ -202,38 +202,44 @@ def fetch_memory_metrics(
     """Query Prometheus HTTP API and return timestamp, value, service, series_id.
 
     Replicas of one service are summed, so a jump on any replica shows up.
+
+    The whole window is read at `step` seconds, in as many queries as
+    Prometheus' point limit needs. One query would have to widen the step
+    instead: 14 days in one query is a 121 s step, and the jump rule links hot
+    points at most `memory_gap_minutes` (2) apart, so it could never confirm a
+    jump on live data. The chunks share one time grid and do not overlap, so a
+    point is never read twice.
     """
     base_url = _resolve_prom_url(base_url)
     if not base_url:
         raise ValueError("PROM_URL is not set")
     query = query or os.environ.get("PROM_QUERY") or DEFAULT_QUERY
-    end = datetime.now(timezone.utc)
-    start = end - pd.Timedelta(hours=hours)
-    params = urlencode(
-        {
-            "query": query,
-            "start": start.timestamp(),
-            "end": end.timestamp(),
-            "step": step_seconds(hours, step),
-        }
-    )
-    url = f"{base_url}/api/v1/query_range?{params}"
-    with urlopen(url, timeout=60) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
-    if payload.get("status") != "success":
-        raise RuntimeError(f"Prometheus query failed: {payload}")
+    end = datetime.now(timezone.utc).timestamp()
+    start = end - hours * 3600
+    step = max(1.0, float(step))
+    span = (MAX_POINTS - 1) * step
 
     rows: list[dict] = []
-    for series in payload.get("data", {}).get("result", []):
-        service = service_from_labels(series.get("metric", {}))
-        for ts, value in series.get("values", []):
-            rows.append(
-                {
-                    "timestamp": pd.to_datetime(float(ts), unit="s", utc=True),
-                    "value": float(value),
-                    "service": service,
-                }
-            )
+    chunk_start = start
+    while chunk_start <= end:
+        chunk_end = min(end, chunk_start + span)
+        params = urlencode({"query": query, "start": chunk_start, "end": chunk_end, "step": step})
+        url = f"{base_url}/api/v1/query_range?{params}"
+        with urlopen(url, timeout=60) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        if payload.get("status") != "success":
+            raise RuntimeError(f"Prometheus query failed: {payload}")
+        for series in payload.get("data", {}).get("result", []):
+            service = service_from_labels(series.get("metric", {}))
+            for ts, value in series.get("values", []):
+                rows.append(
+                    {
+                        "timestamp": pd.to_datetime(float(ts), unit="s", utc=True),
+                        "value": float(value),
+                        "service": service,
+                    }
+                )
+        chunk_start = chunk_end + step
     if not rows:
         return pd.DataFrame(columns=["timestamp", "value", "service", "series_id"])
     frame = (
