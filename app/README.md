@@ -111,6 +111,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `JOB_RETENTION` / `EVAL_RETENTION` | `200` / `30` | Jobs and evaluations kept on disk; older ones are deleted (Real / Noise marks are kept) |
 | `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
 | `SETTINGS_PATH` | `product/data/settings.json` | Settings saved from **Evaluate my data** / `cli tune` (replace the built-in rule) |
+| `AUTH_DB` | `auth.db` beside the ops file | Sign-in sessions (tokens stored as SHA-256), the login lock and ingest rate counters; kept across restarts |
 | `OPS_PATH` | `product/data/ops.json` | Persisted Shadow/Live override + saved PagerDuty routing key |
 | `QUEUE_DB`, `MODEL_PATH` | `product/data/…` | Where state is kept (the model gets a `.sha256` file; a changed file is refused) |
 
