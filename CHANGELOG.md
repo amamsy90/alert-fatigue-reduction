@@ -4,6 +4,16 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [1.0.0] — 2026-10-11
 
+### Added (code review, 11 October 2026, third round)
+- Second dataset for the alert classifier: `tools/fetch_rcaeval_re23.py` downloads RCAEval RE2 and RE3 logs and metrics (720 files, about 570 MB, SHA-256 of every file pinned in `tools/rcaeval_re23_sha256.txt`; git-ignored), and `run_rcaeval_logs.py` runs the classifier / severity / no-log-alerts ablation and the product's promotion gate on each application (`results/rcaeval_logs.csv`, `.json`; report §B5). On RE2 Train Ticket the classifier adds 13.3 points (95% interval +4.4 to +24.4) and the gate promotes it there and on RE2 Online Boutique; elsewhere it adds at most one case and the gate keeps it out. Tests in `test_rcaeval_logs.py`.
+- `perf/resources.py` measures one GAIA scoring job (35.7 s, 500 MB peak, about 215 KB of database a day); report §7 has an operating-cost estimate with its assumptions and cited prices.
+- UML use-case diagram (`figures/use_cases.svg` and `.png`, drawn by `make_figures.py`), a data-retention table (§11) and numeric retrain and rollback triggers (§9).
+- Report §B1: the shipped configuration (the gate keeps the classifier out on GAIA) is its own row, 71.0% at K = 20. `run_validate.py` now checks 189 numbers; 279 tests.
+
+### Changed (code review, 11 October 2026, third round)
+- The promotion gate's queue check compares the new model with what the batch falls back to if the model is refused (the active model, or severity rules), as well as with no log alerts (`_queue_check(..., fallback=...)`). On GAIA the fallback queue catches 871 of 1,223 held-out faults with 70 false items; the classifier still fails the gate.
+- Two experiment-log notes said "Instructor review"; they now say "Code review".
+
 ### Changed (code review, 10 October 2026, second round)
 - The alert classifier is no longer on by default. The promotion gate (`promotion_decision`) now also requires a new model to beat showing **no log alerts**, alert by alert and in the **whole held-out queue** (10 × missed faults + false items), and the first model is no longer promoted just because none is active. A model that fails stays a candidate and does not score the batch it was trained on (rules only or the active model does). On GAIA the classifier fails the queue test (848 vs 872 of 1,223 held-out faults caught), so GAIA runs on rules only. Tests in `test_model_registry.py`.
 - `run_classifier_ablation.py` also writes `results/classifier_ablation_gaia.json`: why the severity row attaches no alerts, and the gate's decision on GAIA. `run_validate.py` checks 18 more numbers (93 in all) and that the gate still keeps the classifier out on GAIA.
