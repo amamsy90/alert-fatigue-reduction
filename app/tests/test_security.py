@@ -222,6 +222,61 @@ def test_forwarded_client_skips_trusted_hops_from_the_right(monkeypatch):
     assert login_client_id(make({"X-Forwarded-For": "10.0.0.5"}, host="192.0.2.1")) == "192.0.2.1"
 
 
+def test_every_forwarded_header_line_is_read(monkeypatch):
+    """A proxy that adds its own X-Forwarded-For (or Forwarded) line instead of
+    appending to the client's line: the client's line comes first and must not
+    be taken for the client."""
+    from starlette.requests import Request
+
+    from product.web.security import login_client_id
+
+    monkeypatch.setenv("TRUSTED_PROXIES", "127.0.0.1/32,10.1.0.0/16")
+
+    def make(lines: list[tuple[str, str]], host: str = "127.0.0.1") -> Request:
+        raw = [(k.lower().encode(), v.encode()) for k, v in lines]
+        return Request({"type": "http", "headers": raw, "client": (host, 1234)})
+
+    two_lines = [("X-Forwarded-For", "1.2.3.4"), ("X-Forwarded-For", "10.0.0.5")]
+    assert login_client_id(make(two_lines)) == "10.0.0.5"
+    three_lines = [("X-Forwarded-For", "6.6.6.6, 7.7.7.7"), ("X-Forwarded-For", "10.0.0.5"),
+                   ("X-Forwarded-For", "10.1.2.3")]
+    assert login_client_id(make(three_lines)) == "10.0.0.5"
+    forwarded = [("Forwarded", 'for="1.2.3.4"'), ("Forwarded", "for=10.0.0.9;proto=https")]
+    assert login_client_id(make(forwarded)) == "10.0.0.9"
+
+
+def test_login_lock_holds_when_the_proxy_adds_its_own_xff_line(client, monkeypatch):
+    """The live case from the 10 October code review: the client sends its own
+    X-Forwarded-For line and the proxy adds a second one. Rotating the first
+    line must not dodge the lock."""
+    from product.web.security import reset_login_attempts
+
+    reset_login_attempts()
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    monkeypatch.setenv("LOGIN_MAX_FAILS", "3")
+    monkeypatch.setenv("LOGIN_LOCK_SECONDS", "60")
+    monkeypatch.setenv("TRUSTED_PROXIES", "127.0.0.1/32")
+    proxy = TestClient(client, client=("127.0.0.1", 5000), base_url="http://localhost")
+    try:
+        codes = [
+            proxy.get(
+                "/connectors",
+                auth=("oncall", "no"),
+                headers=[("X-Forwarded-For", f"203.0.113.{i}"), ("X-Forwarded-For", "10.0.0.5")],
+            ).status_code
+            for i in range(1, 6)
+        ]
+        assert codes == [401, 401, 429, 429, 429]
+        other = proxy.get(
+            "/connectors",
+            auth=("oncall", "s3cret"),
+            headers=[("X-Forwarded-For", "203.0.113.1"), ("X-Forwarded-For", "10.0.0.6")],
+        )
+        assert other.status_code == 200  # another real client is not locked
+    finally:
+        reset_login_attempts()
+
+
 def test_forwarded_proto_from_an_untrusted_client_does_not_set_secure(client, monkeypatch):
     from product.web.security import reset_login_attempts
 

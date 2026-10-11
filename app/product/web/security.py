@@ -305,11 +305,21 @@ def _rightmost_untrusted(hops: list[str]) -> str | None:
     return hops[0] if hops else None
 
 
+def _all_lines(request: Request, name: str) -> str:
+    """Every line of a header, joined in arrival order.
+
+    Some proxies add a new header line instead of appending to the client's
+    one. Reading only the first line would return the value the client wrote,
+    so the hops are read across all lines, as one comma-separated list.
+    """
+    return ",".join(request.headers.getlist(name))
+
+
 def _forwarded_client(request: Request) -> str | None:
-    xff = request.headers.get("x-forwarded-for")
+    xff = _all_lines(request, "x-forwarded-for")
     if xff:
         return _rightmost_untrusted(xff.split(","))
-    forwarded = request.headers.get("forwarded")
+    forwarded = _all_lines(request, "forwarded")
     if forwarded:
         hops = []
         for item in forwarded.split(","):
