@@ -3,7 +3,8 @@
     python make_figures.py
 
 Writes the SVG figures (no extra library) and, when matplotlib and seaborn
-are installed, the same two plots as PNG.
+are installed, the same two plots as PNG and the UML use-case diagram
+(PNG for the Word/PDF report, SVG for GitHub).
 """
 from __future__ import annotations
 
@@ -182,6 +183,91 @@ def publication_pngs() -> None:
     plt.close(fig)
 
 
+def use_case_diagram() -> None:
+    """UML use-case diagram (actors, the system boundary, use cases), PNG and SVG."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Ellipse, FancyArrowPatch, Rectangle
+
+    fig, ax = plt.subplots(figsize=(11.3, 6.0))
+    ax.set_xlim(0, 113)
+    ax.set_ylim(0, 60)
+    ax.axis("off")
+    fig.patch.set_facecolor(SURFACE)
+    ax.add_patch(Rectangle((24, 2), 64, 54, fill=False, edgecolor=INK, linewidth=1.2))
+    ax.text(56, 57.5, "On-call queue (one container per team)", ha="center", fontsize=11, color=INK, weight="bold")
+
+    cases = {
+        "evaluate": (42, 49, "Evaluate my data\n(past exports)"),
+        "view": (42, 38, "Read the queue,\neach item with a reason"),
+        "mark": (42, 30, "Mark item Real / Noise"),
+        "mode": (42, 19, "Switch shadow / Live,\nset channels"),
+        "model": (42, 11.5, "Activate or roll back\na model version"),
+        "health": (42, 4.5, "Check health and\nmonitoring"),
+        "alerts": (74, 50, "Send firing alerts\n(webhook)"),
+        "metrics": (74, 42, "Pull service metrics"),
+        "score": (74, 33, "Score batch into the\ndaily queue (at most K)"),
+        "gate": (74, 24, "Train, gate and\nversion a model"),
+        "page": (74, 13, "Page new items\n(Live mode only)"),
+    }
+    for x, y, text in cases.values():
+        ax.add_patch(Ellipse((x, y), 21, 6.4, facecolor="#eef4fc", edgecolor=BLUE, linewidth=1))
+        ax.text(x, y, text, ha="center", va="center", fontsize=8, color=INK)
+
+    def actor(x: float, y: float, name: str) -> None:
+        ax.add_patch(Ellipse((x, y + 3.2), 1.8, 1.8, fill=False, edgecolor=INK))
+        ax.plot([x, x], [y + 2.3, y - 0.5], color=INK, lw=1)
+        ax.plot([x - 1.6, x + 1.6], [y + 1.5, y + 1.5], color=INK, lw=1)
+        ax.plot([x, x - 1.3], [y - 0.5, y - 2.4], color=INK, lw=1)
+        ax.plot([x, x + 1.3], [y - 0.5, y - 2.4], color=INK, lw=1)
+        ax.text(x, y - 3.6, name, ha="center", va="top", fontsize=8.5, color=INK)
+
+    def system(x: float, y: float, name: str) -> None:
+        ax.add_patch(Rectangle((x - 8, y - 3), 16, 6, facecolor="#f3f2ee", edgecolor=MUTED))
+        ax.text(x, y + 1.6, "«system»", ha="center", va="center", fontsize=7, color=MUTED)
+        ax.text(x, y - 0.9, name, ha="center", va="center", fontsize=8, color=INK)
+
+    people = {"team": (10, 47, "Evaluating team"), "engineer": (10, 32, "On-call engineer"),
+              "operator": (10, 12, "Operator / team lead")}
+    for x, y, name in people.values():
+        actor(x, y, name)
+    systems = {"am": (103, 50, "Alertmanager"), "prom": (103, 42, "Prometheus"),
+               "pager": (103, 13, "PagerDuty, Slack\nor Opsgenie")}
+    for x, y, name in systems.values():
+        system(x, y, name)
+
+    def link(a: tuple[float, float], key: str, side: float = -1) -> None:
+        x, y = cases[key][:2]
+        ax.plot([a[0], x + side * 10.5], [a[1], y], color=MUTED, lw=0.8)
+
+    link((12, 48), "evaluate")
+    for key in ("view", "mark"):
+        link((12, 33), key)
+    for key in ("mode", "model", "health"):
+        link((12, 13), key)
+    link((95, 50), "alerts", 1)
+    link((95, 42), "metrics", 1)
+    link((95, 13), "page", 1)
+
+    def depends(start: tuple[float, float], end: tuple[float, float], label: str, at: tuple[float, float],
+                bend: float = 0.0) -> None:
+        ax.add_patch(FancyArrowPatch(start, end, arrowstyle="->", mutation_scale=10, color=ORANGE,
+                                     linestyle="--", lw=0.9, connectionstyle=f"arc3,rad={bend}"))
+        ax.text(*at, label, fontsize=7, color=ORANGE)
+
+    depends((74, 29.8), (74, 27.2), "«include»", (75, 28))
+    depends((84.5, 33), (84.5, 13), "«include»", (87.5, 23), bend=-0.5)
+    depends((52.5, 30), (63.5, 24), "«extend»", (53, 28.5))
+    fig.text(0.01, 0.01, "UML use-case diagram. Lines join actors to the use cases they take part in; "
+             "dashed arrows are include / extend relations.", fontsize=8, color=MUTED)
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.savefig(OUT / "use_cases.png", dpi=150, facecolor=SURFACE)
+    fig.savefig(OUT / "use_cases.svg", facecolor=SURFACE)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     detection_vs_k()
@@ -189,8 +275,9 @@ if __name__ == "__main__":
     written = [OUT / "detection_vs_k.svg", OUT / "walkforward.svg"]
     try:
         publication_pngs()
+        use_case_diagram()
     except ImportError as exc:
-        print(f"SVG only; PNG needs matplotlib and seaborn ({exc})")
+        print(f"SVG only; PNG and the use-case diagram need matplotlib and seaborn ({exc})")
     else:
-        written.extend([OUT / "detection_vs_k.png", OUT / "walkforward.png"])
+        written.extend([OUT / "detection_vs_k.png", OUT / "walkforward.png", OUT / "use_cases.png", OUT / "use_cases.svg"])
     print("Wrote " + ", ".join(str(p) for p in written))
