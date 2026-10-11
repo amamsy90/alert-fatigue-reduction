@@ -14,6 +14,11 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
         }
+        # log.exception() must keep its traceback, or a production error is undebuggable.
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            payload["stack"] = self.formatStack(record.stack_info)
         return json.dumps(payload, default=str)
 
 

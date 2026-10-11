@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import sqlite3
 from pathlib import Path
 
 from product.model_store import model_path, models_dir
@@ -35,6 +36,21 @@ def runtime_paths() -> dict[str, Path]:
     return paths
 
 
+def _copy_sqlite(src: Path, target: Path) -> None:
+    """Consistent copy of a live WAL-mode database, including commits still in
+    its write-ahead log. A plain file copy can tear while a job writes."""
+    target.unlink(missing_ok=True)
+    source = sqlite3.connect(src, timeout=10)
+    try:
+        copy = sqlite3.connect(target)
+        try:
+            source.backup(copy)
+        finally:
+            copy.close()
+    finally:
+        source.close()
+
+
 def backup(dest: str | Path) -> list[str]:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -43,7 +59,9 @@ def backup(dest: str | Path) -> list[str]:
         if not src.exists():
             continue
         target = dest / name
-        if src.is_dir():
+        if name == "queue.db":
+            _copy_sqlite(src, target)
+        elif src.is_dir():
             if target.exists():
                 shutil.rmtree(target)
             shutil.copytree(src, target)
@@ -64,6 +82,11 @@ def restore(src: str | Path) -> list[str]:
         if not item.exists():
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
+        if name == "queue.db":
+            # A write-ahead log left by the crashed database would be replayed
+            # onto the restored file on the next open. Drop it with the old file.
+            for suffix in ("-wal", "-shm"):
+                dest.with_name(dest.name + suffix).unlink(missing_ok=True)
         if item.is_dir():
             if dest.exists():
                 shutil.rmtree(dest)

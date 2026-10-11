@@ -423,8 +423,42 @@ def _page_key_max() -> int:
         return 10_000
 
 
-def set_seen_spike_keys(keys: set[str]) -> None:
-    capped = sorted(keys)[-_page_key_max():]
+_KEY_TIME = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?)$")
+
+
+def _key_time(key: str):
+    """Start time at the end of a paging key (`kind:service:start`), or None."""
+    import pandas as pd
+
+    match = _KEY_TIME.search(key)
+    if not match:
+        return None
+    try:
+        ts = pd.Timestamp(match.group(1))
+    except ValueError:
+        return None
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
+def _cap_keys(keys: set[str], keep: set[str]) -> list[str]:
+    """At most PAGE_KEY_MAX keys. Keys in `keep` (items still in the re-scored
+    history) are never dropped, because a dropped key looks new and is paged
+    again. Others go oldest first by their start time; a key without a readable
+    time goes first."""
+    limit = _page_key_max()
+    if len(keys) <= limit:
+        return sorted(keys)
+    kept = keys & keep
+    room = max(0, limit - len(kept))
+    times = {k: _key_time(k) for k in keys - kept}
+    unreadable = sorted(k for k, t in times.items() if t is None)
+    readable = sorted((k for k, t in times.items() if t is not None), key=lambda k: (times[k], k))
+    others = unreadable + readable  # first to drop on the left
+    return sorted(kept | set(others[len(others) - room:] if room else []))
+
+
+def set_seen_spike_keys(keys: set[str], keep: set[str] | None = None) -> None:
+    capped = _cap_keys(set(keys), set(keep or ()))
     with _edit() as data:
         data["paged_item_keys"] = capped
 
@@ -440,7 +474,8 @@ def add_channel_delivered_keys(channel: str, keys: set[str]) -> None:
     with _edit() as data:
         marks = data.setdefault("paged_item_keys_by_channel", {})
         current = set(marks.get(channel) or [])
-        marks[channel] = sorted(current | keys)[-_page_key_max():]
+        # Only items not yet in the shared list are looked up here, so the oldest can go.
+        marks[channel] = _cap_keys(current | keys, set())
 
 
 def channel_cutoff(channel: str, now=None):
