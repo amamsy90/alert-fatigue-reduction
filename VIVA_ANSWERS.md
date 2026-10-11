@@ -79,7 +79,7 @@ What is not new, if they push: the jump rule is a threshold on a rolling median.
 
 **"How do you know it still works next month?"** `/monitoring` checks p95 latency, error rate, failed pages, precision from the engineers' Real/Noise marks (target 0.7 once there are 20 marks), alert-volume drift (last batch vs the usual size), and monitoring gaps. `/metrics` gives the same to Prometheus with example alert rules. See `docs/monitoring.md`.
 
-**"How do you track experiments?"** Every experiment script appends a line to `app/results/experiments.jsonl`: commit, library versions, config, data fingerprint, output hashes, metrics, and why it was run. `run_validate.py` then checks the report's 75 checked numbers against the results.
+**"How do you track experiments?"** Every experiment script appends a line to `app/results/experiments.jsonl`: commit, library versions, config, data fingerprint, output hashes, metrics, and why it was run. `run_validate.py` then checks the report's 93 checked numbers against the results.
 
 **"Development, test, production?"** Same image everywhere; only `app/deploy/*.env` differs. Dev on a laptop, test in CI plus a shadow instance on real traffic, production on the team server behind TLS with a password. Nothing pages until someone deliberately turns Live on. See `docs/deployment.md`.
 
