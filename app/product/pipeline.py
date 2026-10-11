@@ -26,7 +26,15 @@ from src.features import build_feature_frame
 from src.ingestion import time_split
 from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
-from src.queue import QueueItem, alert_items, build_queue, spike_items, tune_confirm_thresholds
+from src.queue import (
+    QueueItem,
+    alert_items,
+    build_queue,
+    n_days_between,
+    score_queue,
+    spike_items,
+    tune_confirm_thresholds,
+)
 
 from .inputs import (  # noqa: F401 — re-exported for callers of product.pipeline
     JobInputs,
@@ -171,6 +179,9 @@ class ScoredQueue:
     # Per-series confirm rise learned on the early window only. Empty if there
     # was no held-out window (the one-day sample) or no labels.
     confirm_by_series: dict | None = None
+    # Promotion gate result for a model fit on this batch (None: nothing was fit).
+    # A model that fails the gate is returned in `model` only to be kept as a candidate.
+    promoted: bool | None = None
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -207,6 +218,80 @@ def _class_report(alerts: list[Alert], proba, threshold: float) -> dict:
 
 def _rules_only_training(note: str) -> dict:
     return {"model_used": "rules_only", "note": note, "train": None, "test": None, "threshold": None}
+
+
+def _not_promoted_training(report: dict, fallback: str) -> dict:
+    """The fit's held-out report, marked as a candidate that did not score the batch."""
+    out = dict(report)
+    out["model_used"] = "candidate"
+    out["note"] = (
+        f"A model was fit on the early window but did not pass the promotion gate ({report.get('gate')}), "
+        f"so it is kept as a candidate and {fallback}."
+    )
+    return out
+
+
+def _faults_from_labels(alerts: list[Alert]) -> list[Fault]:
+    """Faults implied by labelled alerts (Real marks carry no window): one per
+    fault id, from its first to its last alert, on the first alert's source."""
+    by_id: dict[str, list[Alert]] = defaultdict(list)
+    for alert in alerts:
+        if alert.fault_id is not None:
+            by_id[alert.fault_id].append(alert)
+    return [
+        Fault(fid, min(a.timestamp for a in rows), max(a.timestamp for a in rows), rows[0].source)
+        for fid, rows in by_id.items()
+    ]
+
+
+def _queue_check(
+    trained: dict,
+    alerts: list[Alert],
+    jumps: list,
+    leaks: list,
+    gaps: list,
+    flags: list[bool],
+    config: Config,
+    faults: list[Fault] | None,
+) -> dict | None:
+    """The whole queue on the held-out window, with this model's alerts and with
+    no log alerts at all. A classifier can be right about single alerts and still
+    lower the queue's catches, because the faults its alerts carry are often also
+    caught by metric jumps and its alerts take slots the jumps needed (GAIA,
+    FINAL_REPORT.md section B4). None when the held-out window has no fault."""
+    split_at = trained["split_at"]
+    later = [i for i, a in enumerate(alerts) if a.timestamp >= split_at]
+    if not later:
+        return None
+    later_alerts = [alerts[i] for i in later]
+    held_faults = (
+        [f for f in faults if f.start >= split_at] if faults else _faults_from_labels(later_alerts)
+    )
+    if not held_faults:
+        return None
+
+    def metric_items() -> list[QueueItem]:  # fresh items per queue: build_queue marks them
+        spikes = [s for s in jumps + leaks + gaps if s.shown_at >= split_at]
+        return spike_items(spikes, config)
+
+    decisions = _apply_model(
+        trained["model"], later_alerts, jumps, [flags[i] for i in later], config,
+        trained["escalate_threshold"], trained["review_threshold"],
+    )
+    end = max(max(a.timestamp for a in later_alerts), max(f.end for f in held_faults)) + pd.Timedelta(seconds=1)
+    n_days = n_days_between(split_at, end, config)
+    out: dict = {"faults": len(held_faults), "days": n_days}
+    for name, items in (
+        ("with_model", metric_items() + alert_items(later_alerts, decisions)),
+        ("no_log_alerts", metric_items()),
+    ):
+        row = score_queue(name, build_queue(items, config), held_faults, n_days, config)
+        false_items = int(round(row["false_items_per_day"] * n_days))
+        missed = len(held_faults) - row["faults_caught"]
+        out[f"caught_{name}"] = row["faults_caught"]
+        out[f"false_items_{name}"] = false_items
+        out[f"cost_{name}"] = config.miss_cost * missed + config.false_alarm_cost * false_items
+    return out
 
 
 def score_alerts(
@@ -260,54 +345,11 @@ def score_alerts(
     )
 
     trained = _train(alerts, metrics if has_metrics else None, config, incumbent=saved)
-    prefer_saved = saved is not None and saved.label_source != "weak_severity" and trained is None
-    if trained is not None:
-        model = trained["model"]
-        escalate_threshold = trained["escalate_threshold"]
-        review_threshold = trained["review_threshold"]
-        label_source = trained["label_source"]
-        model_used, train_count = "trained", trained["train_alerts"]
-        training = trained["training"]
-        split_at = trained["split_at"]
-    elif prefer_saved and saved is not None:
-        model = saved.model
-        escalate_threshold = saved.escalate_threshold
-        review_threshold = saved.review_threshold
-        label_source = saved.label_source
-        model_used, train_count = "saved", saved.train_alerts
-        training = {"model_used": "saved", "note": "This batch had too few labels, so the last saved model scored it.",
-                    "threshold": round(float(escalate_threshold), 4), "train": None, "test": None}
-        split_at = None
-    else:
-        model = None
-        escalate_threshold = review_threshold = 1.0
-        label_source, model_used, train_count = "none", "rules_only", 0
-        training = _rules_only_training(
-            "No labels yet: log alerts are ranked by severity. Metric jumps and gaps do not need labels. "
-            "Mark items Real / Noise to train a model."
-        )
-        split_at = None
-
-    flags = _spike_flags(alerts, jumps, config) if alerts else []
-    if model is not None and alerts and model_used == "trained" and split_at is not None:
-        # The fit just saw the early rows. Score those with the previous model
-        # or with severity rules, and use this fit only on the later window.
-        decisions = _decisions_holding_out_train(
-            alerts, jumps, flags, config, split_at, model, escalate_threshold, review_threshold, saved
-        )
-    elif model is not None and alerts:
-        proba = model.predict_proba(alerts, jumps)
-        decisions = spike_review_decisions(alerts, proba, config, escalate_threshold, review_threshold, flags)
-        if model_used == "saved":
-            training["test"] = _class_report(alerts, proba, escalate_threshold)
-    else:
-        decisions = baseline_decisions(alerts, config)
-
     confirm_by_series: dict[str, float] = {}
     # Learn the confirm gate on the early window only, and only when a later
     # window exists. The one-day sample has no later window, so it stays on the
     # built-in rule and is not fit on the same points it shows.
-    metric_split = split_at
+    metric_split = trained["split_at"] if trained is not None else None
     if metric_split is None and metrics is not None and has_metrics and faults:
         metric_split = metrics["timestamp"].min() + pd.Timedelta(days=config.split_day)
     has_later = bool(
@@ -337,6 +379,70 @@ def score_alerts(
             str(sid): float(gate[0]) for sid, gate in detector.levels.items() if gate
         }
 
+    flags = _spike_flags(alerts, jumps, config) if alerts else []
+    # The promotion gate runs before any alert is scored: a model fit on this
+    # batch scores it only if it beats both "show no log alerts" and the active
+    # model on the held-out window. Otherwise it is kept as a candidate and the
+    # batch is scored as if it had not been trained (saved model or rules only).
+    candidate: AlertClassifier | None = None
+    promoted: bool | None = None
+    gate = ""
+    if trained is not None:
+        trained["training"]["queue_check"] = _queue_check(
+            trained, alerts, jumps, leaks, gaps, flags, config, faults
+        )
+        promoted, gate = promotion_decision(trained["training"], saved is not None, config)
+        trained["training"]["promoted"] = promoted
+        trained["training"]["gate"] = gate
+        if not promoted:
+            candidate = trained["model"]
+    usable_saved = saved is not None and saved.label_source != "weak_severity" and saved.model is not None
+    prefer_saved = usable_saved and (trained is None or not promoted)
+    if trained is not None and promoted:
+        model = trained["model"]
+        escalate_threshold = trained["escalate_threshold"]
+        review_threshold = trained["review_threshold"]
+        label_source = trained["label_source"]
+        model_used, train_count = "trained", trained["train_alerts"]
+        training = trained["training"]
+        split_at = trained["split_at"]
+    elif prefer_saved and saved is not None:
+        model = saved.model
+        escalate_threshold = saved.escalate_threshold
+        review_threshold = saved.review_threshold
+        label_source = saved.label_source
+        model_used, train_count = "saved", saved.train_alerts
+        training = {"model_used": "saved", "note": "This batch had too few labels, so the last saved model scored it.",
+                    "threshold": round(float(escalate_threshold), 4), "train": None, "test": None}
+        if trained is not None:
+            training = _not_promoted_training(trained["training"], "the active model scored this batch")
+        split_at = None
+    else:
+        model = None
+        escalate_threshold = review_threshold = 1.0
+        label_source, model_used, train_count = "none", "rules_only", 0
+        training = _rules_only_training(
+            "No labels yet: log alerts are ranked by severity. Metric jumps and gaps do not need labels. "
+            "Mark items Real / Noise to train a model."
+        )
+        if trained is not None:
+            training = _not_promoted_training(trained["training"], "rules only (severity) scored this batch")
+        split_at = None
+
+    if model is not None and alerts and model_used == "trained" and split_at is not None:
+        # The fit just saw the early rows. Score those with the previous model
+        # or with severity rules, and use this fit only on the later window.
+        decisions = _decisions_holding_out_train(
+            alerts, jumps, flags, config, split_at, model, escalate_threshold, review_threshold, saved
+        )
+    elif model is not None and alerts:
+        proba = model.predict_proba(alerts, jumps)
+        decisions = spike_review_decisions(alerts, proba, config, escalate_threshold, review_threshold, flags)
+        if model_used == "saved" and trained is None:
+            training["test"] = _class_report(alerts, proba, escalate_threshold)
+    else:
+        decisions = baseline_decisions(alerts, config)
+
     candidates: list[QueueItem] = (
         spike_items(jumps, config) + spike_items(leaks, config) + spike_items(gaps, config)
         + alert_items(alerts, decisions)
@@ -364,7 +470,8 @@ def score_alerts(
         jumps=_jump_items(jumps + leaks + gaps, alerts, final, shown_spikes, config, rise_unit),
         label_source=label_source,
         model_used=model_used,
-        model=model if model_used == "trained" else None,
+        model=model if model_used == "trained" else candidate,
+        promoted=promoted,
         train_alerts=train_count,
         training=training,
         data_fingerprint=trained["data_fingerprint"] if trained is not None else None,
@@ -460,23 +567,60 @@ def run_job(*args, **kwargs) -> dict:
         record_job(kwargs.get("mode", "sample"), outcome, time.perf_counter() - start)
 
 
-def promotion_decision(training: dict | None, has_incumbent: bool, config: Config) -> tuple[bool, str]:
-    """Should a newly trained model replace the active one?
+def no_log_alerts_cost(report: dict | None, config: Config) -> float | None:
+    """Held-out cost of showing no log alerts at all: every fault-bearing alert is a miss."""
+    if not report:
+        return None
+    return config.miss_cost * report.get("fault_alerts", 0)
 
-    Yes when there is no active model, or when its cost on this batch's held-out
-    window is no higher than the active model's cost on the same alerts.
-    Without a held-out window there is no honest test, so an active model stays.
+
+def promotion_decision(training: dict | None, has_incumbent: bool, config: Config) -> tuple[bool, str]:
+    """Should a newly trained model become the active one (and score this batch)?
+
+    Three tests on this batch's held-out window, all required:
+
+    1. Alerts: its cost (misses x miss_cost + false alarms) is strictly below
+       the cost of showing no log alerts at all.
+    2. Queue: the whole queue with its alerts costs strictly less (missed
+       faults x miss_cost + false items) than the queue with no log alerts.
+       A model can pass 1 and fail 2: on GAIA it finds most fault-bearing
+       alerts, but those faults are also caught by metric jumps and its alerts
+       take slots the jumps needed (FINAL_REPORT.md section B4).
+    3. If a model is active, its alert cost is no higher than that model's on
+       the same alerts.
+
+    The first model is not promoted just because it is first, and without a
+    held-out window or a held-out fault nothing changes.
     """
-    if not has_incumbent:
-        return True, "no active model yet"
     training = training or {}
+    keep = "the active model stays" if has_incumbent else "rules only stays"
     new = held_out_cost(training.get("test"), config.miss_cost, config.false_alarm_cost)
+    floor = no_log_alerts_cost(training.get("test"), config)
+    if new is None or floor is None:
+        return False, f"no held-out window to test on; {keep}"
+    if new >= floor:
+        return False, (f"held-out cost {new:g} is not below {floor:g} for showing no log alerts; "
+                       f"kept as a candidate, {keep}")
+    check = training.get("queue_check")
+    if not check:
+        return False, f"no held-out fault to test the whole queue on; kept as a candidate, {keep}"
+    with_model, without = check["cost_with_model"], check["cost_no_log_alerts"]
+    queue = (
+        f"queue with its alerts: {check['caught_with_model']}/{check['faults']} held-out faults, "
+        f"{check['false_items_with_model']} false items (cost {with_model:g}); without log alerts: "
+        f"{check['caught_no_log_alerts']}/{check['faults']}, {check['false_items_no_log_alerts']} false items "
+        f"(cost {without:g})"
+    )
+    if with_model >= without:
+        return False, f"{queue}; kept as a candidate, {keep}"
+    if not has_incumbent:
+        return True, f"held-out cost {new:g} < {floor:g} for showing no log alerts; {queue}"
     old = held_out_cost(training.get("incumbent_test"), config.miss_cost, config.false_alarm_cost)
-    if new is None or old is None:
-        return False, "no held-out window to compare on; the active model stays"
+    if old is None:
+        return False, f"active model not scored on the held-out window; {keep}"
     if new <= old:
-        return True, f"held-out cost {new:g} <= active model's {old:g}"
-    return False, f"held-out cost {new:g} > active model's {old:g}; kept as a candidate"
+        return True, f"held-out cost {new:g} <= active model's {old:g}; {queue}"
+    return False, f"held-out cost {new:g} > active model's {old:g}; kept as a candidate, {keep}"
 
 
 def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel | None) -> SavedModel | None:
@@ -493,8 +637,11 @@ def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel
         train_alerts=result.train_alerts,
         feedback_real=real_marks,
     )
-    config = result.config or Config()
-    promote, reason = promotion_decision(result.training, loaded is not None, config)
+    training = result.training or {}
+    if result.promoted is not None:
+        promote, reason = result.promoted, str(training.get("gate", ""))
+    else:
+        promote, reason = promotion_decision(result.training, loaded is not None, result.config or Config())
     training = result.training or {}
     entry = register_model(saved, {
         "data_fingerprint": result.data_fingerprint,

@@ -116,7 +116,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 ## How it decides
 
 - **No labels (day one):** rules only — jumps, gaps, log severity with duplicate suppression.
-- **With labels or marks:** a cost-sensitive classifier (a miss weighs 10× a false alarm) ranks log alerts; the escalate threshold is learned on the early window. A model is saved and reused for small webhook batches; the page reminds you to retrain after 7 days or new Real marks.
+- **With labels or marks:** a cost-sensitive classifier (a miss weighs 10× a false alarm) is trained on the early window and tested on the rest. It ranks log alerts only if it passes the promotion gate there: it must beat showing no log alerts, alert by alert and in the whole queue, and be no worse than the active model. Otherwise it is kept as a candidate and rules only (or the active model) scores the batch; on GAIA this is what happens. An active model is reused for small webhook batches; the page reminds you to retrain after 7 days or new Real marks.
 - **Always causal:** nothing is chosen using data from later in the day.
 
 ---

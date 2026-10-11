@@ -111,7 +111,7 @@ flowchart TD
 
 **Existing model or API.** An existing, well-understood model family (scikit-learn logistic regression) trained locally; no external AI API or LLM, so no data leaves the server and there is no per-call cost.
 
-**What the classifier adds, measured.** An ablation on GAIA (`run_classifier_ablation.py`, §B4) keeps the whole queue and changes only how log alerts are chosen for their quarter of the slots. At K = 20 the queue with the classifier catches 69.6% with 1.8 false items a day; with log severity instead it catches 71.0% (1.4 false a day); with no log alerts at all, 71.2% (1.2 false a day). **On GAIA the classifier adds no catches; it costs about 1.6 points and 0.6 false items a day**, because 82% of GAIA faults write no log line and the alerts it escalates spend slots that jumps would have used. Its value is therefore not shown on this benchmark. It is kept for teams whose faults *do* log: it is the only part that learns from that team's Real / Noise marks (a Noise mark becomes a negative label at the next retrain), every new model must pass the promotion gate on held-out alerts before it is used, and alerts can never take more than a quarter of the budget. A team whose faults do not log can run rules only (no labels) and lose nothing.
+**What the classifier adds, measured.** An ablation on GAIA (`run_classifier_ablation.py`, §B4) keeps the whole queue and changes only how log alerts are chosen for their quarter of the slots. At K = 20 the queue with the classifier catches 69.6% with 1.8 false items a day; with log severity instead it catches 71.0% (1.4 false a day); with no log alerts at all, 71.2% (1.2 false a day). **On GAIA the classifier adds no catches; it costs about 1.6 points and 0.6 false items a day**, because 82% of GAIA faults write no log line and the alerts it escalates spend slots that jumps would have used. Its value is therefore not shown on this benchmark. It is kept for teams whose faults *do* log: it is the only part that learns from that team's Real / Noise marks (a Noise mark becomes a negative label at the next retrain), and alerts can never take more than a quarter of the budget. **It is not on by default.** A trained model is used only if, on the held-out part of its batch, it beats the same queue *without* log alerts (§9). The first model has to pass too. On GAIA it does not (848 vs 872 of 1,223 held-out faults caught, §B4), so the tool keeps it as a candidate and scores GAIA with rules only.
 
 **Limitations of AI here.** It needs labels of both classes, so a new team starts in rules-only mode; learned thresholds do not transfer between datasets (one learned on GAIA's 1 GB faults rejects 0.5 GB faults, §B3); and 82% of GAIA faults leave no log, which caps a log-only model near 18% (§B6).
 
@@ -125,7 +125,7 @@ flowchart TD
 | Output | P(alert is a real fault), turned into an action: escalate, ask a person, or hide, with a reason |
 | Data needed | Past alerts with incident windows, or Real / Noise marks; memory series for the detectors |
 | How the software talks to it | In-process: `pipeline.score_alerts` calls the classifier; models are loaded from the registry (`product/model_store.py`) |
-| If it is wrong | The queue is capped at K; uncertain alerts go to a person; engineers mark Noise; a worse model is not promoted, and the operator can roll back |
+| If it is wrong | The queue is capped at K; uncertain alerts go to a person; engineers mark Noise; a model is not promoted unless it beats the queue without log alerts (and the active model) on held-out data, and the operator can roll back |
 | Main limitation | Label-hungry; helps only services that log |
 
 **How the queue decides** (details in §B1 and `design_specification.md`). One queue, at most K items a day, first come, first served:
@@ -190,7 +190,7 @@ CI runs lint, type checks, the tests on two Python versions with coverage, `run_
 
 - **Versioning.** Code in Git through pull requests; dependencies in `uv.lock` and a hash-pinned `requirements.lock`; configuration in `src/config.py` and per-environment files; data by fingerprint in the experiment log; **models as numbered versions with model cards** in `models/registry.json` (training time, data fingerprint, code version, held-out results, gate decision). No prompts (no LLM).
 - **Reproducibility.** `uv sync --group dev`, `uv run pytest`, `uv run python run_validate.py`, `docker compose up`; every environment variable is documented; the public datasets are fetched by scripts (`tools/fetch_gaia.py`, `fetch_nab.py`, `fetch_smd.py`, `fetch_rcaeval_mem.py`), and `fetch_gaia.py` checks the SHA-256 of every GAIA file used.
-- **Model updates.** A new model is trained when a batch has labels of both classes. It becomes active only if its held-out cost is no higher than the active model's on the same held-out alerts. A worse model stays a candidate. The operator can roll back to any version (`POST /models/{version}/activate`, hash-checked, audited). Precision from engineers' marks and alert-volume drift are monitored, and a retrain is suggested after 7 days or new Real marks.
+- **Model updates.** A new model is trained when a batch has labels of both classes, on the batch's first 7 days, and tested on the rest. It becomes active, and scores the batch, only if on that held-out window (1) it costs less than showing no log alerts (a miss = 10, a false alarm = 1); (2) the whole queue with its alerts costs less than the queue without log alerts (a missed fault = 10, a false item = 1); and (3) it costs no more than the active model on the same held-out alerts. The first model is not promoted just because none is active. A model that fails stays a candidate, and the batch is scored by the active model, or by rules only. On GAIA the classifier passes (1) and fails (2) (§B4), so rules only stays. The operator can roll back to any version (`POST /models/{version}/activate`, hash-checked, audited). Precision from engineers' marks and alert-volume drift are monitored, and a retrain is suggested after 7 days or new Real marks.
 - **Testing before release.** CI for code; the promotion gate and shadow mode for models.
 - **Experiment tracking.** Every experiment script appends to `app/results/experiments.jsonl`: commit, library versions, configuration, data fingerprint, output hashes, headline metrics and the reason for the run.
 
@@ -227,7 +227,7 @@ Evaluation criteria with measured values, justification for each target and exam
 2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
 4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels; the per-series confirm levels (§B4) are measured but not in the headline.
-5. **The AI component adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The classifier is kept for teams whose faults log and who mark items; that benefit is argued, not measured here.
+5. **The AI component adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The classifier is kept for teams whose faults log and who mark items; that benefit is argued, not measured here. The promotion gate now checks this on every batch, and on GAIA it keeps the classifier out (§9, §B4).
 6. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
 
 **Future work.** RCAEval's CPU, disk, delay and packet-loss injections (only the memory injection is scored, in §B5); a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out (behind a trusted proxy the client is read from the right of `X-Forwarded-For`; the instructor review found the leftmost, client-written value was used, which let a client dodge the lock; fixed with a regression test on 10 October), paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
@@ -240,7 +240,7 @@ Evaluation criteria with measured values, justification for each target and exam
 | At least 90% of predefined test cases pass | 267 / 267 | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
-| AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation) | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA |
+| AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA |
 | No critical security vulnerabilities in testing | 0 critical. R1 through R8 are closed and tested | Yes |
 | Deployable from documented instructions | `docker compose up`, `docs/deployment.md`, CI Docker job | Yes |
 | Another person can reproduce the environment | `uv sync`, lock files, `run_validate.py` | Yes |
@@ -272,7 +272,7 @@ At K = 5 / 10 / 50 the full queue catches 19.5% / 38.8% / 85.8% (rate rule: 19.3
 
 **Removing the last look-ahead.** A code review found five places where the queue still used information from later in the day, although the text said it did not. The per-day alert filters kept each day's *most severe* (or highest-scoring) K alerts, which needs the whole day; an overlapping jump that arrived *after* a leak was confirmed could still remove that leak; the robust score used the spread of the whole series; and an alert "rode on" a jump using the jump's final end. All five now use only what is known at the moment of the decision: alerts spend the budget first come, first served; a leak is dropped only by a jump already shown; the robust spread uses earlier points only; and an alert rides on a jump only while the jump's last hot point is within its gap (`Spike.open_at`). `tests/test_causality.py` checks each one. The honest cost is small: the full queue drops from 70.2% to 69.6% at K = 20 and shows 1.8 false items a day instead of 1.6. The detector alone is unchanged (72.6%), because none of the five touched it.
 
-**Why the full queue scores below the detector alone on GAIA.** Every GAIA fault is a 1 GB memory fault, so leak items (0.2 a day), gap items (0.4 a day) and log alerts spend slots that jumps would have used. On a platform with leaks, outages, and CPU, disk or code faults, those are the parts that catch them (§B3). Both rows are reported; the detector comparison is the first claim, the full queue is what the tool runs.
+**Why the full queue scores below the detector alone on GAIA.** Every GAIA fault is a 1 GB memory fault, so leak items (0.2 a day), gap items (0.4 a day) and log alerts spend slots that jumps would have used. On a platform with leaks, outages, and CPU, disk or code faults, those are the parts that catch them (§B3). Both rows are reported; the detector comparison is the first claim. The full queue is the published configuration with the classifier on; the tool's promotion gate turns the classifier off on GAIA (§B4).
 
 The old ranking needed the whole day in advance. Replacing it with a learned confirmation threshold keeps the score (72.6% vs 72.9%), cuts false items (1.0 vs 1.3 a day), and makes the queue usable live.
 
@@ -369,6 +369,10 @@ On GAIA the classifier does not earn its slots: on net, the alerts it escalates 
 Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice.
 
 ---
+**Why the severity row attaches no alerts.** An alert rides on a jump (no slot of its own) only if it arrives while a shown metric item on *its own service* is still open (`build_queue`). The classifier row attaches 280 alerts that way. The severity row attaches none, and the data explains why (`results/classifier_ablation_gaia.json`). The 507 test alerts that carry a fault are all `warning` (471) or `info` (36); no test alert is `critical` or `high`. So the severity rule never escalates a fault's alert. It escalates 44 `error` lines, with 14 more cut by its own 20-a-day limit. All 44 fall on 4 days, none carries a fault, and they are nightly jobs reporting that a log upload failed. None arrives while a shown metric item on its service is open: the nearest one on the same service is at least 199 minutes away (median 617). So 11 of them take a slot of their own, the rest find the day's alert share or budget used, and the row ends up close to "no log alerts".
+
+**What the shipped gate does with this.** The tool trains the classifier on the first 7 days of a batch and tests it on the rest (§9). A model must cost less than showing no log alerts on the held-out alerts, and the whole held-out queue with its alerts must cost less than the same queue without log alerts. The first model is not promoted just because no model is active. On GAIA the classifier passes the first test: it finds 339 of the 507 fault-bearing held-out alerts. It fails the second: with its alerts the queue catches 848 of 1,223 held-out faults with 95 false items, against 872 with 58 false items without log alerts. So it is registered as a candidate, and GAIA is scored by rules only (log alerts by severity, as in the second row). The gate's queue is the tool's, not this table's (it uses the tool's own confirm settings), so its counts differ a little from the rows above; the direction is the same. `run_classifier_ablation.py` records the decision in the same JSON file.
+
 
 ## B5. Beyond microservices: any metric, any team
 
@@ -563,6 +567,24 @@ AI coding assistants were used while building this project: for code review, ref
 | `queue.K20.p3_ranker` | 69.7% | §B4 |
 | `queue.K20.p3_grouped` | 70.7% | §B4 |
 | `queue.K20.p3_per_series` | 69.3% | §B4 |
+| `ablation.attached.K20.classifier` | 280 | §B4 |
+| `severity.K20.fault_alerts` | 507 | §B4 |
+| `severity.K20.fault_alerts_warning` | 471 | §B4 |
+| `severity.K20.fault_alerts_info` | 36 | §B4 |
+| `severity.K20.escalated` | 44 | §B4 |
+| `severity.K20.escalated_with_fault` | 0 | §B4 |
+| `severity.K20.escalated_days` | 4 | §B4 |
+| `severity.K20.cut_by_daily_budget` | 14 | §B4 |
+| `severity.K20.escalated_while_shown_jump_open` | 0 | §B4 |
+| `severity.K20.minutes_to_shown_metric_min` | 199 | §B4 |
+| `severity.K20.minutes_to_shown_metric_median` | 617 | §B4 |
+| `severity.K20.alerts_shown` | 11 | §B4 |
+| `gate.held_out.fault_alerts_found` | 339 | §B4 |
+| `gate.queue.faults` | 1223 | §5, §B4 |
+| `gate.queue.caught_with_model` | 848 | §5, §B4 |
+| `gate.queue.caught_no_log_alerts` | 872 | §5, §B4 |
+| `gate.queue.false_with_model` | 95 | §B4 |
+| `gate.queue.false_no_log_alerts` | 58 | §B4 |
 | `queue.K50.p3_per_series` | 84.1% | §B4 |
 | `false.K20.p3_per_series_jumps` | 0.8 | §B4 |
 | `queue.K20.p3_carryover` | 72.6% | §B4 |
