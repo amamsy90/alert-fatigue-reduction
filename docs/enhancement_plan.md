@@ -5,7 +5,7 @@ Items from the course-project review. Each one has a regression test whose expec
 | # | Item | Where |
 |---|---|---|
 | 1 | Login lock uses the forwarded client (rightmost hop that is not a trusted proxy) only when `TRUSTED_PROXIES` lists the socket | `product/web/security.py`, `test_login_lock_uses_forwarded_client_only_behind_a_trusted_proxy` |
-| 2 | In-memory sessions: one uvicorn worker, one container per team | `docs/deployment.md`, ADR 0003 |
+| 2 | One uvicorn worker, one container per team (sessions were in memory then; since 1.0.2 they are in `auth.db`, and the in-process job locks are what keep it to one worker) | `docs/deployment.md`, ADR 0003 |
 | 3 | Ingest alert-count 413 and batch-rate 429 | `INGEST_MAX_ALERTS`, `INGEST_MAX_BATCHES` |
 | 4 | Corrupt registry 503; `POST /models/reset` with `RESET` | `product/model_store.py` |
 | 5 | HTTPS CONNECT proxy; Slack fail retries Slack only | `test_https_prometheus_fetch_tunnels_through_https_proxy`, `test_failed_slack_is_resent_and_pagerduty_is_not` |

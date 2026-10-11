@@ -126,6 +126,7 @@ def computed_numbers() -> dict[str, float]:
         out["gate.queue.false_no_log_alerts"] = float(check["false_items_no_log_alerts"])
         out["gate.queue.caught_fallback"] = float(check["caught_fallback"])
         out["gate.queue.false_fallback"] = float(check["false_items_fallback"])
+        out["gate.margin"] = float(gate["margin"])
 
     nab = ROOT / "nab_eval.csv"
     if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
@@ -185,11 +186,14 @@ def computed_numbers() -> dict[str, float]:
             out[f"{key}.diff.ci_high"] = float(diff[2])
             out[f"{key}.placebo"] = float(app["by_k"]["10"]["placebo_caught"])
             out[f"{key}.test_cases"] = float(app["test_cases"])
-            if app["promotion_gate"]["promoted"]:
-                check = app["promotion_gate"]["queue_check"]
+            gate = app["promotion_gate"]
+            out["rcalogs.gate.margin"] = float(gate["margin"])
+            if (gate.get("queue_saving") or 0) > 0:  # cheaper than both alternatives: the margin decides
+                check = gate["queue_check"]
                 for field in ("faults", "caught_with_model", "false_items_with_model", "caught_fallback",
                               "false_items_fallback", "caught_no_log_alerts", "false_items_no_log_alerts"):
                     out[f"{key}.gate.{field}"] = float(check[field])
+                out[f"{key}.gate.saving"] = float(gate["queue_saving"])
     return out
 
 
@@ -248,8 +252,15 @@ def claims_still_hold() -> None:
     if logs.exists():
         facts = json.loads(logs.read_text(encoding="utf-8"))
         promoted = sorted(f"{a['suite']} {a['app']}" for a in facts["apps"] if a["promotion_gate"]["promoted"])
-        if promoted != ["RE2 Online Boutique", "RE2 Train Ticket"]:
+        if promoted != ["RE2 Train Ticket"]:
             _fail(f"the gate now promotes the classifier on {promoted}; rewrite the RCAEval RE2/RE3 gate sentences (§B5)")
+        by_margin = sorted(f"{a['suite']} {a['app']}" for a in facts["apps"]
+                           if not a["promotion_gate"]["promoted"] and (a["promotion_gate"].get("queue_saving") or 0) > 0)
+        if by_margin != ["RE2 Online Boutique"]:
+            _fail(f"the margin now refuses {by_margin}; rewrite the margin sentences (§9, §B5)")
+        tt = next(a["promotion_gate"] for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
+        if tt["queue_saving"] != tt["margin"]:
+            _fail("RE2 Train Ticket no longer passes exactly at the margin; rewrite 'exactly one missed fault' (§B5)")
         if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
             _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
 

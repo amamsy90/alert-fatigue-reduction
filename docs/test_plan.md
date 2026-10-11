@@ -21,7 +21,7 @@
 | Performance | Latency, throughput and errors under concurrent users | `perf/load_test.py` against a live server | 50 users: 228 req/s, p95 0.32 s, 0 errors |
 | Reliability | Concurrency and persistence | `test_reliability.py`, `test_app_hardening.py` | concurrent `ops.json` writes keep every change |
 | System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
-| Acceptance of results | Report matches results | `run_validate.py` | 189 checked numbers plus guarded claims |
+| Acceptance of results | Report matches results | `run_validate.py` | 193 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
 | Integration (real services) | The app beside a real Prometheus and Alertmanager in Docker Compose: an alert fired in Alertmanager reaches `/ingest/alertmanager` with the bearer token, the ingest job pulls memory series from Prometheus, and shadow mode records but does not page | `app/integration/docker-compose.yml`, `tests/integration/test_compose.py`, CI `integration` job (skipped locally unless `INTEGRATION_BASE_URL` is set) | found that a 14-day Prometheus fetch used a 121 s step, too coarse for the jump rule to confirm anything |
 
@@ -49,7 +49,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
 | Tests | all pass on Python 3.10 and 3.12 | 295 pass, plus the integration job |
 | Coverage | line coverage ≥ `COVERAGE_MIN` | 90% (min 85%) |
-| Results | `run_validate.py` passes | 189 numbers match |
+| Results | `run_validate.py` passes | 193 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
@@ -74,15 +74,15 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% | 296 / 296 (295 on Python 3.10 and 3.12, 1 in the integration job) |
+| Automated tests passing | 100% | 300 / 300 (299 on Python 3.10 and 3.12, 1 in the integration job) |
 | Line coverage | ≥ 85% | 90% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
 | Throughput | ≥ 20 req/s | 167 / 228 req/s |
 | Error rate under load | ≤ 1% | 0% (3,000 requests) |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s |
-| Full GAIA month (34,863 alerts, with training) | ≤ 5 min | 27 s |
-| Report numbers match results | all | 189 / 189 (`run_validate.py`) |
+| Full GAIA month (34,863 alerts, with training) | ≤ 5 min | 54.9 s (median of 3 runs of `perf/resources.py`, same laptop) |
+| Report numbers match results | all | 193 / 193 (`run_validate.py`) |
 | Malformed webhook rows | never block a job | rejected with a reason (`test_ai_inputs.py`) |
 | Critical security issues | 0 | 0 (`docs/threat_model.md`) |
 
