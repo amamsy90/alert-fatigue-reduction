@@ -43,6 +43,8 @@ CLEARED_ENV = (
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     for name in CLEARED_ENV:
         monkeypatch.delenv(name, raising=False)
+    # Sessions and login locks are kept on disk; each test gets its own file.
+    monkeypatch.setenv("AUTH_DB", str(tmp_path / "auth.db"))
