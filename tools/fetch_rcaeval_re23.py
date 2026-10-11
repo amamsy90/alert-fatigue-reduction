@@ -15,7 +15,7 @@ Git LFS pointers and checked against the downloaded bytes); a mismatch stops
 the run. About 570 MB in all.
 
     python tools/fetch_rcaeval_re23.py               # RE2 and RE3
-    python tools/fetch_rcaeval_re23.py --suite RE3   # RE3 only (about 40 MB)
+    python tools/fetch_rcaeval_re23.py --suite RE3   # RE3 only (181 files, about 84 MB)
     python tools/fetch_rcaeval_re23.py --check       # verify files already in place
 
 Writes app/data/rcaeval_re23/cases.parquet and app/data/rcaeval_re23/<case>/*.parquet
