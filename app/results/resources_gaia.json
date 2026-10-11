@@ -1,0 +1,18 @@
+{
+  "job": "GAIA month, product run_job, shadow mode, K=20",
+  "machine": {
+    "system": "Windows",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 26 Model 36 Stepping 0, AuthenticAMD",
+    "cpus": 20,
+    "python": "3.12.14"
+  },
+  "alerts": 34863,
+  "days": 62,
+  "wall_seconds": 35.7,
+  "peak_rss_mb_before_job": 172,
+  "peak_rss_mb": 500,
+  "db_mb": 13.0,
+  "db_kb_per_day": 215,
+  "models_mb": 0.02
+}
