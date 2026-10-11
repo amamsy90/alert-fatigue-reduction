@@ -2,7 +2,11 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
-## [Unreleased]
+## [1.0.2] — 2026-10-11
+
+### Changed (release)
+- Docs and report: 296 tests (one in the new integration job); the report's Word and PDF copies are regenerated.
+
 
 ### Fixed
 - **Live Prometheus data never confirmed a jump.** The ingest job fetched 14 days in one query; to stay under Prometheus' point limit that query used a 121 s step, and the jump rule links hot points at most `memory_gap_minutes` (2) apart, so no jump could be confirmed. The fetch now reads the window at 60 s in several non-overlapping queries. Found by the new integration test; the unit tests fed the detector data directly. Test: `test_a_14_day_fetch_keeps_one_minute_points_so_live_jumps_are_confirmed`.

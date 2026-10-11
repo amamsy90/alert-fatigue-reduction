@@ -32,7 +32,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 289 tests, coverage report
+uv run pytest -q --cov           # 295 tests, coverage report (the integration test is skipped without its stack)
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -47,22 +47,22 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 289 pass |
+| Tests | all pass on Python 3.10 and 3.12 | 295 pass, plus the integration job |
 | Coverage | line coverage ≥ `COVERAGE_MIN` | 90% (min 85%) |
 | Results | `run_validate.py` passes | 189 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
-## 5. Coverage by module (measured 11 October 2026, 289 tests)
+## 5. Coverage by module (measured 11 October 2026, 295 tests)
 
 `uv run pytest -q --cov` from `app/`. Modules not listed are fully covered.
 
 | Module | Coverage | Note |
 |---|---:|---|
 | `product/app.py`, `pipeline.py`, `paging.py`, `cli.py`, `model_store.py`, `monitoring.py`, `settings.py` | 95–98% | |
-| `product/alertmanager.py`, `labels.py`, `store.py`, `ops.py`, `pagerduty.py`, `web/uploads.py` | 90–94% | |
-| `product/notifiers.py`, `prometheus_adapter.py`, `web/security.py` | 86–88% | untested branches are mostly malformed settings and network errors |
+| `product/alertmanager.py`, `labels.py`, `store.py`, `ops.py`, `pagerduty.py`, `web/uploads.py`, `web/auth_store.py` | 90–94% | |
+| `product/notifiers.py`, `prometheus_adapter.py`, `web/security.py` | 86–89% | untested branches are mostly malformed settings and network errors |
 | `product/inputs.py`, `web/evaluate_routes.py`, `web/job_routes.py`, `web/ops_routes.py`, `backup.py` | 75–84% | untested branches are mostly error paths (GAIA folder missing, channel test pages, dataset download, restore failures) |
 | `product/logging_config.py` | 55% | the JSON formatter is tested (`test_logging_config.py`); switching handlers with `LOG_FORMAT=json` at start-up is not |
 | `src/queue.py`, `experiment.py`, `policy.py`, `jump_ranker.py`, `classifier.py`, `ingestion.py`, `baselines_metric.py`, `tracking.py` | 92–98% | |
@@ -74,7 +74,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% | 289 / 289 on Python 3.10 and 3.12 |
+| Automated tests passing | 100% | 296 / 296 (295 on Python 3.10 and 3.12, 1 in the integration job) |
 | Line coverage | ≥ 85% | 90% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
