@@ -253,9 +253,12 @@ def _queue_check(
     flags: list[bool],
     config: Config,
     faults: list[Fault] | None,
+    fallback: SavedModel | None = None,
 ) -> dict | None:
-    """The whole queue on the held-out window, with this model's alerts and with
-    no log alerts at all. A classifier can be right about single alerts and still
+    """The whole queue on the held-out window three ways: with this model's
+    alerts, with the alerts of what scores the batch if the model is refused
+    (`fallback`, the active model, or rules only = severity), and with no log
+    alerts at all. A classifier can be right about single alerts and still
     lower the queue's catches, because the faults its alerts carry are often also
     caught by metric jumps and its alerts take slots the jumps needed (GAIA,
     FINAL_REPORT.md section B4). None when the held-out window has no fault."""
@@ -280,9 +283,20 @@ def _queue_check(
     )
     end = max(max(a.timestamp for a in later_alerts), max(f.end for f in held_faults)) + pd.Timedelta(seconds=1)
     n_days = n_days_between(split_at, end, config)
-    out: dict = {"faults": len(held_faults), "days": n_days}
+    later_flags = [flags[i] for i in later]
+    if fallback is not None and fallback.model is not None:
+        fallback_name = "the active model"
+        fallback_decisions = _apply_model(
+            fallback.model, later_alerts, jumps, later_flags, config,
+            fallback.escalate_threshold, fallback.review_threshold,
+        )
+    else:
+        fallback_name = "rules only (severity)"
+        fallback_decisions = baseline_decisions(later_alerts, config)
+    out: dict = {"faults": len(held_faults), "days": n_days, "fallback": fallback_name}
     for name, items in (
         ("with_model", metric_items() + alert_items(later_alerts, decisions)),
+        ("fallback", metric_items() + alert_items(later_alerts, fallback_decisions)),
         ("no_log_alerts", metric_items()),
     ):
         row = score_queue(name, build_queue(items, config), held_faults, n_days, config)
@@ -387,16 +401,19 @@ def score_alerts(
     candidate: AlertClassifier | None = None
     promoted: bool | None = None
     gate = ""
+    usable_saved = saved is not None and saved.label_source != "weak_severity" and saved.model is not None
     if trained is not None:
+        # The queue check compares the new model with exactly what scores the
+        # batch if it is refused: the active model, or rules only (severity).
         trained["training"]["queue_check"] = _queue_check(
-            trained, alerts, jumps, leaks, gaps, flags, config, faults
+            trained, alerts, jumps, leaks, gaps, flags, config, faults,
+            fallback=saved if usable_saved else None,
         )
         promoted, gate = promotion_decision(trained["training"], saved is not None, config)
         trained["training"]["promoted"] = promoted
         trained["training"]["gate"] = gate
         if not promoted:
             candidate = trained["model"]
-    usable_saved = saved is not None and saved.label_source != "weak_severity" and saved.model is not None
     prefer_saved = usable_saved and (trained is None or not promoted)
     if trained is not None and promoted:
         model = trained["model"]
@@ -582,7 +599,10 @@ def promotion_decision(training: dict | None, has_incumbent: bool, config: Confi
     1. Alerts: its cost (misses x miss_cost + false alarms) is strictly below
        the cost of showing no log alerts at all.
     2. Queue: the whole queue with its alerts costs strictly less (missed
-       faults x miss_cost + false items) than the queue with no log alerts.
+       faults x miss_cost + false items) than both the queue with no log alerts
+       and the queue the batch falls back to if the model is refused (the
+       active model's alerts, or rules only = severity). So the gate tests the
+       model against what would actually run instead.
        A model can pass 1 and fail 2: on GAIA it finds most fault-bearing
        alerts, but those faults are also caught by metric jumps and its alerts
        take slots the jumps needed (FINAL_REPORT.md section B4).
@@ -605,13 +625,21 @@ def promotion_decision(training: dict | None, has_incumbent: bool, config: Confi
     if not check:
         return False, f"no held-out fault to test the whole queue on; kept as a candidate, {keep}"
     with_model, without = check["cost_with_model"], check["cost_no_log_alerts"]
+    fallback = check.get("cost_fallback", without)
     queue = (
         f"queue with its alerts: {check['caught_with_model']}/{check['faults']} held-out faults, "
-        f"{check['false_items_with_model']} false items (cost {with_model:g}); without log alerts: "
-        f"{check['caught_no_log_alerts']}/{check['faults']}, {check['false_items_no_log_alerts']} false items "
-        f"(cost {without:g})"
+        f"{check['false_items_with_model']} false items (cost {with_model:g})"
     )
-    if with_model >= without:
+    if "cost_fallback" in check:
+        queue += (
+            f"; with {check.get('fallback', 'the fallback')} instead: {check['caught_fallback']}/{check['faults']}, "
+            f"{check['false_items_fallback']} false items (cost {fallback:g})"
+        )
+    queue += (
+        f"; without log alerts: {check['caught_no_log_alerts']}/{check['faults']}, "
+        f"{check['false_items_no_log_alerts']} false items (cost {without:g})"
+    )
+    if with_model >= without or with_model >= fallback:
         return False, f"{queue}; kept as a candidate, {keep}"
     if not has_incumbent:
         return True, f"held-out cost {new:g} < {floor:g} for showing no log alerts; {queue}"
