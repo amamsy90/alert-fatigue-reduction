@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from product import __version__
 from product.logging_config import configure_logging
 from product.monitoring import metrics_middleware
 from product.store import QueueStore
@@ -20,7 +21,7 @@ configure_logging()
 app = FastAPI(
     title="On-call alert queue",
     description="Escalate / ask / hide under a daily budget for cloud microservice on-call.",
-    version="1.0.0",
+    version=__version__,
 )
 
 # Order matters: the last one added runs first. audit_changes sees every

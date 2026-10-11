@@ -1,6 +1,6 @@
 # MLOps and lifecycle
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.0.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.4
 
 This page explains how the AI part of the system is versioned, reproduced, updated and tracked after it is deployed. The AI component is a cost-sensitive logistic regression that scores log alerts (scikit-learn), next to rule-based metric detectors. No external model API is used.
 
@@ -25,7 +25,7 @@ If another team member receives the project tomorrow:
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
 uv run pytest -q                      # 295 tests, no network needed (integration: see test_plan.md)
-uv run python run_validate.py         # the report's 193 checked numbers match the committed results
+uv run python run_validate.py         # the report's 195 checked numbers match the committed results
 docker compose up -d                  # the app, built from the hash-pinned lock (dev settings)
 ```
 
@@ -43,7 +43,7 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 | **Detector settings change** (jump size, window) | Tuned on *Evaluate my data* against the team's past incidents with a held-out part and a chance line; applying them is an explicit action recorded with the evaluation id. |
 | **The knowledge base / an external AI API changes** | Not applicable: no knowledge base or external model API. |
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, 300 tests on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, 301 tests on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [1.0.4]
+
+### Changed
+- Report: the RCAEval RE2 Train Ticket gain is stated against both baselines: +13.3 points over no log alerts and +2.2 over severity alerts (one case) at K = 10 (§5, §12, §13). `run_validate.py` checks both (`rcalogs.RE2.tt.gain_vs_none`, `rcalogs.RE2.tt.gain_vs_severity`; 195 numbers).
+- Report §9: the gate margin was chosen after the RCAEval gate results were seen, so those decisions are not an independent test of it; on Train Ticket the saving of 10 comes from 10 fewer false items, not a saved missed fault, although the setting is named `PROMOTION_MIN_SAVING_MISSES`.
+- Version 1.0.4 everywhere: `app/pyproject.toml` and `uv.lock` (were 1.0.0), the API version and the model-card fallback now read `product.__version__` (were hard-coded 1.0.0), the report header, and the doc headers in `docs/` (were 1.0.0). New test `test_the_package_version_matches_pyproject` (301 tests).
+- The report's Word and PDF copies are regenerated.
+
 ## [1.0.3]
 
 ### Changed
