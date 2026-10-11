@@ -2,7 +2,10 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
-## [Unreleased]
+## [1.0.1] — 2026-10-11
+
+### Changed (release)
+- Docs and report: 289 tests, the coverage table (89.8%), and the model-retention row for `MODEL_CANDIDATE_KEEP`; the report's Word and PDF copies are regenerated.
 
 ### Fixed (code review, 11 October 2026, fourth round)
 - Paging keys: `PAGE_KEY_MAX` dropped keys in alphabetical order (all `gap:` keys before any `jump:` key), so once the list was full an item still in the history lost its key and was paged again on every job. Keys of items still shown are now never dropped; the rest go oldest first by start time. Test: `test_an_item_still_in_history_is_never_paged_twice_once_the_key_cap_is_reached`.
