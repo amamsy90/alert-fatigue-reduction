@@ -1,0 +1,56 @@
+# Integration stack: the app beside a real Prometheus and Alertmanager.
+#
+#   docker compose -f integration/docker-compose.yml up -d --build --wait
+#   INTEGRATION_BASE_URL=http://127.0.0.1:18080 uv run pytest -q tests/integration
+#   docker compose -f integration/docker-compose.yml down -v
+#
+# Prometheus scrapes itself, so its own memory (process_resident_memory_bytes,
+# job="prometheus") is the series the app queries. Alertmanager sends its
+# webhook to the app with a bearer token, the same way a team would set it up.
+# Nothing pages: SHADOW_MODE=1 and no channel keys.
+
+services:
+  app:
+    build: ..
+    environment:
+      SHADOW_MODE: "1"
+      APP_PASSWORD: integration-password
+      INGEST_TOKEN: integration-token
+      # The compose network is a private range; the cloud metadata address stays refused.
+      PROM_ALLOW_PRIVATE: "1"
+      PROM_URL: http://prometheus:9090
+      PROM_QUERY: process_resident_memory_bytes
+      QUEUE_DB: /app/product/data/queue.db
+    ports:
+      - "127.0.0.1:18080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  prometheus:
+    image: prom/prometheus:v2.53.4
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:19090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:19093:9093"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9093/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
