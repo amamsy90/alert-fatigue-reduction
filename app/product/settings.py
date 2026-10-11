@@ -14,6 +14,7 @@
 | LEAK_BYTES          | 0.5e9      | slow-leak rise over the long median |
 | GROUP_MINUTES       | 0          | metric items this close on other services share one slot |
 | CARRY_OVER_MAX      | 0          | unused slots carried to the next day (e.g. 10) |
+| PROMOTION_MIN_SAVING_MISSES | 1  | promotion gate: a new model must save at least this many missed faults (x miss cost) on the held-out queue; 0 = any saving |
 """
 from __future__ import annotations
 
@@ -52,6 +53,7 @@ def config_from_env(budget_k: int = 20) -> Config:
         leak_rise_bytes=_float("LEAK_BYTES", base.leak_rise_bytes),
         group_minutes=_float("GROUP_MINUTES", base.group_minutes),
         carry_over_max=int(_float("CARRY_OVER_MAX", base.carry_over_max)),
+        promotion_min_saving_misses=max(0.0, _float("PROMOTION_MIN_SAVING_MISSES", base.promotion_min_saving_misses)),
     )
 
 
