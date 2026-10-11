@@ -55,19 +55,74 @@ def test_rollback_restores_an_earlier_version_and_refuses_a_changed_file(env):
         activate_version("v0099")
 
 
-def _report(fp: int, fn: int) -> dict:
-    return {"fp": fp, "fn": fn, "tp": 5, "precision": 0.5, "recall": 0.5}
+def _report(fp: int, fn: int, fault_alerts: int = 6) -> dict:
+    return {"fp": fp, "fn": fn, "tp": fault_alerts - fn, "fault_alerts": fault_alerts, "precision": 0.5, "recall": 0.5}
+
+
+def _queue(caught: int, false: int, caught_without: int, false_without: int, faults: int = 10) -> dict:
+    """A queue_check as score_alerts records it (miss = 10, false item = 1)."""
+    return {
+        "faults": faults, "days": 3,
+        "caught_with_model": caught, "false_items_with_model": false,
+        "cost_with_model": 10 * (faults - caught) + false,
+        "caught_no_log_alerts": caught_without, "false_items_no_log_alerts": false_without,
+        "cost_no_log_alerts": 10 * (faults - caught_without) + false_without,
+    }
+
+
+GOOD_QUEUE = _queue(caught=9, false=2, caught_without=7, false_without=1)  # 12 < 31
 
 
 def test_promotion_gate_compares_held_out_cost_on_the_same_alerts():
-    cfg = Config()  # a miss costs 10, a false alarm 1
-    assert promotion_decision(None, has_incumbent=False, config=cfg)[0]
-    better = {"test": _report(fp=3, fn=1), "incumbent_test": _report(fp=1, fn=2)}  # 13 vs 21
-    assert promotion_decision(better, True, cfg) == (True, "held-out cost 13 <= active model's 21")
-    worse = {"test": _report(fp=0, fn=3), "incumbent_test": _report(fp=5, fn=1)}  # 30 vs 15
-    promote, reason = promotion_decision(worse, True, cfg)
+    cfg = Config()  # a miss costs 10, a false alarm 1; 6 fault alerts -> 60 with no log alerts
+    better = {"test": _report(fp=3, fn=1), "incumbent_test": _report(fp=1, fn=2), "queue_check": GOOD_QUEUE}
+    promote, reason = promotion_decision(better, True, cfg)  # 13 vs 21
+    assert promote and reason.startswith("held-out cost 13 <= active model's 21; queue with its alerts: 9/10")
+    worse = {"test": _report(fp=0, fn=3), "incumbent_test": _report(fp=5, fn=1), "queue_check": GOOD_QUEUE}
+    promote, reason = promotion_decision(worse, True, cfg)  # 30 vs 15
     assert not promote and "kept as a candidate" in reason
     assert not promotion_decision({"test": None}, True, cfg)[0]  # no held-out window: keep the active model
+
+
+def test_the_first_model_is_not_promoted_just_because_it_is_first():
+    cfg = Config()
+    assert promotion_decision(None, has_incumbent=False, config=cfg) == (
+        False, "no held-out window to test on; rules only stays")
+    # 10 x 1 miss + 55 false alarms = 65, not below 60 for showing no log alerts.
+    noisy = {"test": _report(fp=55, fn=1), "queue_check": GOOD_QUEUE}
+    promote, reason = promotion_decision(noisy, has_incumbent=False, config=cfg)
+    assert not promote and "showing no log alerts" in reason and "rules only stays" in reason
+    useful = {"test": _report(fp=8, fn=1), "queue_check": GOOD_QUEUE}  # 18 < 60, queue 12 < 31
+    promote, reason = promotion_decision(useful, has_incumbent=False, config=cfg)
+    assert promote and reason.startswith("held-out cost 18 < 60 for showing no log alerts")
+    no_faults = {"test": _report(fp=8, fn=1), "queue_check": None}
+    assert promotion_decision(no_faults, False, cfg) == (
+        False, "no held-out fault to test the whole queue on; kept as a candidate, rules only stays")
+
+
+def test_a_model_right_about_alerts_but_bad_for_the_queue_is_not_promoted():
+    """The GAIA case: the classifier finds most fault-bearing alerts (alert cost far
+    below showing none), but the queue with its alerts catches fewer faults."""
+    cfg = Config()
+    gaia_like = {
+        "test": _report(fp=8, fn=2),  # 28 < 60: good at the alert level
+        "queue_check": _queue(caught=8, false=3, caught_without=9, false_without=1),  # 23 >= 11
+    }
+    promote, reason = promotion_decision(gaia_like, has_incumbent=False, config=cfg)
+    assert not promote
+    assert "queue with its alerts: 8/10" in reason and "without log alerts: 9/10" in reason
+    assert reason.endswith("kept as a candidate, rules only stays")
+    tie = {"test": _report(fp=8, fn=2), "queue_check": _queue(caught=9, false=1, caught_without=9, false_without=1)}
+    assert not promotion_decision(tie, False, cfg)[0]  # must earn its slots, not just tie
+
+
+def test_a_model_that_beats_the_active_one_must_still_beat_no_log_alerts():
+    cfg = Config()
+    both_bad = {"test": _report(fp=70, fn=0), "incumbent_test": _report(fp=90, fn=0), "queue_check": GOOD_QUEUE}
+    promote, reason = promotion_decision(both_bad, True, cfg)  # 70 < 90 but >= 60
+    assert not promote and "no log alerts" in reason
+    nothing_to_find = {"test": _report(fp=0, fn=0, fault_alerts=0), "queue_check": GOOD_QUEUE}
+    assert not promotion_decision(nothing_to_find, False, cfg)[0]
 
 
 @pytest.fixture()
@@ -99,6 +154,9 @@ def test_training_through_the_app_registers_versions_with_cards(client):
     first = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()
     training = first["meta"]["training"]
     assert training["model_version"] == "v0001" and training["promoted"]
+    check = training["queue_check"]  # the whole held-out queue, with and without log alerts
+    assert check["faults"] > 0 and check["caught_with_model"] > check["caught_no_log_alerts"]
+    assert check["cost_with_model"] < check["cost_no_log_alerts"]
     again = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()["meta"]["training"]
     assert again["model_version"] == "v0002"
     assert again["incumbent_test"] is not None  # the active model was scored on the same held-out alerts
@@ -247,3 +305,25 @@ def test_concurrent_saves_leave_a_matching_digest(env):
     loaded = load_model()
     assert loaded is not None
     assert not list(env.glob("*.tmp"))
+
+
+def test_a_model_that_fails_the_gate_does_not_score_the_batch(client, monkeypatch):
+    """Kept as a candidate; the batch is scored by rules only, and nothing becomes active."""
+    import product.pipeline as pipeline
+
+    monkeypatch.setattr(pipeline, "promotion_decision", lambda *a, **k: (False, "test gate says no"))
+    job = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()
+    meta = job["meta"]
+    assert meta["model_used"] == "rules_only"
+    training = meta["training"]
+    assert training["model_used"] == "candidate" and training["promoted"] is False
+    assert training["gate"] == "test gate says no" and training["test"]["alerts"] > 0
+    assert training["model_version"] == "v0001"
+    listing = client.get("/models").json()
+    assert [v["version"] for v in listing["versions"]] == ["v0001"]
+    assert listing["active"] is None
+    assert client.get("/model").json() == {"saved": False}
+    # Every alert in the upload is a warning, so rules only escalates none of them.
+    assert meta["escalate"] == 0 and meta["review"] == 0
+    items = client.get("/queue", params={"job_id": job["job_id"], "limit": 2000}).json()["items"]
+    assert items and {i["reason"] for i in items} == {"severity 'warning' below threshold"}

@@ -673,6 +673,8 @@
           : meta.model_used === "rules_only"
             ? "rules only (no model yet)"
             : "this job trained a new model");
+        const t = meta.training || {};
+        if (t.promoted === false && t.gate) parts.push("new model kept as a candidate: " + t.gate);
       }
       if (meta.labelled_by_real_marks) parts.push(`${meta.labelled_by_real_marks} alerts labelled by Real marks`);
       if (meta.cleared_by_noise_marks) parts.push(`${meta.cleared_by_noise_marks} labels cleared by Noise marks`);
