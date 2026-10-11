@@ -165,4 +165,4 @@ Older alert-only experiments live in `experiments/legacy_alerts_only/` (`run_m1`
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `../tools/build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 296 tests; `tests/integration` runs only with the Docker stack (`python -m pytest -q`) |
+| `tests/` | 300 tests; `tests/integration` runs only with the Docker stack (`python -m pytest -q`) |

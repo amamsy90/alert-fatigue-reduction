@@ -145,9 +145,11 @@
       "promotion_gate": {
         "budget_k": 10,
         "split_day": 44,
-        "model_used": "trained",
-        "promoted": true,
-        "gate": "held-out cost 1 < 60 for showing no log alerts; queue with its alerts: 18/44 held-out faults, 23 false items (cost 283); with rules only (severity) instead: 18/44, 26 false items (cost 286); without log alerts: 17/44, 21 false items (cost 291)",
+        "margin": 10.0,
+        "queue_saving": 3.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 18/44 held-out faults, 23 false items (cost 283); with rules only (severity) instead: 18/44, 26 false items (cost 286); without log alerts: 17/44, 21 false items (cost 291); saves 3, below the margin of 10 (1 missed fault x 10); kept as a candidate, rules only stays",
         "held_out_alerts": {
           "alerts": 72,
           "fault_alerts": 6,
@@ -297,6 +299,8 @@
       "promotion_gate": {
         "budget_k": 10,
         "split_day": 45,
+        "margin": 10.0,
+        "queue_saving": -46.0,
         "model_used": "rules_only",
         "promoted": false,
         "gate": "queue with its alerts: 37/45 held-out faults, 145 false items (cost 225); with rules only (severity) instead: 34/45, 157 false items (cost 267); without log alerts: 34/45, 69 false items (cost 179); kept as a candidate, rules only stays",
@@ -449,9 +453,11 @@
       "promotion_gate": {
         "budget_k": 10,
         "split_day": 44,
+        "margin": 10.0,
+        "queue_saving": 10.0,
         "model_used": "trained",
         "promoted": true,
-        "gate": "held-out cost 403 < 740 for showing no log alerts; queue with its alerts: 32/45 held-out faults, 212 false items (cost 342); with rules only (severity) instead: 32/45, 222 false items (cost 352); without log alerts: 28/45, 198 false items (cost 368)",
+        "gate": "held-out cost 403 < 740 for showing no log alerts; queue with its alerts: 32/45 held-out faults, 212 false items (cost 342); with rules only (severity) instead: 32/45, 222 false items (cost 352); without log alerts: 28/45, 198 false items (cost 368); saves 10 (margin 10)",
         "held_out_alerts": {
           "alerts": 571,
           "fault_alerts": 74,
@@ -600,6 +606,8 @@
       "promotion_gate": {
         "budget_k": 10,
         "split_day": 15,
+        "margin": 10.0,
+        "queue_saving": -2.0,
         "model_used": "rules_only",
         "promoted": false,
         "gate": "queue with its alerts: 14/14 held-out faults, 8 false items (cost 8); with rules only (severity) instead: 14/14, 24 false items (cost 24); without log alerts: 14/14, 6 false items (cost 6); kept as a candidate, rules only stays",
@@ -750,6 +758,8 @@
       "promotion_gate": {
         "budget_k": 10,
         "split_day": 15,
+        "margin": 10.0,
+        "queue_saving": 0.0,
         "model_used": "rules_only",
         "promoted": false,
         "gate": "queue with its alerts: 13/15 held-out faults, 85 false items (cost 105); with rules only (severity) instead: 12/15, 99 false items (cost 129); without log alerts: 12/15, 75 false items (cost 105); kept as a candidate, rules only stays",
@@ -900,6 +910,8 @@
       "promotion_gate": {
         "budget_k": 10,
         "split_day": 15,
+        "margin": 10.0,
+        "queue_saving": 0.0,
         "model_used": "rules_only",
         "promoted": false,
         "gate": "queue with its alerts: 14/14 held-out faults, 61 false items (cost 61); with rules only (severity) instead: 14/14, 87 false items (cost 87); without log alerts: 14/14, 61 false items (cost 61); kept as a candidate, rules only stays",

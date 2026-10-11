@@ -2,6 +2,18 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [Unreleased]
+
+### Changed
+- **Promotion gate margin.** A newly trained model is promoted only if the held-out queue with its alerts costs at least one missed fault (`PROMOTION_MIN_SAVING_MISSES` × miss cost, default 1 × 10) less than both the queue without log alerts and the queue that runs if it is refused. One held-out case moves the cost by that much, so a smaller saving could come from that case alone. `0` restores the previous rule. On RCAEval the gate now promotes the classifier on RE2 Train Ticket only (saving 10, exactly the margin); RE2 Online Boutique (saving 3: 283 against 286 and 291) is now refused. GAIA is unchanged (refused). Tests in `test_model_registry.py` and `test_settings.py`; `run_validate.py` checks the margin, the savings and which applications promote.
+- GAIA job timing: the report and docs gave both 27 s and 35.7 s. Re-measured three times on the same laptop with `perf/resources.py` (53.7, 54.9, 55.7 s; on battery power); every document now gives the median, 54.9 s, and the 27 s manual timing, which had no recorded machine, is dropped. Peak memory 505 MB.
+
+### Fixed
+- `docs/deployment.md` said login sessions were in-process (the scaling-path bullet), contradicting §3a (`auth.db` since 1.0.2). The in-process job, evaluation and `ops.json` locks are what keep the app to one worker.
+
+### Added
+- Report §11 and `docs/privacy_responsible_ai.md`: how to find and erase one person's ID in `queue.db`, `auth.db`, the audit log, evaluation uploads, model files and backups (a data-subject request). Report §7 and §8 now describe the `auth.db` sessions and the live-Prometheus fix from 1.0.2.
+
 ## [1.0.2] — 2026-10-11
 
 ### Changed (release)
