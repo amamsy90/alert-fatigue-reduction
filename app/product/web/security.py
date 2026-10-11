@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import secrets
-import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -21,6 +20,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
+from product.web import auth_store
 from product.web.uploads import _max_upload_bytes
 
 OPEN_PATHS = {"/health"}
@@ -63,10 +63,6 @@ def _match_password(user: str, password: str) -> tuple[str, str] | None:
     return None
 
 
-_LOGIN_LOCK = threading.Lock()
-_LOGIN_FAILS: dict[str, list[float]] = {}
-_LOGIN_UNTIL: dict[str, float] = {}
-
 
 def _login_limits() -> tuple[int, float]:
     """Failed attempts inside the window, then a lock of the same length in seconds."""
@@ -81,16 +77,12 @@ def _login_limits() -> tuple[int, float]:
     return max(1, fails), max(1.0, seconds)
 
 
-_SESSION_LOCK = threading.Lock()
-_SESSIONS: dict[str, tuple[str, str, float]] = {}
+# Sessions, the login lock and the ingest counters are kept in auth.db
+# (product/web/auth_store.py), so a restart keeps people signed in and keeps a lock.
 SESSION_SECONDS = 12 * 60 * 60
 MAX_SESSIONS = 200
 SESSION_COOKIE = "oncall_session"
 _ROLE_FREE_POSTS = {"/login", "/logout"}
-
-
-_INGEST_LOCK = threading.Lock()
-_INGEST_HITS: dict[str, list[float]] = {}
 
 
 def _int_env(name: str, default: int) -> int:
@@ -108,14 +100,8 @@ def _float_env(name: str, default: float) -> float:
 
 
 def reset_login_attempts() -> None:
-    """Clear the in-memory counters and sessions. Tests use this; the process otherwise keeps them."""
-    with _LOGIN_LOCK:
-        _LOGIN_FAILS.clear()
-        _LOGIN_UNTIL.clear()
-    with _SESSION_LOCK:
-        _SESSIONS.clear()
-    with _INGEST_LOCK:
-        _INGEST_HITS.clear()
+    """Clear sessions, the login lock and the ingest counters. Tests use this."""
+    auth_store.reset_all()
 
 
 def ingest_alert_cap() -> int:
@@ -130,15 +116,7 @@ def _ingest_batch_limits() -> tuple[int, float]:
 def _note_ingest_batch(client: str) -> float:
     """Record one ingest POST. Returns the window length when this client is over the cap."""
     n, window = _ingest_batch_limits()
-    now = time.monotonic()
-    with _INGEST_LOCK:
-        recent = [stamp for stamp in _INGEST_HITS.get(client, []) if now - stamp < window]
-        if len(recent) >= n:
-            _INGEST_HITS[client] = recent
-            return window
-        recent.append(now)
-        _INGEST_HITS[client] = recent
-        return 0.0
+    return auth_store.note_ingest_batch(client, time.time(), n, window)
 
 
 def _ingest_rate_response(request: Request) -> Response | None:
@@ -154,34 +132,17 @@ def _ingest_rate_response(request: Request) -> Response | None:
 
 def _login_wait(client: str) -> float:
     """Seconds left on this client's lock, or 0."""
-    with _LOGIN_LOCK:
-        until = _LOGIN_UNTIL.get(client, 0.0)
-        wait = until - time.monotonic()
-        if wait <= 0:
-            _LOGIN_UNTIL.pop(client, None)
-            return 0.0
-        return wait
+    return auth_store.lock_wait(client, time.time())
 
 
 def _note_login_failure(client: str) -> float:
     """Record one bad password. Returns the new lock length when this attempt starts one."""
     fails, seconds = _login_limits()
-    now = time.monotonic()
-    with _LOGIN_LOCK:
-        recent = [stamp for stamp in _LOGIN_FAILS.get(client, []) if now - stamp < seconds]
-        recent.append(now)
-        if len(recent) >= fails:
-            _LOGIN_FAILS.pop(client, None)
-            _LOGIN_UNTIL[client] = now + seconds
-            return seconds
-        _LOGIN_FAILS[client] = recent
-        return 0.0
+    return auth_store.note_login_failure(client, time.time(), fails, seconds)
 
 
 def _note_login_success(client: str) -> None:
-    with _LOGIN_LOCK:
-        _LOGIN_FAILS.pop(client, None)
-        _LOGIN_UNTIL.pop(client, None)
+    auth_store.clear_login_failures(client)
 
 
 def _locked_response(wait: float) -> Response:
@@ -362,14 +323,7 @@ def _session_identity(cookie_header: str | None) -> tuple[str, str] | None:
     token = _cookie_token(cookie_header)
     if not token:
         return None
-    with _SESSION_LOCK:
-        entry = _SESSIONS.get(token)
-        if entry is None:
-            return None
-        if entry[2] <= time.monotonic():
-            _SESSIONS.pop(token, None)
-            return None
-        return entry[0], entry[1]
+    return auth_store.get_session(token, time.time())
 
 
 def _basic_identity(header: str | None) -> tuple[str, str] | None:
@@ -410,8 +364,7 @@ def _drop_session(cookie_header: str | None) -> None:
     token = _cookie_token(cookie_header)
     if not token:
         return
-    with _SESSION_LOCK:
-        _SESSIONS.pop(token, None)
+    auth_store.drop_session(token)
 
 
 async def require_login(request: Request, call_next):
@@ -683,13 +636,8 @@ async def login(request: Request):
         return Response("Login required", status_code=401)
     _note_login_success(client)
     token = secrets.token_urlsafe(32)
-    now = time.monotonic()
-    with _SESSION_LOCK:
-        for stale in [t for t, entry in _SESSIONS.items() if entry[2] <= now]:
-            del _SESSIONS[stale]
-        while len(_SESSIONS) >= MAX_SESSIONS:
-            del _SESSIONS[min(_SESSIONS, key=lambda t: _SESSIONS[t][2])]
-        _SESSIONS[token] = (identity[0], identity[1], now + SESSION_SECONDS)
+    now = time.time()
+    auth_store.add_session(token, identity[0], identity[1], now + SESSION_SECONDS, now, MAX_SESSIONS)
     request.state.user = identity[0]
     response = JSONResponse({"user": identity[0], "role": identity[1]})
     _stamp_session(response, token, request)
