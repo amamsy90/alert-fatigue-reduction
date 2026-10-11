@@ -90,7 +90,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `MAX_INGEST_MB` | `10` | Largest JSON body `/ingest/*` and other JSON routes accept; bigger bodies get 413 while they stream in |
 | `INGEST_MAX_ALERTS` | `400` | Largest number of alerts in one ingest POST; bigger batches get 413 |
 | `INGEST_MAX_BATCHES` / `INGEST_WINDOW_SECONDS` | `60` / `60` | Ingest POSTs per client in the window; over the cap gets 429 |
-| `PAGE_KEY_MAX` | `10000` | Oldest paging keys are dropped so `ops.json` cannot grow without bound |
+| `PAGE_KEY_MAX` | `10000` | Oldest paging keys (by item start time) are dropped so `ops.json` cannot grow without bound; keys of items still in the history are always kept, so nothing is paged twice |
 | `AUDIT_LOG_MAX_BYTES` | `1000000` | Audit file is rotated to `audit.log.1` when it grows past this size |
 | `LOG_FORMAT` | text | `json` writes one JSON object per log line (stdout and the audit file) |
 | `INGEST_DEDUP_HOURS` | `24` | An alert with the same content seen within this window is not buffered again |
