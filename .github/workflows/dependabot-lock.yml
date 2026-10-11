@@ -1,0 +1,51 @@
+name: Dependabot lock sync
+
+# Dependabot's uv updater rewrites app/uv.lock but not app/requirements.lock,
+# the hash-pinned file the Docker image installs from (ADR 0007). Every runtime
+# bump then fails CI's "requirements.lock matches uv.lock" step. This job
+# regenerates requirements.lock on the Dependabot branch and reruns CI.
+#
+# pull_request_target is needed for a token that can push. It runs with write
+# access, so it only acts on Dependabot's own branches in this repository, and
+# it only runs `uv export`, which reads the lock file and executes no project
+# code.
+
+on:
+  pull_request_target:
+    paths: ["app/uv.lock"]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  requirements-lock:
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: astral-sh/setup-uv@v7
+      - name: Regenerate requirements.lock from uv.lock
+        working-directory: app
+        run: uv export --format requirements-txt --no-dev --locked --no-emit-project -o requirements.lock -q
+      - name: Commit it, then run CI on the new commit
+        run: |
+          if git diff --quiet -- app/requirements.lock; then
+            echo "requirements.lock already matches uv.lock"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/requirements.lock
+          git commit -m "Regenerate requirements.lock from uv.lock"
+          git push origin "HEAD:$BRANCH"
+          # A push made with this token starts no workflow, so CI is started by
+          # hand; its checks attach to the new commit and show on the PR.
+          gh workflow run ci.yml --ref "$BRANCH"

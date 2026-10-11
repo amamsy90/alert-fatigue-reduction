@@ -2,6 +2,14 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [Unreleased]
+
+### Added
+- `.github/workflows/dependabot-lock.yml`: on a Dependabot PR that changes `app/uv.lock`, regenerate `app/requirements.lock` on its branch and rerun CI. Dependabot's `uv` updater leaves `requirements.lock` stale, so every runtime-dependency bump failed CI's lock check (PR 12). ADR 0007 records it.
+
+### Changed
+- fastapi 0.143.0 (adds opentelemetry-api 1.45.1), mypy 2.4.0, ruff 0.16.10, pyarrow 25.0.1 (dev). Dependabot uses the `uv` ecosystem.
+
 ## [1.0.1] — 2026-10-11
 
 ### Changed (release)
