@@ -22,6 +22,9 @@ REPORT = Path(__file__).resolve().parent.parent / "FINAL_REPORT.md"
 TABLE_HEADING = "## Checked numbers"
 
 
+RCA_APPS = {"Online Boutique": "ob", "Sock Shop": "ss", "Train Ticket": "tt"}
+
+
 def _fail(msg: str) -> None:
     raise SystemExit(f"VALIDATION FAIL: {msg}")
 
@@ -97,6 +100,9 @@ def computed_numbers() -> dict[str, float]:
             out[f"ablation.K20.{name}"] = float(_row(a, name)["detection_rate"])
             out[f"ablation.false.K20.{name}"] = float(_row(a, name)["false_items_per_day"])
         out["ablation.attached.K20.classifier"] = float(_row(a, "classifier")["attached_alerts"])
+        # What the tool runs on GAIA: the gate refuses the classifier, so log alerts come from severity.
+        out["ablation.K20.shipped"] = float(_row(a, "severity")["detection_rate"])
+        out["ablation.false.K20.shipped"] = float(_row(a, "severity")["false_items_per_day"])
 
     notes = ROOT / "classifier_ablation_gaia.json"
     if notes.exists():  # run_classifier_ablation.py: why severity attaches nothing, and the product's gate
@@ -118,6 +124,8 @@ def computed_numbers() -> dict[str, float]:
         out["gate.queue.caught_no_log_alerts"] = float(check["caught_no_log_alerts"])
         out["gate.queue.false_with_model"] = float(check["false_items_with_model"])
         out["gate.queue.false_no_log_alerts"] = float(check["false_items_no_log_alerts"])
+        out["gate.queue.caught_fallback"] = float(check["caught_fallback"])
+        out["gate.queue.false_fallback"] = float(check["false_items_fallback"])
 
     nab = ROOT / "nab_eval.csv"
     if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
@@ -148,6 +156,40 @@ def computed_numbers() -> dict[str, float]:
             out[f"rcaeval.{dataset}.jump_chance"] = float(jump["chance"])
             out[f"rcaeval.{dataset}.jump_train_false"] = float(fit["train_false"])
             out[f"rcaeval.{dataset}.K5"] = float(yours["detection_rate"])
+
+    resources = ROOT / "resources_gaia.json"
+    if resources.exists():  # perf/resources.py (needs GAIA)
+        used = json.loads(resources.read_text(encoding="utf-8"))
+        for field in ("wall_seconds", "peak_rss_mb", "peak_rss_mb_before_job", "db_mb", "db_kb_per_day"):
+            out[f"resources.{field}"] = float(used[field])
+
+    logs = ROOT / "rcaeval_logs.csv"
+    if logs.exists():  # only after tools/fetch_rcaeval_re23.py + run_rcaeval_logs.py
+        frame = pd.read_csv(logs)
+        facts = json.loads((ROOT / "rcaeval_logs.json").read_text(encoding="utf-8"))
+        jumps = sum(app["jumps"] for app in facts["apps"])
+        out["rcalogs.early_jump_share"] = sum(app["early_jumps"] for app in facts["apps"]) / jumps
+        for app in facts["apps"]:
+            suite, short = app["suite"], RCA_APPS[app["app"]]
+            rows = frame[(frame["suite"] == suite) & (frame["app"] == app["app"]) & (frame["budget_k"] == 10)]
+            key = f"rcalogs.{suite}.{short}"
+            for name, label in (("no_alerts", "none"), ("severity", "severity"), ("classifier", "classifier")):
+                row = rows[rows["queue"] == name].iloc[0]
+                out[f"{key}.{label}"] = float(row["detection_rate"])
+                out[f"{key}.false.{label}"] = float(row["false_items_per_day"])
+            best = rows[rows["queue"] == "classifier"].iloc[0]
+            out[f"{key}.classifier.ci_low"] = float(best["ci_low"])
+            out[f"{key}.classifier.ci_high"] = float(best["ci_high"])
+            diff = app["by_k"]["10"]["classifier_minus_no_alerts"]["detection"]
+            out[f"{key}.diff.ci_low"] = float(diff[1])
+            out[f"{key}.diff.ci_high"] = float(diff[2])
+            out[f"{key}.placebo"] = float(app["by_k"]["10"]["placebo_caught"])
+            out[f"{key}.test_cases"] = float(app["test_cases"])
+            if app["promotion_gate"]["promoted"]:
+                check = app["promotion_gate"]["queue_check"]
+                for field in ("faults", "caught_with_model", "false_items_with_model", "caught_fallback",
+                              "false_items_fallback", "caught_no_log_alerts", "false_items_no_log_alerts"):
+                    out[f"{key}.gate.{field}"] = float(check[field])
     return out
 
 
@@ -181,6 +223,8 @@ def claims_still_hold() -> None:
     if notes.exists():
         facts = json.loads(notes.read_text(encoding="utf-8"))
         gate = facts["promotion_gate"]
+        if gate["queue_check"].get("fallback") != "rules only (severity)":
+            _fail("the GAIA gate no longer falls back to severity rules; the 'shipped configuration' row is wrong")
         if gate["promoted"] or gate["model_used"] != "rules_only":
             _fail("the promotion gate now promotes the classifier on GAIA; rewrite §5, §9, §12 and §B4")
         if facts["severity_K20"]["alerts_attached"] != 0:
@@ -200,6 +244,14 @@ def claims_still_hold() -> None:
         jump = frame[(frame["queue"] == "jump_rule") & (frame["budget_k"] == 5)]
         if (jump["detection_no_budget"] <= jump["chance"]).any():
             _fail("RCAEval jump rule is no longer above its chance line; update §B5")
+    logs = ROOT / "rcaeval_logs.json"
+    if logs.exists():
+        facts = json.loads(logs.read_text(encoding="utf-8"))
+        promoted = sorted(f"{a['suite']} {a['app']}" for a in facts["apps"] if a["promotion_gate"]["promoted"])
+        if promoted != ["RE2 Online Boutique", "RE2 Train Ticket"]:
+            _fail(f"the gate now promotes the classifier on {promoted}; rewrite the RCAEval RE2/RE3 gate sentences (§B5)")
+        if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
+            _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
 
 
 def main() -> None:

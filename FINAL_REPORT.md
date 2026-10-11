@@ -63,10 +63,10 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 273/273, 90%, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 279/279, 90%, 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 273 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 279 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ## 4. Target users and use case
 
@@ -102,6 +102,10 @@ flowchart TD
     L --> M[Job, decisions and metrics recorded for monitoring]
 ```
 
+**UML use-case diagram.** Actors on the left are people; actors on the right are the systems the tool talks to. Scoring a batch always includes training and gating a model when labels exist, and paging (which sends only in Live mode); a Real / Noise mark extends training with a new label. The figure is drawn by `app/make_figures.py`.
+
+![UML use-case diagram of the on-call queue](figures/use_cases.svg)
+
 ## 5. Why use AI?
 
 **What needs AI.** Deciding which *log alerts* are worth a slot. Their text, source, severity and timing interact in ways fixed rules do not capture, and the right answer differs per team. A classifier trained on the team's own labels (and later its own Real / Noise marks) learns that, with a miss weighted ten times a false alarm.
@@ -114,7 +118,7 @@ flowchart TD
 
 **Existing model or API.** An existing, well-understood model family (scikit-learn logistic regression) trained locally; no external AI API or LLM, so no data leaves the server and there is no per-call cost.
 
-**What the classifier adds, measured.** An ablation on GAIA (`run_classifier_ablation.py`, §B4) keeps the whole queue and changes only how log alerts are chosen for their quarter of the slots. At K = 20 the queue with the classifier catches 69.6% with 1.8 false items a day; with log severity instead it catches 71.0% (1.4 false a day); with no log alerts at all, 71.2% (1.2 false a day). **On GAIA the classifier adds no catches; it costs about 1.6 points and 0.6 false items a day**, because 82% of GAIA faults write no log line and the alerts it escalates spend slots that jumps would have used. Its value is therefore not shown on this benchmark. It is kept for teams whose faults *do* log: it is the only part that learns from that team's Real / Noise marks (a Noise mark becomes a negative label at the next retrain), and alerts can never take more than a quarter of the budget. **It is not on by default.** A trained model is used only if, on the held-out part of its batch, it beats the same queue *without* log alerts (§9). The first model has to pass too. On GAIA it does not (848 vs 872 of 1,223 held-out faults caught, §B4), so the tool keeps it as a candidate and scores GAIA with rules only.
+**What the classifier adds, measured.** An ablation on GAIA (`run_classifier_ablation.py`, §B4) keeps the whole queue and changes only how log alerts are chosen for their quarter of the slots. At K = 20 the queue with the classifier catches 69.6% with 1.8 false items a day; with log severity instead it catches 71.0% (1.4 false a day); with no log alerts at all, 71.2% (1.2 false a day). **On GAIA the classifier adds no catches; it costs about 1.6 points and 0.6 false items a day**, because 82% of GAIA faults write no log line and the alerts it escalates spend slots that jumps would have used. Its value is therefore not shown on this benchmark. It is kept for teams whose faults *do* log: it is the only part that learns from that team's Real / Noise marks (a Noise mark becomes a negative label at the next retrain), and alerts can never take more than a quarter of the budget. **It is not on by default.** A trained model is used only if, on the held-out part of its batch, it beats the same queue *without* log alerts and the queue it would fall back to (§9). The first model has to pass too. On GAIA it does not (848 vs 872 of 1,223 held-out faults caught, §B4), so the tool keeps it as a candidate and scores GAIA with rules only. **On a second dataset it does add catches where faults log.** On RCAEval RE2 Train Ticket the classifier lifts the queue from 60.0% to 73.3% of 45 test faults at K = 10 (+13.3 points, 95% interval +4.4 to +24.4), and the gate promotes it there and on RE2 Online Boutique; on Sock Shop and on the RE3 code faults it adds no catch beyond one case, and the gate keeps it out (§B5).
 
 **Limitations of AI here.** It needs labels of both classes, so a new team starts in rules-only mode; learned thresholds do not transfer between datasets (one learned on GAIA's 1 GB faults rejects 0.5 GB faults, §B3); and 82% of GAIA faults leave no log, which caps a log-only model near 18% (§B6).
 
@@ -163,6 +167,28 @@ One Docker container per team, on the team's own server or VM, behind a TLS reve
 
 Measured capacity: 50 concurrent users at 228 requests/s with p95 0.32 s; a 400-alert webhook batch scores in 0.2 s and the full GAIA month in 27 s. The design runs one worker per team; the scaling path is one container per team, or PostgreSQL with shared locks for a shared deployment (ADR 0003).
 
+**Resources and operating cost (learning objective 11).** Measured with `app/perf/resources.py`, which runs the product's own scoring job on the GAIA month (34,863 alerts, 62 days, shadow mode) against a throw-away database on the author's Windows laptop (20 logical CPUs, Python 3.12; `results/resources_gaia.json`):
+
+| Resource | Measured |
+|---|---|
+| Wall time for the whole month in one job (load, score, train and gate, store) | 35.7 s |
+| Peak memory of the process | 500 MB (172 MB of it is Python and the libraries before the job) |
+| Database growth | 13.0 MB for 62 days: about 215 KB per day at GAIA's alert volume |
+| One saved model version | 0.02 MB |
+| Calls to an external AI service | none, so $0 per call |
+
+The cost estimate below rests on **assumptions**, stated so they can be changed: one container per team, running all month (730 hours), on a 2 vCPU / 4 GiB cloud VM (the measured peak of 500 MB leaves room for the web app and the operating system), with a 20 GB disk. Prices are AWS list prices for US East (N. Virginia), Linux, read on 11 October 2026: t3.medium $0.0418 an hour on demand and $0.025 an hour with a 1-year reservation ([AWS T3 page](https://aws.amazon.com/ec2/instance-types/t3/)); gp3 disk at $0.08 per GB-month (the rate in [AWS's EBS pricing examples](https://aws.amazon.com/ebs/pricing/)). Other providers and regions differ; a team's own server costs only its share of an existing machine.
+
+| Item | Per team per month |
+|---|---|
+| VM, on demand (0.0418 × 730) | $30.51 |
+| VM, 1-year reservation (0.025 × 730) | $18.25 |
+| Disk, 20 GB gp3 (one year of jobs at GAIA's volume is about 78 MB) | $1.60 |
+| AI inference | $0 (in-process scikit-learn model) |
+| **Total** | **about $20–32** |
+
+Not priced: data transfer (pages are a few KB), backups (a copy of a 13 MB database), and the largest cost, people: the queue exists to spend on-call hours on at most K items a day.
+
 **AI governance.** The operator is responsible for the AI. It may only order and select items in the queue (escalate, ask a person, hide with a reason); it never acts on infrastructure. Humans review everything in shadow mode, answer "ask a person" items, and mark Real / Noise. Every decision records its reason, score and the model version. New models pass a promotion gate and can be rolled back; the change is audited. No data is sent to an external AI service. Full answers: `docs/deployment.md`.
 
 ## 8. Testing strategy
@@ -180,20 +206,32 @@ Hallucination and prompt injection do not apply (no generative model), but the e
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% | 273 / 273 (Python 3.10 and 3.12) |
+| Tests passing | 100% | 279 / 279 (Python 3.10 and 3.12) |
 | Line coverage | ≥ 85% | 90% |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
-| Report numbers match results | every checked number | 93 / 93 |
+| Report numbers match results | every checked number | 189 / 189 |
 
 CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py`, a dependency audit (`pip-audit` on the hash-pinned lock) and a Docker build with a health check on every push. The audit step was added on 7 October with an option `pip-audit` does not have, so that job failed on that commit; it was corrected on 10 October (a hand run of the corrected command found no known vulnerabilities). Details: `docs/test_plan.md`.
 
 ## 9. MLOps
 
 - **Versioning.** Code in Git through pull requests; dependencies in `uv.lock` and a hash-pinned `requirements.lock`; configuration in `src/config.py` and per-environment files; data by fingerprint in the experiment log; **models as numbered versions with model cards** in `models/registry.json` (training time, data fingerprint, code version, held-out results, gate decision). No prompts (no LLM).
-- **Reproducibility.** `uv sync --group dev`, `uv run pytest`, `uv run python run_validate.py`, `docker compose up`; every environment variable is documented; the public datasets are fetched by scripts (`tools/fetch_gaia.py`, `fetch_nab.py`, `fetch_smd.py`, `fetch_rcaeval_mem.py`), and `fetch_gaia.py` checks the SHA-256 of every GAIA file used.
-- **Model updates.** A new model is trained when a batch has labels of both classes, on the batch's first 7 days, and tested on the rest. It becomes active, and scores the batch, only if on that held-out window (1) it costs less than showing no log alerts (a miss = 10, a false alarm = 1); (2) the whole queue with its alerts costs less than the queue without log alerts (a missed fault = 10, a false item = 1); and (3) it costs no more than the active model on the same held-out alerts. The first model is not promoted just because none is active. A model that fails stays a candidate, and the batch is scored by the active model, or by rules only. On GAIA the classifier passes (1) and fails (2) (§B4), so rules only stays. The operator can roll back to any version (`POST /models/{version}/activate`, hash-checked, audited). Precision from engineers' marks and alert-volume drift are monitored, and a retrain is suggested after 7 days or new Real marks.
+- **Reproducibility.** `uv sync --group dev`, `uv run pytest`, `uv run python run_validate.py`, `docker compose up`; every environment variable is documented; the public datasets are fetched by scripts (`tools/fetch_gaia.py`, `fetch_nab.py`, `fetch_smd.py`, `fetch_rcaeval_mem.py`, `fetch_rcaeval_re23.py`), and `fetch_gaia.py` and `fetch_rcaeval_re23.py` check the SHA-256 of every file used.
+- **Model updates.** A new model is trained when a batch has labels of both classes, on the batch's first 7 days, and tested on the rest. It becomes active, and scores the batch, only if on that held-out window (1) it costs less than showing no log alerts (a miss = 10, a false alarm = 1); (2) the whole queue with its alerts costs less (a missed fault = 10, a false item = 1) than both the queue without log alerts and the queue the batch falls back to if the model is refused (the active model, or rules only = severity), so the model is tested against what would actually run; and (3) it costs no more than the active model on the same held-out alerts. The first model is not promoted just because none is active. A model that fails stays a candidate, and the batch is scored by the active model, or by rules only. On GAIA the classifier passes (1) and fails (2) (§B4), so rules only stays. The operator can roll back to any version (`POST /models/{version}/activate`, hash-checked, audited). Precision from engineers' marks and alert-volume drift are monitored, and a retrain is suggested after 7 days or new Real marks.
+- **Retrain and rollback triggers.** Numeric, from the signals the tool already records. *Automatic* rows are enforced by code; *operator* rows are the runbook (the tool shows the signal, a person acts; it never rolls back on its own).
+
+| Trigger | Threshold | Action | Who |
+|---|---|---|---|
+| Model age | ≥ 7 days since training (`RETRAIN_AFTER_DAYS`) | `retrain_due` reminder on the Queue page: run a job with labels (every such job trains and gates a new model) | Automatic flag |
+| New labels | ≥ 1 new Real mark since training | Same reminder | Automatic flag |
+| Alert-volume drift | last batch ÷ median of earlier batches outside 0.5–2 | Retrain on the next batch; check the alert sources | Operator, from `/monitoring` |
+| Precision from marks | < 0.70 with ≥ 20 marks | Retrain; if it stays < 0.70 for the next 20 marks, roll back | Operator, from `/monitoring` |
+| Promotion gate | new model's held-out cost not below the fallback queue and no-log-alerts queue | Model is not activated (kept as a candidate) | Automatic |
+| After an activation | precision from the first 20 marks < 0.70, or more than 0.10 below the previous version's | Roll back: `POST /models/{version}/activate` with the previous version | Operator |
+| After an activation | escalated alerts per job more than twice the median of the 7 jobs before it, or a failed scoring job | Roll back as above, then investigate | Operator |
+
 - **Testing before release.** CI for code; the promotion gate and shadow mode for models.
 - **Experiment tracking.** Every experiment script appends to `app/results/experiments.jsonl`: commit, library versions, configuration, data fingerprint, output hashes, headline metrics and the reason for the run.
 
@@ -214,7 +252,20 @@ Evaluation criteria with measured values, justification for each target and exam
 
 ## 11. Privacy and responsible AI
 
-**Privacy.** Alert messages may contain host names or user IDs. All data stays on the team's server (SQLite and a volume), behind the login. Messages are cut to 300 characters, and IDs and numbers are normalised before learning. Jobs and evaluations are pruned; marks keep only service and time. No data is sent to an external AI service; only paging summaries go to the team's own paging tools, in Live mode.
+**Privacy.** Alert messages may contain host names or user IDs. All data stays on the team's server (SQLite and a volume), behind the login. Messages are cut to 300 characters, and IDs and numbers are normalised before learning. Jobs and evaluations are pruned; marks keep only service and time (retention table below). No data is sent to an external AI service; only paging summaries go to the team's own paging tools, in Live mode.
+
+**Data retention.** Most limits are counts, set by environment variables; the period they give depends on how often jobs run. The periods below assume one scoring job an hour (Alertmanager batches) where a count is converted; rows marked *policy* are what the operator should enforce, because the code does not delete them.
+
+| Data | Kept by the code | Period (assumption: one job an hour) | Policy |
+|---|---|---|---|
+| Ingest buffer (raw webhook rows) | until the next successful job | ≤ 1 hour | — |
+| Duplicate fingerprints | `INGEST_DEDUP_HOURS` = 24 | 24 hours | — |
+| Jobs: alerts, decisions, items | newest `JOB_RETENTION` = 200 jobs | about 8 days (200 days at one job a day) | — |
+| *Evaluate my data* uploads | newest `EVAL_RETENTION` = 30 | depends on use | delete uploads after 30 days |
+| Real / Noise marks (kind, service, time window; no message) | kept | — | 12 months, the training window a team needs |
+| Model versions and model cards | kept until the operator deletes them | — | keep the active version and the last 5; delete older after 12 months |
+| Audit log file | rotated at `AUDIT_LOG_MAX_BYTES` = 1 MB, one old file kept | size-bound | ship to the team's log store and keep 12 months |
+| Backups (`product.backup`) | in a folder the operator owns | — | 30 days |
 
 **Responsible AI.** Fairness between services: metric rules treat every service the same, and alerts are capped at a quarter of the budget, so services that log a lot cannot crowd out the rest. Every item carries a reason. Humans oversee through shadow mode, "ask a person" and marks. Hidden alerts stay visible. The system never acts on infrastructure. Queue data should not be used to rate engineers. Details: `docs/privacy_responsible_ai.md`.
 
@@ -222,28 +273,28 @@ Evaluation criteria with measured values, justification for each target and exam
 
 **In scope (built):** the causal budgeted queue (jumps, leaks, gaps, alerts); the alert classifier with a model registry, promotion gate and rollback; the web app, API and CLI; Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie connectors; *Evaluate my data*; shadow mode and marks; security hardening; monitoring endpoints; Docker and per-environment settings; CI; the GAIA, NAB, SMD and RCAEval evaluations.
 
-**Out of scope (not built):** automatic remediation; multi-tenant hosting and user roles; LLM summaries of incidents; CPU, disk or network fault detection inside microservices (measured only on SMD servers); a managed cloud deployment; browser UI tests; a live pilot with a real team (the next step).
+**Out of scope (not built):** automatic remediation; multi-tenant hosting and user roles; LLM summaries of incidents; dedicated CPU, disk or network fault detectors inside microservices (the unit-free jump rule is measured on such faults on SMD servers and RCAEval RE2, §B5); a managed cloud deployment; browser UI tests; a live pilot with a real team (the next step).
 
 **Limitations** (say these if asked):
 
-1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (§B3) tests other sizes and shapes. §B5 tests other domains (NAB, a shop, SMD servers) and the same memory injection on three other microservice applications (RCAEval), with small test sets and a chance line.
+1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (§B3) tests other sizes and shapes. §B5 tests other domains (NAB, a shop, SMD servers) and, on three other microservice applications, the same memory injection and CPU, disk, network and code faults with logs (RCAEval), with small test sets and a chance line.
 2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
 3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
 4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels; the per-series confirm levels (§B4) are measured but not in the headline.
-5. **The AI component adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The classifier is kept for teams whose faults log and who mark items; that benefit is argued, not measured here. The promotion gate now checks this on every batch, and on GAIA it keeps the classifier out (§9, §B4).
+5. **The AI component adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The classifier is kept for teams whose faults log and who mark items: on RCAEval RE2 Train Ticket, where faults log on the broken service, it adds 13.3 points (95% interval +4.4 to +24.4) and the gate promotes it; on the other five RCAEval application suites it adds at most one case (§B5). The promotion gate now checks this on every batch, and on GAIA it keeps the classifier out (§9, §B4).
 6. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
 
-**Future work.** RCAEval's CPU, disk, delay and packet-loss injections (only the memory injection is scored, in §B5); a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out (behind a trusted proxy the client is read from the right of `X-Forwarded-For`, across every header line; a code review on 10 October found the leftmost, client-written value was used, which let a client dodge the lock, and that only the first header line was read; both are fixed with regression tests), paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
+**Future work.** A live, continuous log stream (RCAEval recordings are 24–30 minutes, replayed one a day) to confirm the RE2 result for the classifier; a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out (behind a trusted proxy the client is read from the right of `X-Forwarded-For`, across every header line; a code review on 10 October found the leftmost, client-written value was used, which let a client dodge the lock, and that only the first header line was read; both are fixed with regression tests), paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
 
 ## 13. Success criteria
 
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 273 / 273 | Yes |
+| At least 90% of predefined test cases pass | 279 / 279 | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
-| AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA |
+| AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds 13.3 points with an interval above zero, and the gate promotes it (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, on one of six RCAEval application suites, not on GAIA |
 | No critical security vulnerabilities in testing | 0 critical. R1 through R8 are closed and tested | Yes |
 | Deployable from documented instructions | `docker compose up`, `docs/deployment.md`, CI Docker job | Yes |
 | Another person can reproduce the environment | `uv sync`, lock files, `run_validate.py` | Yes |
@@ -266,8 +317,11 @@ Evaluation criteria with measured values, justification for each target and exam
 | Rate rule: `delta(mem[5m]) > 0.5 GB` | 68.9% | 81% | 17.4 | 2.1 | 88% |
 | Jump rule, first come | 67.8% | 80% | 17.5 | 2.4 | 86% |
 | **Jump rule + learned threshold** (detector alone) | **72.6%** | **86%** | 17.1 | **1.0** | **94%** |
-| **Full queue** (jumps + leaks + gaps + alerts) | **69.6%** | **82%** | 17.7 | 1.8 | 90% |
+| **Full queue with the classifier** (jumps + leaks + gaps + classifier alerts; refused by the gate on GAIA) | **69.6%** | **82%** | 17.7 | 1.8 | 90% |
+| **Shipped configuration** (the gate keeps the classifier out: jumps + leaks + gaps + log alerts by severity) | **71.0%** | **84%** | 17.6 | 1.4 | 92% |
 | *Old headline: day's jumps ranked by final peak (not real time)* | *72.9%* | *86%* | *17.5* | *1.3* | *93%* |
+
+**What the tool runs on GAIA is the shipped row.** The promotion gate refuses the classifier on GAIA (§B4), so the tool scores log alerts by severity; that row is the same queue with severity alerts (`run_classifier_ablation.py`, `severity`). The full-queue row is kept because every later comparison (walk-forward, options, ablation) was measured on it.
 
 **Best possible at K = 20 is 84.9%**: GAIA injects 22 faults a day, more than 20 on 34 of 55 days.
 
@@ -374,7 +428,7 @@ Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): 
 ---
 **Why the severity row attaches no alerts.** An alert rides on a jump (no slot of its own) only if it arrives while a shown metric item on *its own service* is still open (`build_queue`). The classifier row attaches 280 alerts that way. The severity row attaches none, and the data explains why (`results/classifier_ablation_gaia.json`). The 507 test alerts that carry a fault are all `warning` (471) or `info` (36); no test alert is `critical` or `high`. So the severity rule never escalates a fault's alert. It escalates 44 `error` lines, with 14 more cut by its own 20-a-day limit. All 44 fall on 4 days, none carries a fault, and they are nightly jobs reporting that a log upload failed. None arrives while a shown metric item on its service is open: the nearest one on the same service is at least 199 minutes away (median 617). So 11 of them take a slot of their own, the rest find the day's alert share or budget used, and the row ends up close to "no log alerts".
 
-**What the shipped gate does with this.** The tool trains the classifier on the first 7 days of a batch and tests it on the rest (§9). A model must cost less than showing no log alerts on the held-out alerts, and the whole held-out queue with its alerts must cost less than the same queue without log alerts. The first model is not promoted just because no model is active. On GAIA the classifier passes the first test: it finds 339 of the 507 fault-bearing held-out alerts. It fails the second: with its alerts the queue catches 848 of 1,223 held-out faults with 95 false items, against 872 with 58 false items without log alerts. So it is registered as a candidate, and GAIA is scored by rules only (log alerts by severity, as in the second row). The gate's queue is the tool's, not this table's (it uses the tool's own confirm settings), so its counts differ a little from the rows above; the direction is the same. `run_classifier_ablation.py` records the decision in the same JSON file.
+**What the shipped gate does with this.** The tool trains the classifier on the first 7 days of a batch and tests it on the rest (§9). A model must cost less than showing no log alerts on the held-out alerts, and the whole held-out queue with its alerts must cost less than both the same queue without log alerts and the queue that runs if the model is refused (here rules only, log alerts by severity). The first model is not promoted just because no model is active. On GAIA the classifier passes the first test: it finds 339 of the 507 fault-bearing held-out alerts. It fails the second: with its alerts the queue catches 848 of 1,223 held-out faults with 95 false items, against 871 with 70 false items with severity alerts and 872 with 58 false items without log alerts. So it is registered as a candidate, and GAIA is scored by rules only (log alerts by severity, as in the second row). The gate's queue is the tool's, not this table's (it uses the tool's own confirm settings), so its counts differ a little from the rows above; the direction is the same. `run_classifier_ablation.py` records the decision in the same JSON file.
 
 
 ## B5. Beyond microservices: any metric, any team
@@ -417,6 +471,29 @@ The labelled service's memory series does move: median rise 0.51 GB, 0.30 GB and
 | Train Ticket | 64 | 0.33 GB | 1,512 | 61.5% | 40.9% | 0% |
 
 The queue that would page someone catches 0 of 13 faults on every application at K = 2, 5 and 10. On the training recordings the jump rule caught all 12 faults and also raised 679, 220 and 1,323 other episodes. At the usual cost (a miss counts 10, a false episode counts 1) that is more expensive than a rate rule which raises nothing, so the tuner keeps the rate rule. Under the same cap the jump rule still misses: the test day contains hundreds of episodes and five slots, and the slots go to episodes that miss the injection. The fault is visible on all three applications. This budget and this cost leave it off the page.
+
+
+**Second dataset for the AI component: RCAEval RE2 and RE3 (logs and metrics).** On GAIA the alert classifier adds no catches (§B4), so it is tested again on the 360 RCAEval cases that have logs: RE2 (cpu, memory, disk, delay, packet loss and socket faults; 90 cases per application) and RE3 (code-level faults F1–F5; 30 per application), in Online Boutique, Sock Shop and Train Ticket ([RCAEval](https://huggingface.co/datasets/phamquiluan/RCAEval), MIT licence). `tools/fetch_rcaeval_re23.py` downloads the logs and metrics (about 570 MB; traces are not used) and checks the SHA-256 of all 720 files; `run_rcaeval_logs.py` scores them (`results/rcaeval_logs.csv`, `results/rcaeval_logs.json`).
+
+How the recordings were used (a documented subset, fixed before scoring): cases in start order, the first half trains (classifier, its threshold and the jump confirm gates) and the later half is scored once; each recording is laid on its own on-call day, so K is per case; the fault is the root-cause service from the injection to the end of the recording. Metrics: the product's unit-free jump rule (robust mode) on each service's cpu, memory, disk I/O, socket, p90 latency and error series; leaks and gaps are off, and jumps that start in the first 5 minutes of a recording (a short rolling baseline that live data never has: 43% of all jumps) are dropped. Logs: a line is an alert only at warning or error level (from its level token, or error words when it has none); identical lines from one service within 60 s are one alert. **An alert counts as a catch only if it comes from the root-cause service after the injection**, the same rule as GAIA; on Online Boutique many faults log at the caller (`frontend`) as well as, or instead of, the broken service, so this rule is strict. Every variant shares the same metric items; only the log alerts change, as in §B4. Daily budget K = 10 (2 alert slots; K = 5 and 20 are in the CSV). Rates have 95% Wilson intervals; the difference to "no log alerts" has a 95% bootstrap interval over test cases. The *placebo* column scores the same no-log-alerts queue against a fake fault on the root-cause service in the quiet part of each recording (7 minutes; 10 on RE3 Train Ticket): metric catches by chance are rare.
+
+| Suite | Application | Test cases | No log alerts | Severity | Classifier (95% CI) | Classifier − no log alerts, points (95% CI) | False items / day: none / severity / classifier | Placebo catches | Gate |
+|---|---|---|---|---|---|---|---|---|---|
+| RE2 | Online Boutique | 45 | 44.4% | 46.7% | 46.7% (32.9%–60.9%) | +2.2 pts (+0.0 to +6.7) | 0.42 / 0.53 / 0.47 | 0 / 45 | **promoted** |
+| RE2 | Sock Shop | 45 | 84.4% | 84.4% | 86.7% (73.8%–93.7%) | +2.2 pts (+0.0 to +6.7) | 1.42 / 3.38 / 3.13 | 2 / 45 | refused (rules only) |
+| RE2 | Train Ticket | 45 | 60.0% | 71.1% | 73.3% (59.0%–84.0%) | +13.3 pts (+4.4 to +24.4) | 3.27 / 3.87 / 3.56 | 2 / 45 | **promoted** |
+| RE3 | Online Boutique | 15 | 100.0% | 100.0% | 100.0% (79.6%–100.0%) | +0.0 pts (+0.0 to +0.0) | 0.53 / 1.60 / 0.53 | 0 / 15 | refused (rules only) |
+| RE3 | Sock Shop | 15 | 93.3% | 93.3% | 93.3% (70.2%–98.8%) | +0.0 pts (+0.0 to +0.0) | 4.07 / 5.40 / 4.67 | 1 / 15 | refused (rules only) |
+| RE3 | Train Ticket | 15 | 100.0% | 100.0% | 100.0% (79.6%–100.0%) | +0.0 pts (+0.0 to +0.0) | 1.93 / 3.67 / 1.93 | 0 / 15 | refused (rules only) |
+
+What this shows, with only 45 (RE2) or 15 (RE3) test cases per application:
+
+- **The classifier does add catches on one application.** On RE2 Train Ticket, where faults leave error logs on the broken service, it catches 6 faults the metric items miss and loses none: +13.3 points, interval +4.4 to +24.4. Severity alerts gain 5 cases, with more false items a day (3.87 against 3.56). On RE2 Online Boutique and Sock Shop it adds one case each (interval includes 0).
+- **On RE3 the metric items already catch 93–100%** of the code faults at K = 10, so log alerts cannot add catches there; the classifier keeps the false items at the metric-only level on two applications, where severity adds 1.1–1.7 a day.
+- **Sock Shop logs are noisy:** both alert variants add 1.7–2.0 false items a day on RE2 (the classifier 1.71, severity 1.96).
+- **The promotion gate decides per application, as designed.** It promotes the classifier on RE2 Online Boutique and RE2 Train Ticket, where the queue with its alerts costs less than both the severity fallback and no log alerts (Train Ticket: 32 of 45 held-out faults with 212 false items, against 32 with 222 by severity and 28 with 198 without log alerts). It refuses it on RE2 Sock Shop (more false items than it buys) and on all of RE3 (no catch to buy). The gate splits at the first alert's time of day, so on RE2 Online Boutique and RE3 Online Boutique and Train Ticket its held-out window starts after one test case's injection (one held-out fault fewer); its queue check also keeps the early-recording jumps, which cost all three of its queues the same slots.
+
+Caveats: small test sets (the 95% intervals are 20–30 points wide); one train/test split per application; recordings are short (24–30 minutes) and replayed one per day, which is not a live stream; labels are the dataset's root-cause service, so a caller's error log counts as noise; the level rule for logs without a level token is a keyword list. The classifier's value is therefore **shown on one of six application suites, with a confidence interval that excludes zero**, and the gate keeps it out where it does not pay.
 
 ---
 
@@ -485,6 +562,9 @@ python ../tools/fetch_smd.py      # needs internet, ~240 MB
 python run_smd.py                # 28 machines, about 15 min; resumes if interrupted
 python ../tools/fetch_rcaeval_mem.py   # needs internet; RE1 memory cases only
 python run_rcaeval.py            # three applications, a few minutes
+python ../tools/fetch_rcaeval_re23.py  # needs internet, ~570 MB; RE2/RE3 logs + metrics, SHA-256 checked
+python run_rcaeval_logs.py       # RE2 and RE3, about 8 minutes on an 8-core Linux box; Train Ticket RE2 needs several GB of RAM
+python perf/resources.py         # time, peak memory and disk of one GAIA job (§7)
 python make_figures.py
 python run_validate.py
 ```
@@ -522,7 +602,7 @@ AI coding assistants were used while building this project: for code review, ref
 | This report | `FINAL_REPORT.md` |
 | Code + tests | `app/` |
 | Result tables | `app/results/` |
-| Figures | `figures/detection_vs_k.svg`, `figures/walkforward.svg` |
+| Figures | `figures/detection_vs_k.svg`, `figures/walkforward.svg`, `figures/use_cases.svg` (UML use cases) |
 | Tool | Web app `docker compose up` (http://127.0.0.1:8080/, **/evaluate** for your own data), CLI `python -m product.cli` |
 | End-user guide | `USE_YOUR_DATA.md` |
 
@@ -588,6 +668,10 @@ AI coding assistants were used while building this project: for code review, ref
 | `gate.queue.caught_no_log_alerts` | 872 | §5, §B4 |
 | `gate.queue.false_with_model` | 95 | §B4 |
 | `gate.queue.false_no_log_alerts` | 58 | §B4 |
+| `gate.queue.caught_fallback` | 871 | §B4 |
+| `gate.queue.false_fallback` | 70 | §B4 |
+| `ablation.K20.shipped` | 71.0% | §B1 table |
+| `ablation.false.K20.shipped` | 1.4 | §B1 table |
 | `queue.K50.p3_per_series` | 84.1% | §B4 |
 | `false.K20.p3_per_series_jumps` | 0.8 | §B4 |
 | `queue.K20.p3_carryover` | 72.6% | §B4 |
@@ -627,3 +711,95 @@ AI coding assistants were used while building this project: for code review, ref
 | `stats.chance_overlap` | 2.6% | §B1 |
 | `stats.confirm_minutes_median` | 0.72 | §B1 |
 | `stats.false_jumps_near_fault` | 24.6% | §B6 |
+| `resources.wall_seconds` | 35.7 | §7 resources |
+| `resources.peak_rss_mb` | 500 | §7 resources |
+| `resources.peak_rss_mb_before_job` | 172 | §7 resources |
+| `resources.db_mb` | 13.0 | §7 resources |
+| `resources.db_kb_per_day` | 215 | §7 resources |
+| `rcalogs.RE2.ob.classifier` | 46.7% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.classifier.ci_high` | 60.9% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.classifier.ci_low` | 32.9% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.diff.ci_high` | 6.7% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.diff.ci_low` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.false.classifier` | 0.47 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.false.none` | 0.42 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.false.severity` | 0.53 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.caught_fallback` | 18 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.caught_no_log_alerts` | 17 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.caught_with_model` | 18 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.false_items_fallback` | 26 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.false_items_no_log_alerts` | 21 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.false_items_with_model` | 23 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.gate.faults` | 44 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.none` | 44.4% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.placebo` | 0 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.severity` | 46.7% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ob.test_cases` | 45 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.classifier` | 86.7% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.classifier.ci_high` | 93.7% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.classifier.ci_low` | 73.8% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.diff.ci_high` | 6.7% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.diff.ci_low` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.false.classifier` | 3.13 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.false.none` | 1.42 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.false.severity` | 3.38 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.none` | 84.4% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.placebo` | 2 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.severity` | 84.4% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.ss.test_cases` | 45 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.classifier` | 73.3% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.classifier.ci_high` | 84.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.classifier.ci_low` | 59.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.diff.ci_high` | 24.4% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.diff.ci_low` | 4.4% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.false.classifier` | 3.56 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.false.none` | 3.27 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.false.severity` | 3.87 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.caught_fallback` | 32 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.caught_no_log_alerts` | 28 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.caught_with_model` | 32 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.false_items_fallback` | 222 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.false_items_no_log_alerts` | 198 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.false_items_with_model` | 212 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.gate.faults` | 45 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.none` | 60.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.placebo` | 2 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.severity` | 71.1% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE2.tt.test_cases` | 45 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.classifier` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.classifier.ci_high` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.classifier.ci_low` | 79.6% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.diff.ci_high` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.diff.ci_low` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.false.classifier` | 0.53 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.false.none` | 0.53 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.false.severity` | 1.60 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.none` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.placebo` | 0 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.severity` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ob.test_cases` | 15 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.classifier` | 93.3% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.classifier.ci_high` | 98.8% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.classifier.ci_low` | 70.2% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.diff.ci_high` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.diff.ci_low` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.false.classifier` | 4.67 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.false.none` | 4.07 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.false.severity` | 5.40 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.none` | 93.3% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.placebo` | 1 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.severity` | 93.3% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.ss.test_cases` | 15 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.classifier` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.classifier.ci_high` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.classifier.ci_low` | 79.6% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.diff.ci_high` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.diff.ci_low` | 0.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.false.classifier` | 1.93 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.false.none` | 1.93 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.false.severity` | 3.67 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.none` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.placebo` | 0 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.severity` | 100.0% | §B5 RCAEval RE2/RE3 |
+| `rcalogs.RE3.tt.test_cases` | 15 | §B5 RCAEval RE2/RE3 |
+| `rcalogs.early_jump_share` | 43% | §B5 RCAEval RE2/RE3 |
