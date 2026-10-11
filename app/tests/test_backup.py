@@ -45,3 +45,76 @@ def test_backup_and_restore_bring_the_queue_back(tmp_path, monkeypatch):
     again = QueueStore(db)
     assert again.latest_job_id() == job_id
     assert '"shadow_mode": true' in (live / "ops.json").read_text(encoding="utf-8")
+
+
+def test_backup_includes_commits_still_in_the_write_ahead_log(tmp_path, monkeypatch):
+    """Requirement: a backup taken while the app runs holds every committed job."""
+    import sqlite3
+
+    live = tmp_path / "live"
+    live.mkdir()
+    db = live / "queue.db"
+    monkeypatch.setenv("QUEUE_DB", str(db))
+    monkeypatch.setenv("OPS_PATH", str(live / "ops.json"))
+    monkeypatch.setenv("MODEL_PATH", str(live / "model.pkl"))
+    monkeypatch.setenv("AUDIT_LOG_PATH", "off")
+    QueueStore(db)
+    # A reader held open (the queue page) keeps the commit below in the -wal file.
+    reader = sqlite3.connect(db)
+    reader.execute("SELECT count(*) FROM jobs").fetchall()
+    writer = sqlite3.connect(db)
+    writer.execute("PRAGMA wal_autocheckpoint = 0")
+    writer.execute(
+        "INSERT INTO jobs (job_id, created_at, source, budget_k, escalate_threshold, review_threshold) "
+        "VALUES ('j1', '2026-02-01T10:00:00Z', 'sample', 20, 1.0, 1.0)"
+    )
+    writer.commit()
+    try:
+        assert (live / "queue.db-wal").stat().st_size > 0
+        backup(tmp_path / "copy")
+    finally:
+        writer.close()
+        reader.close()
+    copied = sqlite3.connect(tmp_path / "copy" / "queue.db")
+    try:
+        assert copied.execute("SELECT job_id FROM jobs").fetchall() == [("j1",)]
+    finally:
+        copied.close()
+
+
+def test_restore_drops_the_stale_write_ahead_log_of_the_lost_database(tmp_path, monkeypatch):
+    """Requirement: after a restore the queue holds what the backup holds, not
+    commits replayed from the crashed database's log."""
+    import shutil
+    import sqlite3
+
+    live = tmp_path / "live"
+    live.mkdir()
+    db = live / "queue.db"
+    monkeypatch.setenv("QUEUE_DB", str(db))
+    monkeypatch.setenv("OPS_PATH", str(live / "ops.json"))
+    monkeypatch.setenv("MODEL_PATH", str(live / "model.pkl"))
+    monkeypatch.setenv("AUDIT_LOG_PATH", "off")
+    QueueStore(db)
+    backup(tmp_path / "copy")
+    # The crash: a commit is left in -wal, and the files are copied while open.
+    reader = sqlite3.connect(db)
+    reader.execute("SELECT count(*) FROM jobs").fetchall()
+    writer = sqlite3.connect(db)
+    writer.execute("PRAGMA wal_autocheckpoint = 0")
+    writer.execute(
+        "INSERT INTO jobs (job_id, created_at, source, budget_k, escalate_threshold, review_threshold) "
+        "VALUES ('lost', '2026-02-01T10:00:00Z', 'sample', 20, 1.0, 1.0)"
+    )
+    writer.commit()
+    crashed = tmp_path / "crashed"
+    crashed.mkdir()
+    for suffix in ("", "-wal", "-shm"):
+        shutil.copy2(live / f"queue.db{suffix}", crashed / f"queue.db{suffix}")
+    writer.close()
+    reader.close()
+    for suffix in ("", "-wal", "-shm"):
+        (live / f"queue.db{suffix}").unlink(missing_ok=True)
+        shutil.copy2(crashed / f"queue.db{suffix}", live / f"queue.db{suffix}")
+    restore(tmp_path / "copy")
+    assert QueueStore(db).latest_job_id() is None

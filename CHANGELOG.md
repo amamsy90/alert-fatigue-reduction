@@ -2,6 +2,14 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [Unreleased]
+
+### Fixed (code review, 11 October 2026, fourth round)
+- Paging keys: `PAGE_KEY_MAX` dropped keys in alphabetical order (all `gap:` keys before any `jump:` key), so once the list was full an item still in the history lost its key and was paged again on every job. Keys of items still shown are now never dropped; the rest go oldest first by start time. Test: `test_an_item_still_in_history_is_never_paged_twice_once_the_key_cap_is_reached`.
+- Backup copied the live WAL-mode `queue.db` as a plain file, which could tear during a job and missed commits still in the write-ahead log. It now uses SQLite's backup API, and restore deletes the lost database's `-wal` and `-shm` so they are not replayed. Tests in `test_backup.py`.
+- `LOG_FORMAT=json` dropped tracebacks; the JSON line now has `exc` and `stack`. Test: `test_logging_config.py`.
+- The release workflow published an image without running any check. It now runs every CI job (`ci.yml` as a reusable workflow) on the tagged commit first.
+
 ## [1.0.0] — 2026-10-11
 
 ### Added (code review, 11 October 2026, third round)

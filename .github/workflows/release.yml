@@ -9,7 +9,13 @@ permissions:
   packages: write
 
 jobs:
+  # Lint, types, tests, report check, dependency audit and Docker health on the
+  # tagged commit. A tag on a commit that fails any of them publishes nothing.
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   image:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

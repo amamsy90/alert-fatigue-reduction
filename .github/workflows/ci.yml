@@ -4,6 +4,8 @@ on:
   push:
     branches: [master]
   pull_request:
+  # The release workflow runs every job here before it publishes an image.
+  workflow_call:
 
 permissions:
   contents: read
