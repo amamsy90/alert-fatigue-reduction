@@ -139,7 +139,10 @@ def save_model(saved: SavedModel, path: Path | None = None) -> None:
     digest_path = _digest_path(path)
     # Both files are written to temp names first, then swapped in with
     # os.replace back to back under one lock, so two saves cannot interleave
-    # and a crash while writing never leaves a half-written model or digest.
+    # and a crash while writing cannot leave a half-written model or digest.
+    # A crash between the two os.replace calls can still leave the new model
+    # beside the old digest; that fails safe, because load_model checks the
+    # digest and refuses the model until the next save or a rollback.
     with _SAVE_LOCK:
         tmp_model = _write_temp(path, blob)
         try:

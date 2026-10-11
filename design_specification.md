@@ -2,7 +2,14 @@
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
-**Author:** Aishah Mohamed Alyammahi  **Course:** Software Engineering and Programming  **Date:** 30 September 2026  **Version:** 3.0
+**Author:** Aishah Mohamed Alyammahi
+
+**Course:** Software Engineering and Programming
+
+**Date:** 10 October 2026
+
+**Version:** 3.0
+
 **Sector:** Cloud microservice operations (online platforms)
 
 ---
