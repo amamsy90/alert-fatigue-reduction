@@ -6,6 +6,8 @@ on:
   pull_request:
   # The release workflow runs every job here before it publishes an image.
   workflow_call:
+  # dependabot-lock.yml starts CI after it pushes a regenerated requirements.lock.
+  workflow_dispatch:
 
 permissions:
   contents: read
