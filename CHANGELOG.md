@@ -5,6 +5,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ## [Unreleased]
 
 ### Added
+- Sign-in sessions, the login lock and the ingest rate counters are kept in `auth.db` (SQLite, beside `ops.json`; `AUTH_DB` moves it) instead of process memory. A restart no longer signs everyone out or clears a lock earned by guessing passwords. Session tokens are stored as SHA-256. Tests in `test_auth_store.py`, two of which start the app twice in separate processes.
 - `.github/workflows/dependabot-lock.yml`: on a Dependabot PR that changes `app/uv.lock`, regenerate `app/requirements.lock` on its branch and rerun CI. Dependabot's `uv` updater leaves `requirements.lock` stale, so every runtime-dependency bump failed CI's lock check (PR 12). ADR 0007 records it.
 
 ### Changed

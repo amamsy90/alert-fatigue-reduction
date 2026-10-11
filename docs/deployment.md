@@ -39,7 +39,7 @@ The same image runs in every environment. Only environment variables differ, and
 
 ## 3a. Sessions and workers
 
-Login sessions live in the process (`product/web/security.py`). That matches ADR 0003 (one worker). Do not raise `--workers` or run replicas in front of one SQLite file: a request that hits another worker gets 401 for a valid cookie, and two jobs can race. Put TLS and `TRUSTED_PROXIES` on the reverse proxy in front of this single container. The image starts uvicorn with `--workers 1` for this reason.
+Login sessions, the login lock and the ingest rate counters are kept in `auth.db` beside `ops.json` (`product/web/auth_store.py`; `AUTH_DB` moves it). A restart therefore keeps people signed in and keeps a lock an attacker earned. Session tokens are stored as SHA-256, so a copy of the file holds no usable cookie. The app still runs one worker (ADR 0003): the job, evaluation and `ops.json` locks are in-process, so do not raise `--workers` or run replicas in front of one SQLite file, or two jobs can race. Put TLS and `TRUSTED_PROXIES` on the reverse proxy in front of this single container. The image starts uvicorn with `--workers 1` for this reason.
 
 ## 3b. Client addresses behind a reverse proxy
 
