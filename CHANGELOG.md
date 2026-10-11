@@ -4,7 +4,11 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+### Fixed
+- **Live Prometheus data never confirmed a jump.** The ingest job fetched 14 days in one query; to stay under Prometheus' point limit that query used a 121 s step, and the jump rule links hot points at most `memory_gap_minutes` (2) apart, so no jump could be confirmed. The fetch now reads the window at 60 s in several non-overlapping queries. Found by the new integration test; the unit tests fed the detector data directly. Test: `test_a_14_day_fetch_keeps_one_minute_points_so_live_jumps_are_confirmed`.
+
 ### Added
+- Integration test against real services: `app/integration/docker-compose.yml` runs the app beside Prometheus and Alertmanager, and `tests/integration/test_compose.py` checks webhook → ingest job with Prometheus series → nothing paged in shadow mode. CI runs it in a new `integration` job.
 - Sign-in sessions, the login lock and the ingest rate counters are kept in `auth.db` (SQLite, beside `ops.json`; `AUTH_DB` moves it) instead of process memory. A restart no longer signs everyone out or clears a lock earned by guessing passwords. Session tokens are stored as SHA-256. Tests in `test_auth_store.py`, two of which start the app twice in separate processes.
 - `.github/workflows/dependabot-lock.yml`: on a Dependabot PR that changes `app/uv.lock`, regenerate `app/requirements.lock` on its branch and rerun CI. Dependabot's `uv` updater leaves `requirements.lock` stale, so every runtime-dependency bump failed CI's lock check (PR 12). ADR 0007 records it.
 
