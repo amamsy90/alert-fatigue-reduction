@@ -185,6 +185,11 @@ def computed_numbers() -> dict[str, float]:
             out[f"{key}.diff.ci_low"] = float(diff[1])
             out[f"{key}.diff.ci_high"] = float(diff[2])
             out[f"{key}.placebo"] = float(app["by_k"]["10"]["placebo_caught"])
+            if key == "rcalogs.RE2.tt":  # the "+13.3 over none (+2.2 over severity)" sentences (§5, §12, §13)
+                rate = {name: float(rows[rows["queue"] == name].iloc[0]["detection_rate"])
+                        for name in ("classifier", "severity", "no_alerts")}
+                out[f"{key}.gain_vs_none"] = rate["classifier"] - rate["no_alerts"]
+                out[f"{key}.gain_vs_severity"] = rate["classifier"] - rate["severity"]
             out[f"{key}.test_cases"] = float(app["test_cases"])
             gate = app["promotion_gate"]
             out["rcalogs.gate.margin"] = float(gate["margin"])
