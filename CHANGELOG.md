@@ -2,21 +2,32 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
-## [Unreleased] — toward 1.0.0
+## [1.0.0] — 2026-10-11
 
-### Fixed (instructor review, 10 October 2026)
+### Changed (code review, 10 October 2026, second round)
+- The alert classifier is no longer on by default. The promotion gate (`promotion_decision`) now also requires a new model to beat showing **no log alerts**, alert by alert and in the **whole held-out queue** (10 × missed faults + false items), and the first model is no longer promoted just because none is active. A model that fails stays a candidate and does not score the batch it was trained on (rules only or the active model does). On GAIA the classifier fails the queue test (848 vs 872 of 1,223 held-out faults caught), so GAIA runs on rules only. Tests in `test_model_registry.py`.
+- `run_classifier_ablation.py` also writes `results/classifier_ablation_gaia.json`: why the severity row attaches no alerts, and the gate's decision on GAIA. `run_validate.py` checks 18 more numbers (93 in all) and that the gate still keeps the classifier out on GAIA.
+- Report header fields on separate lines; report dated 11 October; design specification dated 10 October; coverage table in `docs/test_plan.md` refreshed; the `save_model` comment says what a crash between the two `os.replace` calls can still do.
+
+### Fixed (code review, 10 October 2026, second round)
+- Every `X-Forwarded-For` and `Forwarded` header line is read, not only the first, so a proxy that adds its own line cannot be bypassed by the client's line. Regression tests `test_every_forwarded_header_line_is_read` and `test_login_lock_holds_when_the_proxy_adds_its_own_xff_line`. `docs/deployment.md`: `TRUSTED_PROXIES` lists only the proxy's own addresses, never a client subnet.
+
+### Added (code review, 10 October 2026, second round)
+- `app/tests/conftest.py`: every test starts with the sign-in, proxy, ingest-limit and connector variables unset, so a shell with `APP_PASSWORD` exported no longer turns the suite red. 273 tests.
+
+### Fixed (code review, 10 October 2026)
 - CI audit job: `pip-audit` has no `--severity` option, so the job failed on every push. It now runs `uvx pip-audit -r requirements.lock --require-hashes --disable-pip`.
 - Login lockout bypass behind a trusted proxy: the client address was the **leftmost** `X-Forwarded-For` value, which the client controls. It is now the rightmost hop that is not in `TRUSTED_PROXIES`. Regression test `test_login_lock_cannot_be_split_by_prepending_xff`.
 - `X-Forwarded-Proto` marks the session cookie Secure only when it comes from a trusted proxy.
 - `save_model` writes the model and its SHA-256 to temp files and swaps both in with `os.replace` under a lock, so a crash or two concurrent saves cannot leave a model whose digest does not match.
 - Docker CMD states `--workers 1`; `docs/deployment.md` documents `TRUSTED_PROXIES` vs `uvicorn --forwarded-allow-ips`.
 
-### Added (instructor review)
+### Added (code review, 10 October 2026)
 - `tools/fetch_gaia.py`: downloads the GAIA MicroSS run tables and the 37 memory series used, without an external unzip tool, and checks each file's SHA-256.
 - `run_classifier_ablation.py` and `results/classifier_ablation_gaia.csv`: the full queue with log alerts chosen by the classifier, by severity, or not at all. At K = 20: 69.6%, 71.0%, 71.2%. The classifier adds no catches on GAIA; the report now says so (§5, §12, §B4). `run_validate.py` checks the six new numbers (75 in all).
 - Report §C1a, use of AI tools.
 
-### Changed (instructor review)
+### Changed (code review, 10 October 2026)
 - One title everywhere: *AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices*, with *Alert Fatigue Reduction in Cloud Microservice Operations* as the subtitle.
 - Report date, test counts (267), checked-number counts, project plan D6/T13, and the README pointer to the submitted proposal PDF.
 - Submitted proposal (PDF and its Word source), `queue_flowchart.png` and `package.json` / `package-lock.json` committed; course material and draft Word files kept out of git.
