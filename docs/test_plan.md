@@ -23,6 +23,7 @@
 | System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
 | Acceptance of results | Report matches results | `run_validate.py` | 189 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
+| Integration (real services) | The app beside a real Prometheus and Alertmanager in Docker Compose: an alert fired in Alertmanager reaches `/ingest/alertmanager` with the bearer token, the ingest job pulls memory series from Prometheus, and shadow mode records but does not page | `app/integration/docker-compose.yml`, `tests/integration/test_compose.py`, CI `integration` job (skipped locally unless `INTEGRATION_BASE_URL` is set) | found that a 14-day Prometheus fetch used a 121 s step, too coarse for the jump rule to confirm anything |
 
 Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests; no test needs the network.
 
