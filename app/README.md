@@ -107,6 +107,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 | `LEAK_WINDOW_MINUTES` / `LEAK_BYTES` | `180` / `5e8` | Slow-leak rule (byte metrics only); `0` = off |
 | `GROUP_MINUTES` | `0` | Metric items this close on other services share one slot |
 | `CARRY_OVER_MAX` | `0` | Unused slots carried to the next day (e.g. `10`) |
+| `PROMOTION_MIN_SAVING_MISSES` | `1` | Promotion gate margin: a new model must make the held-out queue cheaper than both alternatives by at least this many missed faults (× the miss cost of 10); `0` = any saving |
 | `MAX_UPLOAD_MB` | `200` | Largest CSV the upload and Evaluate pages accept (the whole request is stopped while it streams in once it passes 3 files' worth) |
 | `JOB_RETENTION` / `EVAL_RETENTION` | `200` / `30` | Jobs and evaluations kept on disk; older ones are deleted (Real / Noise marks are kept) |
 | `ALLOW_OPEN_ACCESS` | unset | Without a password the app only answers private networks; `1` lifts that |
@@ -118,7 +119,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 ## How it decides
 
 - **No labels (day one):** rules only — jumps, gaps, log severity with duplicate suppression.
-- **With labels or marks:** a cost-sensitive classifier (a miss weighs 10× a false alarm) is trained on the early window and tested on the rest. It ranks log alerts only if it passes the promotion gate there: it must beat showing no log alerts, alert by alert and in the whole queue, and be no worse than the active model. Otherwise it is kept as a candidate and rules only (or the active model) scores the batch; on GAIA this is what happens. An active model is reused for small webhook batches; the page reminds you to retrain after 7 days or new Real marks.
+- **With labels or marks:** a cost-sensitive classifier (a miss weighs 10× a false alarm) is trained on the early window and tested on the rest. It ranks log alerts only if it passes the promotion gate there: it must beat showing no log alerts, alert by alert and in the whole queue, save at least one missed fault's worth of queue cost over both no log alerts and what would run instead (`PROMOTION_MIN_SAVING_MISSES`), and be no worse than the active model. Otherwise it is kept as a candidate and rules only (or the active model) scores the batch; on GAIA this is what happens. An active model is reused for small webhook batches; the page reminds you to retrain after 7 days or new Real marks.
 - **Always causal:** nothing is chosen using data from later in the day.
 
 ---

@@ -84,7 +84,7 @@ def severity_diagnosis(test_alerts: list[Alert], severity: list[Decision], shown
 def promotion_gate_on_gaia(k: int = 20) -> dict:
     """What the product does with GAIA: train, then run the promotion gate (no saved model)."""
     from product.inputs import load_inputs
-    from product.pipeline import score_alerts
+    from product.pipeline import promotion_margin, score_alerts
 
     inputs = load_inputs("gaia", budget_k=k)
     result = score_alerts(inputs.alerts, metrics=inputs.metrics, budget_k=k, saved=None, faults=inputs.faults,
@@ -95,6 +95,7 @@ def promotion_gate_on_gaia(k: int = 20) -> dict:
         "budget_k": k,
         "model_used": result.model_used,
         "promoted": bool(result.promoted),
+        "margin": promotion_margin(result.config or inputs.config),
         "gate": training.get("gate"),
         "held_out_alerts": {key: test.get(key) for key in ("alerts", "fault_alerts", "tp", "fp", "fn")},
         "queue_check": training.get("queue_check"),

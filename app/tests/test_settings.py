@@ -7,7 +7,8 @@ from product.settings import clear_saved, config_from_env, load_saved, save_save
 from src.config import Config
 
 ENV = ("JUMP_MODE", "JUMP_BYTES", "JUMP_RATIO", "JUMP_WINDOW_MINUTES", "CONFIRM_MIN_RISE", "ALERT_SHARE",
-       "GAP_MINUTES", "DAY_OFFSET_HOURS", "LEAK_WINDOW_MINUTES", "LEAK_BYTES", "GROUP_MINUTES", "CARRY_OVER_MAX")
+       "GAP_MINUTES", "DAY_OFFSET_HOURS", "LEAK_WINDOW_MINUTES", "LEAK_BYTES", "GROUP_MINUTES", "CARRY_OVER_MAX",
+       "PROMOTION_MIN_SAVING_MISSES")
 
 
 @pytest.fixture()
@@ -25,6 +26,7 @@ def test_defaults_match_the_library_config(clean_env):
     assert cfg.alert_share == base.alert_share
     assert cfg.confirm_min_rise is None
     assert cfg.leak_window_minutes == base.leak_window_minutes
+    assert cfg.promotion_min_saving_misses == base.promotion_min_saving_misses == 1.0
 
 
 def test_env_overrides_and_blank_values(clean_env):
@@ -53,3 +55,10 @@ def test_saved_settings_round_trip(clean_env):
     assert load_saved()["z"] == saved["z"] == 6.0
     clear_saved()
     assert not load_saved()
+
+
+def test_promotion_margin_from_env_is_never_negative(clean_env):
+    clean_env.setenv("PROMOTION_MIN_SAVING_MISSES", "2.5")
+    assert config_from_env().promotion_min_saving_misses == 2.5
+    clean_env.setenv("PROMOTION_MIN_SAVING_MISSES", "-1")
+    assert config_from_env().promotion_min_saving_misses == 0.0
