@@ -21,7 +21,7 @@
 | Performance | Latency, throughput and errors under concurrent users | `perf/load_test.py` against a live server | 50 users: 228 req/s, p95 0.32 s, 0 errors |
 | Reliability | Concurrency and persistence | `test_reliability.py`, `test_app_hardening.py` | concurrent `ops.json` writes keep every change |
 | System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
-| Acceptance of results | Report matches results | `run_validate.py` | 75 checked numbers plus guarded claims |
+| Acceptance of results | Report matches results | `run_validate.py` | 93 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
 
 Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests; no test needs the network.
@@ -31,7 +31,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 267 tests, coverage report
+uv run pytest -q --cov           # 273 tests, coverage report
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -46,9 +46,9 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 267 pass |
+| Tests | all pass on Python 3.10 and 3.12 | 273 pass |
 | Coverage | line coverage ≥ `COVERAGE_MIN` | 90% (min 85%) |
-| Results | `run_validate.py` passes | 75 numbers match |
+| Results | `run_validate.py` passes | 93 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
@@ -73,7 +73,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% | 267 / 267 on Python 3.10 and 3.12 |
+| Automated tests passing | 100% | 273 / 273 on Python 3.10 and 3.12 |
 | Line coverage | ≥ 85% | 90% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
@@ -81,7 +81,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Error rate under load | ≤ 1% | 0% (3,000 requests) |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s |
 | Full GAIA month (34,863 alerts, with training) | ≤ 5 min | 27 s |
-| Report numbers match results | all | 75 / 75 (`run_validate.py`) |
+| Report numbers match results | all | 93 / 93 (`run_validate.py`) |
 | Malformed webhook rows | never block a job | rejected with a reason (`test_ai_inputs.py`) |
 | Critical security issues | 0 | 0 (`docs/threat_model.md`) |
 
