@@ -2,7 +2,7 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
-## [Unreleased]
+## [1.0.3]
 
 ### Changed
 - **Promotion gate margin.** A newly trained model is promoted only if the held-out queue with its alerts costs at least one missed fault (`PROMOTION_MIN_SAVING_MISSES` × miss cost, default 1 × 10) less than both the queue without log alerts and the queue that runs if it is refused. One held-out case moves the cost by that much, so a smaller saving could come from that case alone. `0` restores the previous rule. On RCAEval the gate now promotes the classifier on RE2 Train Ticket only (saving 10, exactly the margin); RE2 Online Boutique (saving 3: 283 against 286 and 291) is now refused. GAIA is unchanged (refused). Tests in `test_model_registry.py` and `test_settings.py`; `run_validate.py` checks the margin, the savings and which applications promote.
