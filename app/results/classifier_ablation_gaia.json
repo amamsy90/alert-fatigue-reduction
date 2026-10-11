@@ -25,7 +25,7 @@
     "budget_k": 20,
     "model_used": "rules_only",
     "promoted": false,
-    "gate": "queue with its alerts: 848/1223 held-out faults, 95 false items (cost 3845); without log alerts: 872/1223, 58 false items (cost 3568); kept as a candidate, rules only stays",
+    "gate": "queue with its alerts: 848/1223 held-out faults, 95 false items (cost 3845); with rules only (severity) instead: 871/1223, 70 false items (cost 3590); without log alerts: 872/1223, 58 false items (cost 3568); kept as a candidate, rules only stays",
     "held_out_alerts": {
       "alerts": 31233,
       "fault_alerts": 507,
@@ -36,9 +36,13 @@
     "queue_check": {
       "faults": 1223,
       "days": 55,
+      "fallback": "rules only (severity)",
       "caught_with_model": 848,
       "false_items_with_model": 95,
       "cost_with_model": 3845.0,
+      "caught_fallback": 871,
+      "false_items_fallback": 70,
+      "cost_fallback": 3590.0,
       "caught_no_log_alerts": 872,
       "false_items_no_log_alerts": 58,
       "cost_no_log_alerts": 3568.0

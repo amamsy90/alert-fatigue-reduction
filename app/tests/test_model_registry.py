@@ -59,12 +59,18 @@ def _report(fp: int, fn: int, fault_alerts: int = 6) -> dict:
     return {"fp": fp, "fn": fn, "tp": fault_alerts - fn, "fault_alerts": fault_alerts, "precision": 0.5, "recall": 0.5}
 
 
-def _queue(caught: int, false: int, caught_without: int, false_without: int, faults: int = 10) -> dict:
-    """A queue_check as score_alerts records it (miss = 10, false item = 1)."""
+def _queue(caught: int, false: int, caught_without: int, false_without: int, faults: int = 10,
+           caught_fallback: int | None = None, false_fallback: int | None = None) -> dict:
+    """A queue_check as score_alerts records it (miss = 10, false item = 1).
+    The fallback queue (rules only here) defaults to the no-log-alerts one."""
+    caught_fallback = caught_without if caught_fallback is None else caught_fallback
+    false_fallback = false_without if false_fallback is None else false_fallback
     return {
-        "faults": faults, "days": 3,
+        "faults": faults, "days": 3, "fallback": "rules only (severity)",
         "caught_with_model": caught, "false_items_with_model": false,
         "cost_with_model": 10 * (faults - caught) + false,
+        "caught_fallback": caught_fallback, "false_items_fallback": false_fallback,
+        "cost_fallback": 10 * (faults - caught_fallback) + false_fallback,
         "caught_no_log_alerts": caught_without, "false_items_no_log_alerts": false_without,
         "cost_no_log_alerts": 10 * (faults - caught_without) + false_without,
     }
@@ -116,6 +122,26 @@ def test_a_model_right_about_alerts_but_bad_for_the_queue_is_not_promoted():
     assert not promotion_decision(tie, False, cfg)[0]  # must earn its slots, not just tie
 
 
+def test_the_model_must_beat_the_queue_it_would_fall_back_to():
+    """The gate tests the model against what runs if it is refused, not only
+    against no log alerts: here severity rules already catch more."""
+    cfg = Config()
+    beats_none_not_rules = {
+        "test": _report(fp=8, fn=1),
+        "queue_check": _queue(caught=8, false=2, caught_without=7, false_without=1,
+                              caught_fallback=9, false_fallback=2),  # 22 < 31 but >= 12
+    }
+    promote, reason = promotion_decision(beats_none_not_rules, has_incumbent=False, config=cfg)
+    assert not promote
+    assert "with rules only (severity) instead: 9/10" in reason and reason.endswith("rules only stays")
+    beats_both = {
+        "test": _report(fp=8, fn=1),
+        "queue_check": _queue(caught=9, false=2, caught_without=7, false_without=1,
+                              caught_fallback=8, false_fallback=2),  # 12 < 22 and < 31
+    }
+    assert promotion_decision(beats_both, has_incumbent=False, config=cfg)[0]
+
+
 def test_a_model_that_beats_the_active_one_must_still_beat_no_log_alerts():
     cfg = Config()
     both_bad = {"test": _report(fp=70, fn=0), "incumbent_test": _report(fp=90, fn=0), "queue_check": GOOD_QUEUE}
@@ -154,12 +180,14 @@ def test_training_through_the_app_registers_versions_with_cards(client):
     first = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()
     training = first["meta"]["training"]
     assert training["model_version"] == "v0001" and training["promoted"]
-    check = training["queue_check"]  # the whole held-out queue, with and without log alerts
+    check = training["queue_check"]  # the whole held-out queue: model, fallback, no log alerts
     assert check["faults"] > 0 and check["caught_with_model"] > check["caught_no_log_alerts"]
-    assert check["cost_with_model"] < check["cost_no_log_alerts"]
+    assert check["fallback"] == "rules only (severity)"
+    assert check["cost_with_model"] < min(check["cost_no_log_alerts"], check["cost_fallback"])
     again = client.post("/jobs/upload", files=_labelled_upload(), data={"budget_k": "20"}).json()["meta"]["training"]
     assert again["model_version"] == "v0002"
     assert again["incumbent_test"] is not None  # the active model was scored on the same held-out alerts
+    assert again["queue_check"]["fallback"] == "the active model"  # what would run if v0002 is refused
     listing = client.get("/models").json()
     assert [v["version"] for v in listing["versions"]] == ["v0001", "v0002"]
     card = listing["versions"][0]
