@@ -12,5 +12,5 @@ The target user is one team on one server, often in a pilot. A database server w
 
 ## Consequences
 - `docker compose up` is the whole install; backups are one volume.
-- The locks are in-process, so running several workers or replicas is not supported. Scaling out would need a real database and a shared lock (for example PostgreSQL advisory locks).
+- Sign-in sessions, the login lock and the ingest counters moved to `auth.db` (SQLite) so they survive a restart; they no longer tie the app to one process. The job, evaluation and `ops.json` locks are still in-process, so running several workers or replicas is not supported. Scaling out would need a real database and a shared lock (for example PostgreSQL advisory locks).
 - Paging secrets live in `secrets.json` (or a Docker secret file), not in `ops.json`. The file is owner-only where the OS allows.
