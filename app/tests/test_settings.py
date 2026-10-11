@@ -62,3 +62,17 @@ def test_promotion_margin_from_env_is_never_negative(clean_env):
     assert config_from_env().promotion_min_saving_misses == 2.5
     clean_env.setenv("PROMOTION_MIN_SAVING_MISSES", "-1")
     assert config_from_env().promotion_min_saving_misses == 0.0
+
+
+def test_the_package_version_matches_pyproject():
+    """One version string: the API (FastAPI `version`), model cards outside a git
+    checkout and pyproject.toml must not drift apart at a release."""
+    import re
+    from pathlib import Path
+
+    from product import __version__
+    from product.app import app
+
+    pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version = "([^"]+)"', pyproject, re.M)
+    assert match and match.group(1) == __version__ == app.version

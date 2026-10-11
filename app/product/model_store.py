@@ -277,7 +277,9 @@ def code_version() -> str:
             return out.stdout.strip()
     except (OSError, subprocess.SubprocessError):
         pass
-    return "1.0.0"
+    from product import __version__
+
+    return __version__
 
 
 def held_out_cost(report: dict | None, miss_cost: float, false_alarm_cost: float) -> float | None:

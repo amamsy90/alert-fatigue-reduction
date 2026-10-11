@@ -1,6 +1,6 @@
 # Monitoring and evaluation
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.0.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.4
 
 The running app exposes two endpoints (`product/monitoring.py`):
 
@@ -57,7 +57,7 @@ groups:
 | Successful requests under load | ≥ 99% | 100% (3,000 requests) | load tests at 20 and 50 users |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s | `oncall_job_duration_seconds` |
 | Full GAIA month (34,863 alerts) | ≤ 5 min | 54.9 s | `perf/resources.py`, median of 3 runs (`app/results/resources_gaia.json`) |
-| Automated tests passing | 100% | 300 / 300 | CI |
+| Automated tests passing | 100% | 301 / 301 | CI |
 | Line coverage | ≥ 85% | 90% | CI |
 | Faults caught at K = 20 (detector vs Prometheus rate rule) | beats it | 72.6% vs 68.9%, 8/8 weeks | `run_validate.py` |
 | False items a day at K = 20 | fewer than the rate rule | 1.0 (detector), 1.8 (full queue) vs 2.1 | same |

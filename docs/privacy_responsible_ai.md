@@ -1,6 +1,6 @@
 # Privacy and responsible AI
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.0.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.4
 
 ## 1. Privacy
 
