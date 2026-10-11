@@ -8,7 +8,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 - Paging keys: `PAGE_KEY_MAX` dropped keys in alphabetical order (all `gap:` keys before any `jump:` key), so once the list was full an item still in the history lost its key and was paged again on every job. Keys of items still shown are now never dropped; the rest go oldest first by start time. Test: `test_an_item_still_in_history_is_never_paged_twice_once_the_key_cap_is_reached`.
 - Backup copied the live WAL-mode `queue.db` as a plain file, which could tear during a job and missed commits still in the write-ahead log. It now uses SQLite's backup API, and restore deletes the lost database's `-wal` and `-shm` so they are not replayed. Tests in `test_backup.py`.
 - `LOG_FORMAT=json` dropped tracebacks; the JSON line now has `exc` and `stack`. Test: `test_logging_config.py`.
+- `recent_jobs`, `latest_job_id` and job retention ordered by `created_at` only, so two jobs saved in the same clock tick came back in either order and `/monitoring` could read an older job as the last one. Ties now break on insertion order. Test: `test_jobs_saved_in_the_same_clock_tick_keep_their_order`.
 - The release workflow published an image without running any check. It now runs every CI job (`ci.yml` as a reusable workflow) on the tagged commit first.
+
+### Changed (code review, 11 October 2026, fourth round)
+- Metric drift on `/monitoring` is per series: the median of each series' last hour against its own earlier jobs, with the drifted series listed (`data.metric_drift_series`). The fleet-wide median over the whole re-scored history barely moved and hid a single service. Jobs saved before this fall back to the old check. Tests in `test_monitoring.py`.
+- Refused candidate models: only the newest `MODEL_CANDIDATE_KEEP` (default 20) keep their file; the rest are deleted and their cards marked `file_removed`. Versions that were ever active are never deleted. Test: `test_only_the_newest_refused_models_keep_their_files`.
 
 ## [1.0.0] — 2026-10-11
 
