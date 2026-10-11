@@ -162,3 +162,35 @@ def test_paged_item_keys_are_capped(ops_env, monkeypatch):
     assert kept == {"k2", "k3", "k4"}
     ops.add_channel_delivered_keys("slack", {f"s{i}" for i in range(5)})
     assert ops.channel_delivered_keys("slack") == {"s2", "s3", "s4"}
+
+
+def test_an_item_still_in_history_is_never_paged_twice_once_the_key_cap_is_reached(ops_env, monkeypatch):
+    """Requirement: an item already considered for paging is not paged again while
+    the re-scored history still shows it, however many keys have been stored."""
+    from product.paging import page_job
+
+    monkeypatch.setenv("PAGE_KEY_MAX", "4")
+    now = pd.Timestamp("2026-09-27 12:00", tz="UTC")
+
+    def item(kind: str, service: str, minutes_ago: float) -> Spike:
+        t = now - pd.Timedelta(minutes=minutes_ago)
+        return Spike(service, service, t, t + pd.Timedelta(minutes=5), 1e9, t, 1e9, kind=kind)
+
+    # Months of items that have left the history, then the current history:
+    # gaps sort before jumps by name, so an alphabetical cap would drop them first.
+    old = [item("jump", f"z{i}", 60 * 24 * 200 + i) for i in range(6)]
+    current = [item("gap", "a", 30), item("gap", "b", 20), item("jump", "c", 10)]
+    page_job("ingest", True, [], [], old + current, run_at=now)
+
+    _, again = page_job("ingest", True, [], [], current, run_at=now + pd.Timedelta(minutes=1))
+    assert again["spikes"] == 0
+    stored = ops.seen_spike_keys() or set()
+    assert len(stored) <= 4
+
+
+def test_key_cap_drops_the_oldest_keys_first(ops_env, monkeypatch):
+    monkeypatch.setenv("PAGE_KEY_MAX", "2")
+    t = pd.Timestamp("2026-09-27 12:00", tz="UTC")
+    keys = {f"gap:a:{(t - pd.Timedelta(days=d)).isoformat()}" for d in (1, 2, 3)}
+    ops.set_seen_spike_keys(keys)
+    assert ops.seen_spike_keys() == {f"gap:a:{(t - pd.Timedelta(days=d)).isoformat()}" for d in (1, 2)}

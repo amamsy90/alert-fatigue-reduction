@@ -121,7 +121,7 @@ class QueueStore:
     def latest_job_id(self) -> str | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT job_id FROM jobs ORDER BY created_at DESC LIMIT 1"
+                "SELECT job_id FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT 1"
             ).fetchone()
         return None if row is None else str(row["job_id"])
 
@@ -411,7 +411,7 @@ class QueueStore:
             old = [
                 r["job_id"]
                 for r in conn.execute(
-                    "SELECT job_id FROM jobs ORDER BY created_at DESC LIMIT -1 OFFSET ?",
+                    "SELECT job_id FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?",
                     (max(int(keep), 0),),
                 )
             ]
@@ -425,7 +425,7 @@ class QueueStore:
         """Newest jobs first: id, time, source and meta (for monitoring)."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT job_id, created_at, source, meta_json FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+                "SELECT job_id, created_at, source, meta_json FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
             ).fetchall()
         return [{"job_id": r["job_id"], "created_at": r["created_at"], "source": r["source"],
                  "meta": json.loads(r["meta_json"] or "{}")} for r in rows]
@@ -483,7 +483,7 @@ class QueueStore:
             ).fetchone()
             jobs = conn.execute(
                 "SELECT job_id, created_at, source, shadow_mode, meta_json "
-                "FROM jobs ORDER BY created_at DESC LIMIT 1"
+                "FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT 1"
             ).fetchone()
         last_job = None
         if jobs:

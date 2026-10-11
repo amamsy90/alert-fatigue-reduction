@@ -71,10 +71,12 @@ def _remember(shown: list[Spike], fresh: list[Spike], seen: set[str] | None, suc
     base = set() if seen is None else set(seen)
     shown_keys = {spike_key(s) for s in shown}
     fresh_keys = {spike_key(s) for s in fresh}
+    # Items still in the history are never pruned from the store: a pruned key
+    # would look new and be paged again.
     if success:
-        set_seen_spike_keys(base | shown_keys)
+        set_seen_spike_keys(base | shown_keys, keep=shown_keys)
     else:
-        set_seen_spike_keys(base | (shown_keys - fresh_keys))
+        set_seen_spike_keys(base | (shown_keys - fresh_keys), keep=shown_keys - fresh_keys)
 
 
 def _send(alerts: list[Alert], decisions: list[Decision], spikes: list[Spike], run_at: pd.Timestamp) -> dict:
