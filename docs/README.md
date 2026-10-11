@@ -12,5 +12,6 @@
 | [monitoring.md](monitoring.md) | `/metrics` and `/monitoring`: AI, system and data signals, targets, alert rules, evaluation criteria |
 | [privacy_responsible_ai.md](privacy_responsible_ai.md) | What data is kept, where, for how long, who sees it; bias, oversight, misuse, safety |
 | [retrospective.md](retrospective.md) | How the project was built, what the reviews found, and how the work is run from now on |
+| [enhancement_plan.md](enhancement_plan.md) | Items from the course-project review, each closed with where it is done and the test that proves it |
 
 Related, outside this folder: `../design_specification.md` (component detail and configuration), `../FINAL_REPORT.md` (results), `../VALIDATION.md` (result files), `../CHANGELOG.md` (versions), `../.github/workflows/ci.yml` (CI).
