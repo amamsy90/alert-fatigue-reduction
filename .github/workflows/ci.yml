@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --group dev
       - name: requirements.lock matches uv.lock
         run: diff <(uv export --format requirements-txt --no-dev --locked --no-emit-project -q | grep -v '^#') <(grep -v '^#' requirements.lock)
@@ -50,7 +50,7 @@ jobs:
         python: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --group dev --python ${{ matrix.python }}
       - name: Tests with coverage
         run: uv run pytest -q --cov --cov-report=term --cov-fail-under=$COVERAGE_MIN
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       # pip-audit has no severity filter: any known vulnerability fails the job.
       # To accept a reviewed advisory, add `--ignore-vuln <ID>` with a reason.
       - name: Known vulnerabilities in the locked dependencies
