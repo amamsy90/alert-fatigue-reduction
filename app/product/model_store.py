@@ -313,8 +313,39 @@ def register_model(saved: SavedModel, card: dict, promote: bool) -> dict:
         registry["versions"].append(entry)
         if promote:
             _make_active(path, entry, registry)
+        _prune_candidates(registry)
         _write_registry(registry)
         return entry
+
+
+def _candidate_keep() -> int:
+    try:
+        return max(0, int(os.environ.get("MODEL_CANDIDATE_KEEP", "20")))
+    except ValueError:
+        return 20
+
+
+def _prune_candidates(registry: dict) -> None:
+    """Delete the files of all but the newest MODEL_CANDIDATE_KEEP refused models.
+
+    A refused model can never score a batch, so its file only takes disk. A
+    version that was ever active is a rollback target and is never touched.
+    The card stays in the registry (marked `file_removed`) as the record of
+    what was trained and why it was refused."""
+    ever_active = {h["version"] for h in registry.get("history", [])}
+    if registry.get("active"):
+        ever_active.add(registry["active"])
+    candidates = [
+        v for v in registry["versions"]
+        if v["version"] not in ever_active and not v.get("promoted") and not v.get("file_removed")
+    ]
+    candidates.sort(key=lambda v: v["number"])
+    drop = candidates[: max(0, len(candidates) - _candidate_keep())]
+    for entry in drop:
+        path = models_dir() / entry["file"]
+        path.unlink(missing_ok=True)
+        _digest_path(path).unlink(missing_ok=True)
+        entry["file_removed"] = True
 
 
 def _make_active(path: Path, entry: dict, registry: dict) -> None:
