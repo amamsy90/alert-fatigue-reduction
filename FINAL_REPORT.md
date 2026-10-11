@@ -3,9 +3,12 @@
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
 **Final report**
+
 **Author:** Aishah Mohamed Alyammahi
+
 **Course:** Software Engineering and Programming
-**Date:** 10 October 2026
+
+**Date:** 11 October 2026
 
 Numbers come from scripts under `app/` and are checked by `python run_validate.py` against the *Checked numbers* table at the end. Part A follows the thirteen sections of the course brief; Part B holds the measured results; Part C says how to reproduce them.
 
