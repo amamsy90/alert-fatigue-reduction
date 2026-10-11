@@ -355,3 +355,22 @@ def test_a_model_that_fails_the_gate_does_not_score_the_batch(client, monkeypatc
     assert meta["escalate"] == 0 and meta["review"] == 0
     items = client.get("/queue", params={"job_id": job["job_id"], "limit": 2000}).json()["items"]
     assert items and {i["reason"] for i in items} == {"severity 'warning' below threshold"}
+
+
+def test_only_the_newest_refused_models_keep_their_files(env, monkeypatch):
+    """Requirement: refused candidates are capped at MODEL_CANDIDATE_KEEP files;
+    every version that was ever active stays available for rollback."""
+    monkeypatch.setenv("MODEL_CANDIDATE_KEEP", "2")
+    register_model(_model(0.5), {}, promote=True)  # v0001, active then replaced
+    for threshold in (0.6, 0.61, 0.62, 0.63):  # v0002..v0005, refused
+        register_model(_model(threshold), {}, promote=False)
+    register_model(_model(0.7), {}, promote=True)  # v0006, active
+    files = sorted(p.name for p in (env / "models").glob("v*.pkl"))
+    assert files == ["v0001.pkl", "v0004.pkl", "v0005.pkl", "v0006.pkl"]
+    cards = {v["version"]: v for v in load_registry()["versions"]}
+    assert cards["v0002"]["file_removed"] and cards["v0003"]["file_removed"]
+    assert len(cards) == 6  # every card is kept as the record
+    activate_version("v0001")  # an earlier active model can still be rolled back to
+    assert load_model().escalate_threshold == 0.5
+    with pytest.raises(ValueError, match="missing"):
+        activate_version("v0002")

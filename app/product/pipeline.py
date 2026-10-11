@@ -684,6 +684,29 @@ def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel
     return saved if promote else loaded
 
 
+METRIC_DRIFT_WINDOW = pd.Timedelta(hours=1)
+
+
+def _recent_series_medians(metrics: pd.DataFrame | None) -> dict[str, float]:
+    """Median value of each series over its last hour of points.
+
+    Ingest jobs re-score the whole history, so a median over all of it barely
+    moves; one fleet-wide number also hides a single service changing scale.
+    The monitor compares these per series with earlier jobs."""
+    if metrics is None or metrics.empty or not {"value", "timestamp"} <= set(metrics.columns):
+        return {}
+    key = "series_id" if "series_id" in metrics.columns else "service" if "service" in metrics.columns else None
+    if key is None:
+        return {}
+    out: dict[str, float] = {}
+    for series, rows in metrics.groupby(metrics[key].astype(str)):
+        recent = rows[rows["timestamp"] > rows["timestamp"].max() - METRIC_DRIFT_WINDOW]["value"]
+        value = recent.median()
+        if pd.notna(value):
+            out[series] = float(value)
+    return out
+
+
 def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, real_marks: int,
               page: dict, whp: dict, feedback_stats: dict) -> dict:
     decisions = result.decisions
@@ -693,6 +716,7 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         value = inputs.metrics["value"].median()
         if pd.notna(value):
             metric_median = float(value)
+    metric_medians = _recent_series_medians(inputs.metrics)
 
     def shown(kind: str) -> int:
         return sum(1 for j in jumps if j["kind"] == kind and j["shown"])
@@ -712,6 +736,7 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         "confirm_min_rise": None if result.config is None else result.config.confirm_min_rise,
         "has_metrics": inputs.metrics is not None and not inputs.metrics.empty,
         "metric_median": metric_median,
+        "metric_medians": metric_medians,
         "label_source": result.label_source,
         "model_used": result.model_used,
         "model": saved.status(real_marks) if saved else None,
