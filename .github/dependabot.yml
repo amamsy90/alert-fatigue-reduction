@@ -1,6 +1,8 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  # uv, not pip: the pip updater edits pyproject.toml but not uv.lock, so its
+  # pull requests fail `uv sync --locked` in CI.
+  - package-ecosystem: uv
     directory: /app
     schedule:
       interval: weekly
