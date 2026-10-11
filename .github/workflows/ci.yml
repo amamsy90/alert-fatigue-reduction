@@ -22,7 +22,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --locked --group dev
       - name: requirements.lock matches uv.lock
@@ -49,7 +49,7 @@ jobs:
       matrix:
         python: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --locked --group dev --python ${{ matrix.python }}
       - name: Tests with coverage
@@ -60,7 +60,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       # pip-audit has no severity filter: any known vulnerability fails the job.
       # To accept a reviewed advisory, add `--ignore-vuln <ID>` with a reason.
@@ -71,7 +71,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build the image
         run: docker build -t oncall-queue:ci .
       - name: Container starts and answers /health
