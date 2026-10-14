@@ -4,6 +4,8 @@ You do not need to write code, and your data does not have to come from microser
 
 The app answers one question honestly: *if a person could look at only K items a day, which items should they see — and would that have caught my past problems?*
 
+> **Scope of the evidence.** No pilot with a real organisation has been run. The results in this guide come from public benchmarks (GAIA, NAB, SMD, RCAEval) and from synthetic examples (the *Online shop* and *Microservice* cards are generated data). The evaluate page measures what the queue would have done on *your* past data; it does not show that it will work in your operations until you check it there, in shadow mode first.
+
 ---
 
 ## 1. Start the app
