@@ -1,7 +1,7 @@
 ﻿# 5-minute demo script (viva)
 
 App: http://127.0.0.1:8080  
-From `app/`: `uvicorn product.app:app --port 8080`  
+From `app/`: `docker compose up -d --build` (shadow mode), or `uv run uvicorn product.app:app --port 8080`  
 Numbers below match `FINAL_REPORT.md` / `run_validate.py` (not the older `CODE_REVIEW.md`).
 
 ---
@@ -16,13 +16,13 @@ Numbers below match `FINAL_REPORT.md` / `run_validate.py` (not the older `CODE_R
 
 1. Open the queue page → **Run sample**.
 2. Point at the **jump**, **gap**, and **leak** cards (metric filter if needed).
-3. Say: "One click builds a fake day so you see the three metric item types. This is demo data, not the GAIA proof."
+3. Say: "One click builds a synthetic day so you see the three metric item types. This is demo data, not the GAIA proof."
 
 ---
 
 ## 2:00–3:30 — Evaluate my data + ML on metrics
 
-1. Open **Evaluate my data** → pick **Online shop**.
+1. Open **Evaluate my data**, then click **Evaluate this** on the **Online shop** card (synthetic data).
 2. Show the table: severity vs static / rate / jump / your queue.
 3. Point at **learned jump level per series**.
 4. Say: "Two ML pieces. Log alerts: cost-sensitive classifier from Real/Noise marks. Metrics: each series learns its confirm rise on the train window only, then that number is frozen. ChatGPT is not in this path."
@@ -34,7 +34,7 @@ Numbers below match `FINAL_REPORT.md` / `run_validate.py` (not the older `CODE_R
 Say roughly:
 
 - Public proof: GAIA MicroSS, train week 1, test 55 days, 1,223 faults.
-- At K = 20: full queue **69.6%** (about **82%** of the 84.9% ceiling), vs Prometheus-style delta **~69%**, log severity **0%**.
+- At K = 20: the detector alone (jump rule + learned threshold) **72.6%** (86% of the 84.9% ceiling, 1.0 false items a day) vs the Prometheus-style rate rule **68.9%** (2.1 false items a day) and log severity **0%**. The full queue with the classifier catches **69.6%**; the promotion gate refuses the classifier on GAIA.
 - Walk-forward mean **71.3%** (95% CI 64.5–76.7%); the detector alone 74.8%, 8/8 weeks over the rate rule.
 - Misses: mostly no metric data or a full budget — not "silent faults."
 
@@ -66,13 +66,13 @@ Closer: "GPT writes text; this decides which K items on-call should see today."
 
 ```text
 cd app
-python -m pytest -q
-python run_validate.py
-uvicorn product.app:app --port 8080
+uv run pytest -q
+uv run python run_validate.py
+docker compose up -d --build
 ```
 
-Expect: **150 passed**, **VALIDATION OK**.
+Expect: **300 passed, 1 skipped** (the skipped integration test needs Docker), **VALIDATION OK (195 numbers)**, and `docker compose ps` showing the container `healthy`.
 
 Also, before the viva, click **Go back to the built-in rule** on the Evaluate page and delete `app/product/data/model.pkl` (if present). Otherwise the queue and any live alert are scored with the detector and classifier learned from the last data you evaluated (e.g. the online shop), and a "critical" sample alert can come out as *hide* — correct for that model, confusing in a demo.
 
-Checked from a fresh clone on 27 Sep 2026: `pip install`, quick start, Run sample, Evaluate (online shop), Use these settings, Show in queue, Alertmanager webhook — all pass.
+Checked in Docker on 14 Oct 2026: Run sample, Evaluate this (Online shop), Use these settings for my live queue, Show this data in the queue, Go back to the built-in rule, and `POST /ingest/alertmanager` in shadow mode — all pass. Run sample failed in Docker before that day's Dockerfile fix (`/app/data/sample_product` was not writable).

@@ -25,6 +25,19 @@ uv run python run_validate.py        # the report's 195 checked numbers match ap
 uv run uvicorn product.app:app --reload
 ```
 
+**Runtime (measured 14 Oct 2026, clean clone in a Linux container `ghcr.io/astral-sh/uv:python3.14-bookworm`):** `uv sync --group dev` 8 min 13 s with an empty uv cache, `pytest -q` 58 s (300 passed, 1 skipped), `run_validate.py` a few seconds. `docker compose up -d --build` serves `/health` within about 30 s of the build finishing.
+
+**Benchmark data** is not in the repository or the zip (about 420 MB). `run_validate.py` and the tests need only the committed `app/results/`. To rerun an experiment, fetch its data first; each script pins its source URL and checks SHA-256 where the source publishes stable files:
+
+```bash
+cd app
+uv run python ../tools/fetch_nab.py            # NAB, MIT licence (~15 MB); then: uv run python run_nab.py  (about 1 min in total)
+uv run python ../tools/fetch_smd.py            # SMD (OmniAnomaly)
+uv run python ../tools/fetch_rcaeval_mem.py    # RCAEval memory cases
+uv run python ../tools/fetch_rcaeval_re23.py   # RCAEval RE2/RE3, checked against tools/rcaeval_re23_sha256.txt
+uv run python ../tools/fetch_gaia.py           # GAIA, ~1.8 GB download, SHA-256 checked (--check to verify only)
+```
+
 Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE_YOUR_DATA.md)).
 
 ## What is where
