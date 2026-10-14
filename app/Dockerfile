@@ -11,7 +11,7 @@ COPY product ./product
 COPY examples ./examples
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
- && mkdir -p /app/product/data \
+ && mkdir -p /app/product/data /app/data/sample_product \
  && chown -R appuser:appuser /app
 
 ENV PYTHONPATH=/app

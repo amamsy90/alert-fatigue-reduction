@@ -24,7 +24,7 @@ BUDGETS = (1, 2, 5)
 def main() -> None:
     train_fraction = float(sys.argv[1]) if len(sys.argv) > 1 else 0.5
     rows, settings = [], []
-    for folder in sorted(p for p in ROOT.iterdir() if p.is_dir()):
+    for folder in sorted((p for p in ROOT.iterdir() if p.is_dir()), key=lambda p: p.name.lower())  # same order on Windows and Linux:
         report = evaluate(folder / "metrics.csv", folder / "incidents.csv", budgets=BUDGETS,
                           train_fraction=train_fraction)
         chosen = report.settings["chosen"]
