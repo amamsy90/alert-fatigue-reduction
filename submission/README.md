@@ -1,13 +1,13 @@
 # Submission copies
 
-Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** The report copies (Word and PDF) were last regenerated on 18 October 2026 for release 1.0.5 (301 tests, 195 checked numbers); the design specification, project plan and Use Your Data guide on 18 October 2026; the other generated copies on 10 October 2026.
+Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** The report copies (Word and PDF) were last regenerated on 18 October 2026 for release 1.0.5 (301 tests, 195 checked numbers); the design specification and project plan on 18 October 2026; the other generated copies on 10 October 2026. The report PDF of this release was exported with LibreOffice (the 11 October copy used Word).
 
 Project title on every copy: *AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices*, subtitle *Alert Fatigue Reduction in Cloud Microservice Operations*. The file names keep the older `Alert_Fatigue_` prefix so that earlier links still work.
 
 | Copy | Source | Regenerate |
 |---|---|---|
 | `Alert_Fatigue_Final_Report.docx` | `FINAL_REPORT.md` | `node tools/md2docx.js FINAL_REPORT.md submission/Alert_Fatigue_Final_Report.docx "" figures` |
-| `Alert_Fatigue_Final_Report.pdf` | `Alert_Fatigue_Final_Report.docx` | Export to PDF from Word, or `soffice --headless --convert-to pdf --outdir submission submission/Alert_Fatigue_Final_Report.docx` (this copy: Word) |
+| `Alert_Fatigue_Final_Report.pdf` | `Alert_Fatigue_Final_Report.docx` | Export to PDF from Word, or `soffice --headless --convert-to pdf --outdir submission submission/Alert_Fatigue_Final_Report.docx` (this copy: LibreOffice) |
 | `Alert_Fatigue_Design_Specification.docx` | `design_specification.md` | `node tools/md2docx.js design_specification.md submission/Alert_Fatigue_Design_Specification.docx ""` |
 | `Alert_Fatigue_Project_Plan.docx` | `project_plan.md` | `node tools/md2docx.js project_plan.md submission/Alert_Fatigue_Project_Plan.docx ""` |
 | `Use_Your_Data_Guide.docx` | `USE_YOUR_DATA.md` | `node tools/md2docx.js USE_YOUR_DATA.md submission/Use_Your_Data_Guide.docx ""` |
