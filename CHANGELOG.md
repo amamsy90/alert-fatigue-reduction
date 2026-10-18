@@ -2,6 +2,25 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [1.0.5]
+
+### Changed
+- Report: on RCAEval the promotion gate is run on the same later half of cases that is scored (`product_gate()` in `app/run_rcaeval_logs.py` splits at the ablation's case boundary), so "promoted on RE2 Train Ticket" was decided on its own test set, and the +13.3 points were measured on the same cases. This is now stated in §5, §9, §12, §13 and in the §B5 method and caveats, and listed under future work. The evaluation itself is unchanged (a further split of 45 cases would leave about 22 on each side), so no result number changed. `run_validate.py` now fails if the Train Ticket gate window stops being the scored set. In the product the gate window is the tail of a batch and later batches are scored, so the live design does not overlap.
+- Stale numbers in shipped documents: `DEMO_SCRIPT.md`, `VIVA_ANSWERS.md`, `VALIDATION.md`, `design_specification.md`, `project_plan.md` and the speaker notes led with 69.6% as "the full queue". They now give the shipped configuration on GAIA (log alerts by severity: 71.0%, 1.4 false items a day, precision 92%) and name 69.6% as the queue with the classifier's alerts, which the gate refuses. The speaker notes also had 70 / 70.2 / 72.5 / 74.4 and "1.3 points"; they now match the report (71.0, 71.3, 72.6, 2.1). `docs/mlops.md` and `docs/test_plan.md` said 295 tests; they say 300 (+1 integration) and the coverage table was re-measured (89.83%).
+- Version 1.0.5: `app/pyproject.toml`, `uv.lock`, `product.__version__`, the doc headers (including `docs/requirements.md`, which still said 1.0.0), the report header and date, `submission/README.md`. The report's Word and PDF copies are regenerated.
+
+### Fixed
+- `test_old_evaluations_are_pruned` depended on the file system giving three folders made 2 ms apart different modification times; on Linux it could fail (it did in a full run on one machine). It now sets the times explicitly. No product code changed.
+
+### Fixed (already on `master` since 1.0.4: 14-15 October, PRs #21, #22, #23)
+- Docker: **Run sample** works in the container (`app/Dockerfile` creates a writable `/app/data/sample_product`).
+- `DEMO_SCRIPT.md` numbers and commands refreshed; `USE_YOUR_DATA.md` states that no pilot with a real organisation has been run; README runtime and data-fetch steps.
+- `app/run_nab.py`: platform-independent NAB order. The first version had a syntax error that failed lint on `master` for about 13 minutes before PR #22 fixed it.
+- ruff 0.16.10 to 0.17.0 (Dependabot, PR #23).
+
+### Release process
+- `v1.0.3` was moved after it was published; no tag is moved for this release.
+
 ## [1.0.4]
 
 ### Changed
