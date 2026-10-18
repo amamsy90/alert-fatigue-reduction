@@ -1,6 +1,6 @@
 # Test plan
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.0.4
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.5
 
 ## 1. Goals
 
@@ -32,7 +32,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 295 tests, coverage report (the integration test is skipped without its stack)
+uv run pytest -q --cov           # 300 tests, coverage report (the 301st, integration, is skipped without its stack)
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -47,14 +47,14 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 295 pass, plus the integration job |
+| Tests | all pass on Python 3.10 and 3.12 | 300 pass, plus the integration job |
 | Coverage | line coverage ≥ `COVERAGE_MIN` | 90% (min 85%) |
 | Results | `run_validate.py` passes | 195 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
-## 5. Coverage by module (measured 11 October 2026, 295 tests)
+## 5. Coverage by module (measured 18 October 2026, 300 tests + 1 skipped)
 
 `uv run pytest -q --cov` from `app/`. Modules not listed are fully covered.
 

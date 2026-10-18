@@ -266,6 +266,10 @@ def claims_still_hold() -> None:
         tt = next(a["promotion_gate"] for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
         if tt["queue_saving"] != tt["margin"]:
             _fail("RE2 Train Ticket no longer passes exactly at the margin; rewrite 'exactly one missed fault' (§B5)")
+        tt_app = next(a for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
+        if tt["queue_check"]["faults"] != tt_app["test_cases"]:
+            _fail("the RE2 Train Ticket gate window is no longer the scored set of test cases; rewrite the "
+                  "'gate's window is the scored window' caveat (§9, §12, §13, §B5)")
         if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
             _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
 

@@ -1,6 +1,6 @@
 # MLOps and lifecycle
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.0.4
+**System:** AI-Assisted On-Call Queue · **Version:** 1.0.5
 
 This page explains how the AI part of the system is versioned, reproduced, updated and tracked after it is deployed. The AI component is a cost-sensitive logistic regression that scores log alerts (scikit-learn), next to rule-based metric detectors. No external model API is used.
 
@@ -24,7 +24,7 @@ If another team member receives the project tomorrow:
 ```bash
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
-uv run pytest -q                      # 295 tests, no network needed (integration: see test_plan.md)
+uv run pytest -q                      # 300 tests (+1 integration), no network needed (integration: see test_plan.md)
 uv run python run_validate.py         # the report's 195 checked numbers match the committed results
 docker compose up -d                  # the app, built from the hash-pinned lock (dev settings)
 ```
