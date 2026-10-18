@@ -106,8 +106,10 @@ def test_jobs_run_one_at_a_time(monkeypatch):
 def test_old_evaluations_are_pruned(client, tmp_path):
     from product.web import evaluate_routes as ev
 
-    for name in ("a1", "b2", "c3"):
+    now = time.time()
+    for n, name in enumerate(("a1", "b2", "c3")):
         (ev.EVAL_DIR / name).mkdir(parents=True)
-        time.sleep(0.002)
+        # Explicit, distinct times: on Linux, folders made a few milliseconds apart can share one mtime.
+        os.utime(ev.EVAL_DIR / name, (now + n, now + n))
     ev._prune_evals(keep="c3", limit=1)
     assert sorted(f.name for f in ev.EVAL_DIR.iterdir()) == ["c3"]
