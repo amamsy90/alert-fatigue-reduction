@@ -6,7 +6,7 @@
 
 **Course:** Software Engineering and Programming
 
-**Date:** 10 October 2026
+**Date:** 18 October 2026
 
 **Version:** 3.0
 
@@ -121,7 +121,7 @@ Sweep K = 5, 10, 20, 50.
 
 A fault is caught if a surfaced alert carries its label **or** a shown jump on its service overlaps its window.
 
-At K = 20 on the test period: full queue **69.6%**, jumps with learned threshold **72.6%**, Prometheus-style rate rule **68.9%**, log severity **0%**. Best possible 84.9%.
+At K = 20 on the test period: shipped full queue (log alerts by severity; the promotion gate refuses the classifier on GAIA) **71.0%**, with the classifier's alerts 69.6%, jumps with learned threshold **72.6%**, Prometheus-style rate rule **68.9%**, log severity **0%**. Best possible 84.9%.
 
 ### 4.6 Evaluation harness
 
@@ -207,7 +207,8 @@ At K = 20 on the test period: full queue **69.6%**, jumps with learned threshold
 | Static `memory > p99` | 57.2%; 3.0 false/day |
 | Rate rule `delta(mem[5m]) > 0.5 GB` | 68.9%; 2.1 false/day |
 | Jumps + learned threshold | **72.6%**; 1.0 false/day |
-| Full queue (jumps + leaks + gaps + alerts) | **69.6%**; 1.8 false/day; precision 90% |
+| Full queue, shipped (jumps + leaks + gaps + log alerts by severity) | **71.0%**; 1.4 false/day; precision 92% |
+| Full queue with the classifier's alerts (refused by the gate on GAIA) | 69.6%; 1.8 false/day; precision 90% |
 | Carry-over ≤ 10 slots (Phase 3) | 72.6% (rate rule with the same: 72.5%) |
 | Best possible (oracle) | 84.9% |
 | Full queue at K=5 / 10 / 50 | 19.5% / 38.6% / 85.8% |

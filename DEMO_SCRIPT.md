@@ -34,7 +34,7 @@ Numbers below match `FINAL_REPORT.md` / `run_validate.py` (not the older `CODE_R
 Say roughly:
 
 - Public proof: GAIA MicroSS, train week 1, test 55 days, 1,223 faults.
-- At K = 20: the detector alone (jump rule + learned threshold) **72.6%** (86% of the 84.9% ceiling, 1.0 false items a day) vs the Prometheus-style rate rule **68.9%** (2.1 false items a day) and log severity **0%**. The full queue with the classifier catches **69.6%**; the promotion gate refuses the classifier on GAIA.
+- At K = 20: the detector alone (jump rule + learned threshold) **72.6%** (86% of the 84.9% ceiling, 1.0 false items a day) vs the Prometheus-style rate rule **68.9%** (2.1 false items a day) and log severity **0%**. The shipped configuration (the promotion gate refuses the classifier on GAIA, so log alerts are chosen by severity) catches **71.0%** (84% of the ceiling, 1.4 false items a day); the same queue with the classifier's alerts would catch 69.6% (1.8 false items a day), which is why the gate keeps it out.
 - Walk-forward mean **71.3%** (95% CI 64.5–76.7%); the detector alone 74.8%, 8/8 weeks over the rate rule.
 - Misses: mostly no metric data or a full budget — not "silent faults."
 
