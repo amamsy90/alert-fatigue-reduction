@@ -8,9 +8,9 @@
 
 **Course:** Software Engineering and Programming
 
-**Date:** 11 October 2026
+**Date:** 18 October 2026
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 
 Numbers come from scripts under `app/` and are checked by `python run_validate.py` against the *Checked numbers* table at the end. Part A follows the thirteen sections of the course brief; Part B holds the measured results; Part C says how to reproduce them.
 
