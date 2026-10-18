@@ -25,7 +25,8 @@ Script: `python run_queue_eval.py` → `app/results/queue_eval_gaia.csv`
 | delta_5m (fair baseline) | 68.9% | 17.4 | 2.1 | 88% |
 | jumps_online | 67.8% | 17.5 | 2.4 | 86% |
 | **jumps_tuned** (detector alone) | **72.6%** | 17.1 | **1.0** | 94% |
-| **proposed** (jumps + leaks + gaps + alerts) | **69.6%** | 17.7 | 1.8 | 90% |
+| **proposed** (jumps + leaks + gaps + classifier alerts; refused by the promotion gate on GAIA) | 69.6% | 17.7 | 1.8 | 90% |
+| **shipped** (the same queue with log alerts by severity: what the tool runs on GAIA) | **71.0%** | 17.6 | 1.4 | 92% |
 | jumps_hindsight (old headline, not causal) | 72.9% | 17.5 | 1.3 | 93% |
 | p3_ranker | 69.7% | 17.7 | 1.8 | 90% |
 | p3_grouped (2 min) | 70.7% | 17.6 | 1.9 | 89% |

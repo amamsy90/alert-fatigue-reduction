@@ -16,7 +16,7 @@ Build and evaluate a system for **cloud microservice on-call queues** that, unde
 | D1 | Data pipeline + baseline numbers on the shared split | Done (`results/m1_gaia.csv`) |
 | D2 | Alert classifier vs baseline at equal budget | Done (`results/m2_gaia.csv`) |
 | D3 | Memory-jump detector vs injected faults | Done (`results/memory_gaia_jump.csv`) — 86.1% overlap |
-| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 69.6% (jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
+| D4 | Shared-budget policy + whole-queue evaluation | Done (`results/queue_eval_gaia.csv`) — causal queue 71.0% as shipped (69.6% with the classifier's alerts; jumps + threshold 72.6%) vs rate rule 68.9% at K=20 |
 | D5 | Local on-call app (shadow mode, marks, saved model) | Done (`app/product/`) |
 | D6 | Final report + name / course / date on documents | Done (`FINAL_REPORT.md`; name, course and date filled on the report, plan, design and proposal) |
 

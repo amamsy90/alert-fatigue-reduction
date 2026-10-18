@@ -50,7 +50,7 @@ Success is fixed before I look at the scores. Learn on the first week. Test on t
 
 I compare against rules a team already runs, through the same queue. At twenty items a day: log severity catches none, because the lines inside a fault are warnings. A static memory threshold catches 57 percent. A Prometheus rate rule — memory up half a gigabyte in five minutes — catches 69 percent with about two false items a day.
 
-My jump rule with a threshold learned on week one catches 73 percent with one false item a day. The full queue, which also shows slow leaks, monitoring gaps and a few log alerts, catches 70 percent. The best any method could do at twenty a day is 85 percent, because GAIA injects twenty-two faults a day.
+My jump rule with a threshold learned on week one catches 73 percent with one false item a day. The full queue, which also shows slow leaks, monitoring gaps and a few log alerts, catches 71 percent. The best any method could do at twenty a day is 85 percent, because GAIA injects twenty-two faults a day.
 
 Of the faults I miss, almost half fall in metric outages and half are days with more faults than slots. Two percent are the detector's fault. Re-learned every week, the detector beats the rate rule in all eight later weeks.
 
@@ -70,17 +70,17 @@ That is the project: budgeted incident detection for cloud microservice on-call,
 
 Do not say this in the seven minutes unless they ask.
 
-**Where does the work stand?** The logs are China time and the memory files are UTC. After that alignment, the jump rule overlaps 86.1 percent of the 1,223 test faults, and 99.6 percent of the faults that have metric data. At 20 items a day, in real time, the jump rule with a learned threshold catches 72.6 percent and the full queue 70.2 percent. A normal Prometheus rate rule catches 68.9 percent with twice the false items. The best possible at 20 a day is 84.9 percent, because GAIA injects 22 faults a day.
+**Where does the work stand?** The logs are China time and the memory files are UTC. After that alignment, the jump rule overlaps 86.1 percent of the 1,223 test faults, and 99.6 percent of the faults that have metric data. At 20 items a day, in real time, the jump rule with a learned threshold catches 72.6 percent and the full queue 71.0 percent. A normal Prometheus rate rule catches 68.9 percent with twice the false items. The best possible at 20 a day is 84.9 percent, because GAIA injects 22 faults a day.
 
 **How do you explain a memory jump?** Memory on one service sits at its own recent level. A jump is that series rising more than 0.5 GB above the median of the previous 15 minutes, for at least two points no more than two minutes apart. That is one incident. The logs from that service during the jump belong to it. The 0.5 GB size was chosen on week 1 only.
 
 **Can a company use a model trained on open data?** Not as is. Their services and alert text differ, and they have no injected-fault labels. Keep the queue and the jump rule. Run in shadow mode. Mark items Real or Noise. Retrain on those labels. The app already does this.
 
-**Why does the log baseline catch 0%?** The log lines inside a GAIA memory fault are warnings, not errors, so a fixed severity rule never escalates them. Most injected faults have no log line at all. That is why I also compare against metric rules a team would already have — the rate rule is the fair baseline. The detector beats it by 3.7 points with half the false items; the full queue by 1.3 points.
+**Why does the log baseline catch 0%?** The log lines inside a GAIA memory fault are warnings, not errors, so a fixed severity rule never escalates them. Most injected faults have no log line at all. That is why I also compare against metric rules a team would already have — the rate rule is the fair baseline. The detector beats it by 3.7 points with half the false items; the full queue by 2.1 points.
 
 **Why not 95% at K=20?** The 95 percent target assumed every fault would leave an alert and that there are fewer faults than slots. On this data 71 percent of test faults have a jump and no log, and there are 22 faults a day for 20 slots, so the ceiling is 84.9 percent. 10.8 percent of faults fall in monitoring gaps, where no metric method can see them; the queue shows those gaps as items.
 
-**Was it a lucky month?** No. Everything learned is re-learned before each later week: the jump rule with threshold averages 74.8 percent and beats the rate rule in all eight weeks; the full queue, which also spends slots on leaks, gaps and alerts, averages 72.5 percent. The weak week, 52 percent, is a 2.5-day metric outage on every service: only 61 percent of that week's faults have any metric data.
+**Was it a lucky month?** No. Everything learned is re-learned before each later week: the jump rule with threshold averages 74.8 percent and beats the rate rule in all eight weeks; the full queue, which also spends slots on leaks, gaps and alerts, averages 71.3 percent. The weak week, 52 percent, is a 2.5-day metric outage on every service: only 61 percent of that week's faults have any metric data.
 
 **Did the old version cheat?** The first queue ranked each day's jumps by their final peak, which needs the whole day in advance. I replaced it with a threshold on the rise at confirmation, learned on week one. Same score, fewer false items, and it works live.
 
@@ -91,7 +91,7 @@ Do not say this in the seven minutes unless they ask.
 
 **Why are faults still missed?** At twenty a day I miss 364 faults. 166 are during metric outages, 191 are days with more faults than slots, and only 7 are the detector's fault.
 
-**What did you try that did not work?** A learned model to rank jumps. The rise threshold already gives 94 percent precision, so it added nothing. Carrying unused slots to the next day did help: 74.4 percent at K=20, and it still beats the rate rule given the same carry-over.
+**What did you try that did not work?** A learned model to rank jumps. The rise threshold already gives 94 percent precision, so it added nothing. Carrying unused slots to the next day did help: 72.6 percent at K=20, but the rate rule with the same carry-over reaches 72.5 percent, so it does not separate the two.
 
 
 **Can someone use it on their own data — not microservices?** Yes, without code. The Evaluate page takes any number over time, finds the columns itself, tunes on the early part and shows how every approach would have done on the rest, next to a random-chance line. On a shop's orders it caught 10 of 11 outages where the notification stream caught 3. On public NAB data it beats chance on traffic, machines, servers and ads, and is no better than chance on Twitter volume — and it says so. One click then uses those settings for the live queue.
