@@ -1,17 +1,19 @@
 """Causal service-call graphs built from spans.
 
 RCAEval's trace files are not in the log and metric download (`tools/fetch_rcaeval_re23.py`
-keeps `logs.parquet` and `metrics.parquet` only). This module reads a span table
-when one is present. A span counts only when its recorded time is strictly
-before the decision time. The root-cause service is a label for scoring, not
-a feature.
+keeps `logs.parquet` and `metrics.parquet` only, plus `cases.parquet`). This
+module reads a span table when one is present. A span counts only when its
+recorded time is strictly before the decision time. The root-cause service is
+a label for scoring, not a feature.
 
-RCAEval `traces.parquet` columns (Online Boutique and Train Ticket; Sock Shop
-has no traces) are accepted under their published names: `time`, `traceID`,
-`spanID`, `parentSpanID`, `serviceName`, `duration`, `statusCode`.
+RCAEval `traces.parquet` (Online Boutique and Train Ticket; Sock Shop has no
+traces) has a text `time` column such as ``21:24``. That clock is not a span
+time. The timestamp is `startTimeMillis` or `startTime` (or another numeric
+epoch column).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -20,9 +22,20 @@ import pandas as pd
 NODE_FEATURES = ("log_calls", "error_rate", "log_duration", "error_jump", "latency_jump")
 EDGE_FEATURES = ("log_calls", "error_rate", "latency_jump")
 _OK_STATUS = frozenset({"", "0", "0.0", "ok", "unset", "200"})
+# Clock-of-day text is not an epoch. startTimeMillis wins over that column.
+_CLOCK = re.compile(r"^\d{1,2}:\d{2}(?::\d{2})?$")
+_TIME_ORDER = (
+    "starttimemillis",
+    "start_time_millis",
+    "starttimeunixnano",
+    "starttimeunixmicro",
+    "starttime",
+    "start_time",
+    "timestamp",
+    "time",
+)
 
 _ALIASES = {
-    "time": ("time", "timestamp", "starttime", "start_time"),
     "trace_id": ("traceid", "trace_id", "traceid"),
     "span_id": ("spanid", "span_id"),
     "parent_span_id": ("parentspanid", "parent_span_id", "parentspan"),
@@ -51,24 +64,94 @@ def _is_error(value: object) -> int:
     return 0 if text in _OK_STATUS else 1
 
 
+def _clock_column(series: pd.Series) -> bool:
+    """True when the values are clock text such as ``21:24``, not an epoch."""
+    if pd.api.types.is_numeric_dtype(series):
+        return False
+    text = series.astype("string").str.strip()
+    sample = text.dropna()
+    if sample.empty:
+        return False
+    sample = sample.head(32)
+    hits = sum(1 for value in sample if _CLOCK.match(str(value)))
+    return hits * 2 > len(sample)
+
+
+def _numeric_epoch(series: pd.Series) -> pd.Series | None:
+    """Numeric epoch values, including digit strings. Never raises on StringDtype."""
+    if pd.api.types.is_numeric_dtype(series):
+        numeric = pd.to_numeric(series, errors="coerce")
+    else:
+        numeric = pd.to_numeric(series.astype("string"), errors="coerce")
+    if not numeric.notna().any():
+        return None
+    return numeric
+
+
+def _epoch_unit(name: str, median: float) -> str:
+    key = name.lower()
+    if "nano" in key or median >= 1e17:
+        return "ns"
+    if "micro" in key or median >= 1e14:
+        return "us"
+    if "milli" in key or median >= 1e11:
+        return "ms"
+    return "s"
+
+
+def _stamps_from(series: pd.Series, name: str) -> pd.Series | None:
+    if _clock_column(series):
+        return None
+    numeric = _numeric_epoch(series)
+    if numeric is not None:
+        median = float(numeric.dropna().abs().median())
+        stamps = pd.to_datetime(numeric, unit=_epoch_unit(name, median), utc=True, errors="coerce")
+        if stamps.notna().any():
+            return stamps
+    parsed = pd.to_datetime(series, utc=True, errors="coerce")
+    if parsed.notna().any():
+        return parsed
+    return None
+
+
+def _span_stamps(frame: pd.DataFrame, lookup: dict[str, str]) -> pd.Series:
+    """Prefer startTimeMillis / startTime. A ``21:24`` column is never used."""
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for name in _TIME_ORDER:
+        column = lookup.get(name)
+        if column and column not in seen:
+            ordered.append(column)
+            seen.add(column)
+    for lower, column in lookup.items():
+        if column in seen:
+            continue
+        if "time" in lower or "timestamp" in lower:
+            ordered.append(column)
+            seen.add(column)
+    for column in ordered:
+        stamps = _stamps_from(frame[column], column)
+        if stamps is not None:
+            return stamps
+    raise ValueError(
+        "span table has no usable timestamp; a clock column such as 21:24 is not a span time"
+    )
+
+
 def normalize_spans(frame: pd.DataFrame) -> pd.DataFrame:
     """One row per span with `time`, `service`, `duration`, `error`, and ids.
 
-    `time` becomes UTC. A numeric time is unix seconds, which is what RCAEval
-    stores. Duration is kept in the file's own unit; jump features are ratios.
+    `time` becomes UTC. A numeric epoch is seconds unless the column is
+    milliseconds (``startTimeMillis``) or the magnitude says otherwise.
+    Duration is kept in the file's own unit; jump features are ratios.
     """
     if frame is None or frame.empty:
         return pd.DataFrame(columns=["time", "trace_id", "span_id", "parent_span_id", "service", "duration", "error"])
     lookup = {str(column).strip().lower(): str(column) for column in frame.columns}
-    time_col = _pick(lookup, _ALIASES["time"])
     service_col = _pick(lookup, _ALIASES["service"])
-    if time_col is None or service_col is None:
+    if service_col is None:
         raise ValueError("span table needs a time column and a service column")
-    raw_time = frame[time_col]
-    if np.issubdtype(raw_time.dtype, np.number):
-        stamps = pd.to_datetime(raw_time, unit="s", utc=True)
-    else:
-        stamps = pd.to_datetime(raw_time, utc=True)
+    stamps = _span_stamps(frame, lookup)
     duration_col = _pick(lookup, _ALIASES["duration"])
     status_col = _pick(lookup, _ALIASES["status"])
     duration = (
