@@ -26,6 +26,12 @@ dev = [
     "seaborn>=0.13,<1",
     "pyarrow>=15,<26",
 ]
+# Optional. `uv sync` and CI do not install this group. cuML is not pinned
+# here: its wheels are CUDA-specific and come from the NVIDIA index.
+# docs/GPU_LLM_ROLES.md has the install commands.
+gpu = [
+    "xgboost>=2.1,<4",
+]
 
 [tool.uv]
 # An application, not a library: `uv sync` installs the dependencies only.
@@ -35,6 +41,9 @@ package = false
 # Tests import `src` and `product` from app/ without setting PYTHONPATH.
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "gpu: needs a CUDA device and the optional gpu libraries (skipped otherwise)",
+]
 
 [tool.coverage.run]
 source = ["src", "product"]
