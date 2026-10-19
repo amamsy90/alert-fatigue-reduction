@@ -104,12 +104,18 @@ class AlertClassifier:
         )
 
     def _active_encoder(self) -> object | None:
+        """Encoder for the template columns.
+
+        A caller-supplied encoder is kept. A saved ``hash-v1`` model stays on
+        the hash. Otherwise (a new classifier, or a saved sentence-encoder
+        name) ``resolve_encoder`` reads ``LLM_TEMPLATE_ENCODER``.
+        """
         if not self.template_features:
             return None
         if self._template_encoder is None:
             from .template_features import HASH_ENCODER, HashTemplateEncoder, resolve_encoder
 
-            if self.template_encoder_name in (None, HASH_ENCODER):
+            if self.template_encoder_name == HASH_ENCODER:
                 self._template_encoder = HashTemplateEncoder()
             else:
                 self._template_encoder = resolve_encoder(None)
