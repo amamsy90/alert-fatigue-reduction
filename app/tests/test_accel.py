@@ -99,7 +99,18 @@ def test_realised_label_is_not_a_model_feature():
 
 def test_training_modules_do_not_import_pickle():
     """FR-21. Models stay skops archives. pickle and joblib are not loaders."""
-    for module_name in ("accel", "classifier"):
+    for module_name in (
+        "accel",
+        "classifier",
+        "metric_model",
+        "metric_tcn",
+        "ranker",
+        "ranker_torch",
+        "ranker_xgb",
+        "optional_models",
+        "model_eval",
+        "weight_io",
+    ):
         path = Path(__file__).parents[1] / "src" / f"{module_name}.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
