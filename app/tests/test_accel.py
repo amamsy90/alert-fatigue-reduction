@@ -1,8 +1,9 @@
 """GPU backend requirements (docs/GPU_LLM_ROLES.md, FR-21, FR-22, FR-23).
 
 REQUIREMENTS
-- The LLM never changes the queue unless an evaluated feature flag is on
-  (Phase 2b). ``classifier_decisions`` takes alerts, scores and config only.
+- The LLM never changes the queue unless ``LLM_TEMPLATE_FEATURES`` is on.
+  That flag is off by default. ``classifier_decisions`` takes alerts, scores
+  and config only.
 - No output path without a CPU fallback. A missing CUDA device or a missing
   library resolves to sklearn, and a GPU fit that fails is retrained with
   sklearn. The saved pipeline is scikit-learn either way.
