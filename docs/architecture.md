@@ -265,7 +265,7 @@ Operator state that is not relational lives in `ops.json` (Live override, keys, 
 
 ## 6. Optional GPU training
 
-The classifier can train its head with cuML, or with XGBoost on a CUDA device, and then stores a scikit-learn pipeline. `load_model` does not import those libraries. `src/accel.get_backend` falls back to sklearn when the device or the library is missing, and logs which backend it chose. Roles, the install, and what is deliberately not automatic are in `docs/GPU_LLM_ROLES.md`.
+The classifier can train its head with cuML, or with XGBoost on a CUDA device, and then stores a scikit-learn pipeline. `load_model` does not import those libraries. `src/accel.get_backend` resolves `auto` to sklearn even when cuML is installed; a GPU backend runs only when it is named, and falls back to sklearn when the device or the library is missing. Roles, the install, and what is deliberately not automatic are in `docs/GPU_LLM_ROLES.md`.
 
 A local LLM can attach a short note to the shadow record (`would_have_paged.explanations`) when `LLM_EXPLAIN` is set. The note is written after the page decision, from fields known at that moment, and it is not sent to a channel. Missing weights or a failed completion leave the same items with an empty note list. The GGUF is pinned in `product/llm_pin.json` and checked by SHA-256 at load.
 

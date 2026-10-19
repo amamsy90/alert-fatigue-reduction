@@ -52,16 +52,21 @@ def test_same_template_has_the_same_hash_whatever_the_label():
 
 
 def test_default_pipeline_matches_the_baseline_queue(tmp_path, monkeypatch):
-    """FR-22. With the flag off, scores and the shown alert queue match the current columns."""
+    """FR-22. With the flag off, scores and the shown alert queue match the current columns.
+
+    Both fits are pinned to sklearn. ``auto`` is sklearn too; the pin keeps this
+    comparison identical on a machine where cuML is installed.
+    """
     monkeypatch.delenv("LLM_TEMPLATE_FEATURES", raising=False)
+    monkeypatch.setenv("ACCEL_BACKEND", "sklearn")
     generate(tmp_path, seed=42, days=14)
     alerts = load_alerts(tmp_path / "alerts.csv")
     faults = load_faults(tmp_path / "faults.csv")
     alerts, _faults = align_alerts_to_faults(alerts, faults)
     config = Config(budget_k=20)
     train, test = time_split(alerts, config.split_day)
-    baseline = AlertClassifier(config, template_features=False).fit(train)
-    followed = AlertClassifier(config).fit(train)
+    baseline = AlertClassifier(config, template_features=False, backend="sklearn").fit(train)
+    followed = AlertClassifier(config, backend="sklearn").fit(train)
     base_proba = baseline.predict_proba(test)
     assert np.allclose(base_proba, followed.predict_proba(test))
     base_decisions = classifier_decisions(test, base_proba, config)
@@ -145,3 +150,74 @@ def test_missing_or_unpinned_sentence_encoder_uses_the_hash(tmp_path, monkeypatc
 
     monkeypatch.setattr(builtins, "__import__", blocked)
     assert resolve_encoder().name == "hash-v1"
+    from src.template_features import encoder_load_status
+
+    assert encoder_load_status()["error"] == "sentence-transformers is not installed"
+
+
+def test_pinned_sentence_encoder_loads_the_weight_files_folder(tmp_path, monkeypatch):
+    """Hash the weight file. Load the model from its folder, not from the file path."""
+    import sys
+    import types
+
+    folder = tmp_path / "all-MiniLM"
+    folder.mkdir()
+    weights = folder / "model.safetensors"
+    payload = b"weights"
+    weights.write_bytes(payload)
+    seen: dict[str, str] = {}
+
+    class _Fake:
+        def __init__(self, path: str) -> None:
+            seen["path"] = path
+
+        def encode(self, texts):
+            return np.ones((len(texts), 6))
+
+    module = types.ModuleType("sentence_transformers")
+    module.SentenceTransformer = _Fake
+    monkeypatch.setitem(sys.modules, "sentence_transformers", module)
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER", str(weights))
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER_SHA256", hashlib.sha256(payload).hexdigest())
+    encoder = resolve_encoder()
+    assert seen["path"] == str(folder)
+    assert encoder.name.startswith("sentence-transformers@")
+    assert len(encoder.embed("disk full")) == 4
+    from src.template_features import encoder_load_status
+
+    status = encoder_load_status()
+    assert status["active"] == encoder.name
+    assert status["error"] is None
+    assert status["requested"] == str(weights)
+
+
+def test_a_failed_sentence_encoder_load_is_recorded(tmp_path, monkeypatch, caplog):
+    import sys
+    import types
+
+    folder = tmp_path / "model"
+    folder.mkdir()
+    weights = folder / "model.safetensors"
+    payload = b"weights"
+    weights.write_bytes(payload)
+
+    class _Boom:
+        def __init__(self, path: str) -> None:
+            raise NotADirectoryError(path)
+
+    module = types.ModuleType("sentence_transformers")
+    module.SentenceTransformer = _Boom
+    monkeypatch.setitem(sys.modules, "sentence_transformers", module)
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER", str(weights))
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER_SHA256", hashlib.sha256(payload).hexdigest())
+    caplog.set_level("ERROR")
+    assert resolve_encoder().name == "hash-v1"
+    from src.template_features import encoder_load_status
+
+    error = encoder_load_status()["error"] or ""
+    assert "NotADirectoryError" in error
+    assert "fell back to hash-v1" in caplog.text
+
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER", str(folder))
+    assert resolve_encoder().name == "hash-v1"
+    assert encoder_load_status()["error"] == "weights file missing"

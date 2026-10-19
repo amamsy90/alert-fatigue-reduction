@@ -274,6 +274,7 @@ def health(store) -> dict:
         "accel": {"backend": _active_backend()},
         "llm": {**_llm_health(), "attempts": attempts, "timeout_rate": timeout_rate,
                 "fallback_rate": fallback_rate},
+        "template_encoder": _template_encoder_status(),
         "gpu": {"memory_mib": _gpu_memory_mib()},
     }
 
@@ -283,7 +284,11 @@ def liveness_fields() -> dict:
 
     Weight bytes are hashed only when explanations are on (see ``llm_health``).
     """
-    return {"accel": {"backend": _active_backend()}, "llm": _llm_health()}
+    return {
+        "accel": {"backend": _active_backend()},
+        "llm": _llm_health(),
+        "template_encoder": _template_encoder_status(),
+    }
 
 
 def _active_backend() -> str:
@@ -296,6 +301,12 @@ def _llm_health() -> dict:
     from product.llm import llm_health
 
     return llm_health()
+
+
+def _template_encoder_status() -> dict:
+    from src.template_features import encoder_load_status
+
+    return encoder_load_status()
 
 
 def _gpu_memory_mib() -> float | None:
