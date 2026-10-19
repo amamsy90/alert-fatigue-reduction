@@ -259,3 +259,9 @@ erDiagram
 `FEEDBACK` keeps the service and time window of the marked item, so marks survive when old jobs are pruned (NFR-9). `INGEST_BUFFER` and `INGEST_SEEN` stand alone: the buffer is acknowledged after a successful job, and fingerprints expire after `INGEST_DEDUP_HOURS`.
 
 Operator state that is not relational lives in `ops.json` (Live override, keys, Prometheus URL, page marks); it is written under a lock through a unique temporary file.
+
+---
+
+## 6. Optional GPU training
+
+The classifier can train its head with cuML, or with XGBoost on a CUDA device, and then stores a scikit-learn pipeline. `load_model` does not import those libraries. `src/accel.get_backend` falls back to sklearn when the device or the library is missing, and logs which backend it chose. Roles, the install, and what is deliberately not automatic are in `docs/GPU_LLM_ROLES.md`. A later local LLM may annotate a shadow queue; it does not choose what is paged.

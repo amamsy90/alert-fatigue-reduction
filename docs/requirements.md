@@ -42,6 +42,9 @@ This document states what the system must do (functional requirements, FR), how 
 | **FR-18** | The system shall expose service, job, paging, model and data health as Prometheus metrics (`/metrics`) and as a checked summary (`/monitoring`). | Must |
 | **FR-19** | Every experiment run shall be logged with its code version, configuration, data fingerprint, outputs and metrics. | Should |
 | **FR-20** | Webhook rows without a usable timestamp or source shall be rejected with a reason and never block later jobs. | Must |
+| **FR-21** | GPU training shall be optional. The default install and CI shall run without the `gpu` dependency group. Every GPU path shall fall back to the scikit-learn classifier when CUDA or the GPU library is missing, and the saved model shall remain a skops archive that loads on CPU. | Must |
+| **FR-22** | An LLM shall not change which items are queued or paged unless an evaluated feature flag is on. Live paging rules are unchanged. The flag is not implemented yet (Phase 2b). | Must |
+| **FR-23** | An LLM prompt shall contain only fields known at decision time. Realised fault labels and later rows shall not be included. Prompt construction is Phase 2a; the classifier already excludes the realised label from its inputs. | Must |
 
 ## 3. Non-functional requirements
 
@@ -132,6 +135,9 @@ This document states what the system must do (functional requirements, FR), how 
 | FR-18 | all of `test_monitoring.py` | `docs/monitoring.md` |
 | FR-19 | all of `test_tracking.py` | `app/results/experiments.jsonl` |
 | FR-20 | all of `test_ai_inputs.py` | |
+| FR-21 | `test_missing_gpu_libraries_fall_back_to_sklearn`, `test_missing_gpu_backends_build_the_same_queue`, `test_a_failing_gpu_fit_is_retrained_on_sklearn`, `test_copied_coefficients_match_and_load_on_cpu`, `test_tree_head_round_trips_through_the_model_archive`, `test_training_modules_do_not_import_pickle` | `docs/GPU_LLM_ROLES.md`. cuML and XGBoost-GPU queue checks skip when there is no CUDA device. |
+| FR-22 | `test_queue_decisions_have_no_llm_argument` | Phase 2b flag is not in the code yet |
+| FR-23 | `test_realised_label_is_not_a_model_feature` | Phase 2a prompt test is not in the code yet |
 | NFR-11 | — | `app/results/perf/load_test_*_users.json` |
 | NFR-1 | all of `test_causality.py`, `test_later_data_does_not_change_the_window`, `test_counts_use_only_earlier_alerts`, `test_jump_features_look_only_backwards`, `test_test_window_cannot_move_a_series_threshold` | |
 | NFR-2 | all of `test_security.py`, `test_login_guards_everything_but_health`, `test_no_password_means_private_networks_only`, `test_ingest_token`, `test_metadata_prometheus_url_always_refused`, `test_private_prometheus_needs_env_override`, `test_fetch_respects_ssrf_gate`, `test_slack_webhook_must_be_hooks_slack`, `test_failures_never_echo_the_secret`, `test_tampered_model_file_is_refused`, `test_oversized_ingest_body_is_refused`, `test_upload_above_limit_is_refused` | `docs/threat_model.md` |
@@ -149,3 +155,4 @@ This document states what the system must do (functional requirements, FR), how 
 - `product/datasets.py` (NAB download) is excluded from coverage because it needs the network.
 - NFR-5's "under an hour" and NFR-11's load test are measured by hand, not in CI.
 - R1 through R8 in `docs/threat_model.md` are closed and tested.
+- FR-21's cuML-versus-sklearn tolerance and the XGBoost CUDA conversion check are skipped on machines without a CUDA device, including CI. The CPU fallback and the skops round-trip are not skipped.

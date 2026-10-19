@@ -25,15 +25,19 @@ from pathlib import Path
 import pandas as pd
 import skops.io as sio
 
+from src.accel import TREE_SKOPS_TYPE
 from src.classifier import AlertClassifier
+from src.tracking import accelerator_snapshot as _accelerator_snapshot
 
 DEFAULT_PATH = Path(__file__).resolve().parent / "data" / "model.pkl"
 RETRAIN_AFTER_DAYS = 7
 # Zip of meta.json and, when a classifier was fit, pipe.skops. Not a pickle.
 MODEL_FORMAT = "oncall-model-v1"
-# numpy.ravel is the FunctionTransformer inside the text branch. Anything else
-# beside skops' own sklearn types is refused, so a file cannot name os.system.
-TRUSTED_TYPES = frozenset({"numpy.ravel"})
+# numpy.ravel is the FunctionTransformer inside the text branch. The tree head
+# is the skops form of an optional XGBoost booster (numeric node arrays only).
+# Anything else beside skops' own sklearn types is refused, so a file cannot
+# name os.system.
+TRUSTED_TYPES = frozenset({"numpy.ravel", TREE_SKOPS_TYPE})
 
 
 @dataclass
@@ -92,6 +96,7 @@ def _meta(saved: SavedModel, has_pipeline: bool) -> dict:
         "trained_at": saved.trained_at,
         "train_alerts": saved.train_alerts,
         "feedback_real": saved.feedback_real,
+        "backend": None if saved.model is None else getattr(saved.model, "backend_used", "sklearn"),
     }
 
 
@@ -200,6 +205,7 @@ def load_model(path: Path | None = None) -> SavedModel | None:
                     return None
                 model = AlertClassifier()
                 model._pipe = pipe
+                model.backend_used = str(meta.get("backend") or "sklearn")
         return SavedModel(
             model=model,
             escalate_threshold=float(meta["escalate_threshold"]),
@@ -309,6 +315,7 @@ def register_model(saved: SavedModel, card: dict, promote: bool) -> dict:
             "escalate_threshold": saved.escalate_threshold,
             "review_threshold": saved.review_threshold,
             "code_version": code_version(),
+            "accelerator": _accelerator_snapshot(),
             "promoted": bool(promote),
             **card,
         }

@@ -21,6 +21,9 @@ def test_a_run_is_recorded_with_everything_needed_to_trace_it(tmp_path, monkeypa
     assert entry["metrics"]["K20.proposed"] == 0.69583
     assert set(entry["outputs"]) == {"result.csv"} and entry["data"]
     assert "commit" in entry["code"] and entry["libraries"]["pandas"]
+    assert entry["accelerator"]["backend"] in {"sklearn", "cuml", "xgboost-gpu"}
+    assert "cuda" in entry["accelerator"]
+    assert entry["accelerator"]["libraries"]["scikit-learn"]
     record_run("demo", log=log)
     assert len(read_log(log)) == 2  # appended, never rewritten
 
