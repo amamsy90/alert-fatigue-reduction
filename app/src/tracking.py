@@ -87,8 +87,9 @@ def _version(dist_name: str) -> str | None:
 def accelerator_snapshot() -> dict:
     """Backend, library versions and CUDA version for one experiment or model card.
 
-    ``backend`` is what ``get_backend()`` would train with on this machine
-    (sklearn unless cuML is usable, or ``ACCEL_BACKEND`` says otherwise).
+    ``backend`` is what ``get_backend()`` would train with on this machine.
+    The default (``auto``) is sklearn even when cuML can run. ``ACCEL_BACKEND``
+    selects ``cuml`` or ``xgboost-gpu`` only when that name is set.
     ``libraries`` includes the optional GPU packages even when they are absent.
     """
     versions: dict[str, str | None] = {name: _version(name) for name in ACCEL_LIBRARIES}

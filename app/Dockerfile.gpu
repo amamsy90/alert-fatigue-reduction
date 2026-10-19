@@ -10,7 +10,7 @@
 #
 # The lock installed here is the CPU stack (requirements.lock). cuML, the `gpu`
 # dependency group, and llama-cpp-python are not baked in. See docs/GPU_LLM_ROLES.md.
-FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
+FROM docker.io/nvidia/cuda:12.6.3-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \

@@ -2,10 +2,12 @@
 
 The default encoder is a 4-number hash of the normalised template plus a count
 of earlier copies of that same template. Both are known at the alert's own
-timestamp. A sentence-transformer file is used only when ``LLM_TEMPLATE_ENCODER``
-points at a file whose SHA-256 is ``LLM_TEMPLATE_ENCODER_SHA256``. A missing
-file, a hash mismatch, or a missing library skips that encoder and the hash
-is used instead. Nothing here reads a realised fault label.
+timestamp. A sentence-transformer model is used only when ``LLM_TEMPLATE_ENCODER``
+points at a weight file whose SHA-256 is ``LLM_TEMPLATE_ENCODER_SHA256``. The
+file is hashed; the model is loaded from that file's folder (sentence-transformers
+needs a directory). A missing file, a hash mismatch, a missing library, or a
+failed load is logged and recorded, and the hash encoder is used instead.
+Nothing here reads a realised fault label.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ DIM = 4
 TEMPLATE_COLUMNS = ["tpl_h0", "tpl_h1", "tpl_h2", "tpl_h3", "tpl_prior"]
 HASH_ENCODER = "hash-v1"
 _ON = frozenset({"1", "true", "yes", "on"})
+_encoder_state: dict[str, str | None] = {"active": HASH_ENCODER, "requested": None, "error": None}
 
 
 class TemplateEncoder(Protocol):
@@ -67,6 +70,19 @@ class _ProjectedEncoder:
             self._proj = np.random.default_rng(0).normal(size=(DIM, raw.shape[0]))
         reduced = np.tanh(self._proj @ raw)
         return (float(reduced[0]), float(reduced[1]), float(reduced[2]), float(reduced[3]))
+
+
+def encoder_load_status() -> dict[str, str | None]:
+    """Last encoder resolution. ``error`` is set when a requested model did not load."""
+    return dict(_encoder_state)
+
+
+def _record_encoder(active: str, requested: str | None, error: str | None) -> None:
+    _encoder_state["active"] = active
+    _encoder_state["requested"] = requested
+    _encoder_state["error"] = error
+    if error:
+        log.error("template encoder fell back to %s (%s): %s", active, requested or "unset", error)
 
 
 def template_features_enabled() -> bool:
@@ -146,28 +162,36 @@ def _sha256(path: Path) -> str:
 def _try_pinned_sentence_encoder() -> TemplateEncoder | None:
     path = os.environ.get("LLM_TEMPLATE_ENCODER", "").strip()
     expected = os.environ.get("LLM_TEMPLATE_ENCODER_SHA256", "").strip().lower()
+    if not path and not expected:
+        _record_encoder(HASH_ENCODER, None, None)
+        return None
     if not path or len(expected) != 64:
+        _record_encoder(HASH_ENCODER, path or None, "encoder path or sha256 is incomplete")
         return None
     file = Path(path)
     if not file.is_file():
-        log.info("template encoder weights missing (%s); using %s", file.name, HASH_ENCODER)
+        _record_encoder(HASH_ENCODER, str(file), "weights file missing")
         return None
     try:
         digest = _sha256(file)
-    except OSError:
-        log.error("template encoder weights unreadable; using %s", HASH_ENCODER)
+    except OSError as exc:
+        _record_encoder(HASH_ENCODER, str(file), f"weights unreadable: {exc}")
         return None
     if digest != expected:
-        log.error("template encoder hash mismatch for %s; using %s", file.name, HASH_ENCODER)
+        _record_encoder(HASH_ENCODER, str(file), "hash mismatch")
         return None
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError:
-        log.info("sentence-transformers is not installed; using %s", HASH_ENCODER)
+        _record_encoder(HASH_ENCODER, str(file), "sentence-transformers is not installed")
         return None
+    folder = str(file.parent)
     try:
-        model = SentenceTransformer(str(file))
-    except Exception:
-        log.warning("template encoder failed to load; using %s", HASH_ENCODER, exc_info=True)
+        model = SentenceTransformer(folder)
+    except Exception as exc:
+        _record_encoder(HASH_ENCODER, str(file), f"{type(exc).__name__}: {exc}")
         return None
-    return _ProjectedEncoder(model, f"sentence-transformers@{digest[:12]}")
+    name = f"sentence-transformers@{digest[:12]}"
+    _record_encoder(name, str(file), None)
+    log.info("template encoder loaded %s from %s", name, folder)
+    return _ProjectedEncoder(model, name)

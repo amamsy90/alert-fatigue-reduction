@@ -234,18 +234,18 @@ def get_backend(prefer: str | None = None) -> BackendName:
     """Choose the training backend and log the choice.
 
     ``prefer`` overrides the ``ACCEL_BACKEND`` environment variable.
-    ``auto`` (the default) is ``cuml`` when that library can run, otherwise
-    ``sklearn``. ``xgboost-gpu`` is not selected automatically: a tree booster
-    is a different classifier, and Phase 0 keeps the logistic queue as the
-    trusted path until an explicit request (``ACCEL_BACKEND=xgboost-gpu`` or
-    ``AlertClassifier(..., backend="xgboost-gpu")``). Any request that cannot
-    be honoured falls back to sklearn.
+    ``auto`` (the default) is always ``sklearn``. cuML is not bit-stable
+    across same-seed fits, so it must not replace the published queue just
+    because the library imports. Set ``ACCEL_BACKEND=cuml`` or
+    ``backend="cuml"`` to use it. ``xgboost-gpu`` is also opt-in: a tree
+    booster is a different classifier. Any request that cannot be honoured
+    falls back to sklearn.
     """
     requested = prefer if prefer is not None else os.environ.get("ACCEL_BACKEND", "auto")
     requested = (requested or "auto").strip().lower()
     if requested in ("", "auto"):
-        chosen: BackendName = "cuml" if cuml_usable() else "sklearn"
-        reason = "auto: cuML logistic" if chosen == "cuml" else "auto: no cuML, sklearn logistic"
+        chosen: BackendName = "sklearn"
+        reason = "auto: sklearn logistic; GPU backends are opt-in"
     elif requested == "sklearn":
         chosen = "sklearn"
         reason = "requested sklearn"
@@ -502,6 +502,20 @@ def xgboost_gpu_params(seed: int) -> dict[str, Any]:
     }
 
 
+def is_cuda_device(device: object) -> bool:
+    """True for ``cuda`` and ``cuda:N`` (XGBoost 3.4 reports ``cuda:0``).
+
+    Anything else, including a silent CPU fallback, is not a GPU fit.
+    """
+    if not isinstance(device, str):
+        return False
+    text = device.strip().lower()
+    if text == "cuda":
+        return True
+    index = text.removeprefix("cuda:")
+    return text.startswith("cuda:") and index.isdigit() and index != ""
+
+
 def xgboost_gpu_ensemble(
     x: Any,
     y: np.ndarray,
@@ -512,7 +526,8 @@ def xgboost_gpu_ensemble(
 
     ``fail_on_invalid_gpu_id`` is not reliable on the sklearn wrapper (3.x
     still falls back to CPU). After fit, a booster whose saved device is not
-    ``cuda`` is refused so a silent CPU fallback is not labelled GPU.
+    ``cuda`` or ``cuda:N`` is refused so a silent CPU fallback is not labelled
+    GPU. XGBoost 3.4 writes ``cuda:0``.
     """
     import xgboost as xgb
 
@@ -521,7 +536,7 @@ def xgboost_gpu_ensemble(
     model.fit(dense, np.asarray(y), sample_weight=np.asarray(sample_weight, dtype=np.float64))
     config = json.loads(model.get_booster().save_config())
     device = config["learner"]["generic_param"].get("device")
-    if device != "cuda":
+    if not is_cuda_device(device):
         raise AccelUnavailable(f"xgboost device is {device!r}, not cuda")
     head = ensemble_from_booster(model.get_booster())
     head.fit(dense, y)
