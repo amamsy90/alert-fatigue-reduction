@@ -1,8 +1,11 @@
 """Synthetic ablation of the two optional models. GAIA numbers are not invented."""
 from __future__ import annotations
 
+import pandas as pd
+
 from src.config import Config
-from src.model_eval import EvalSpec, evaluate_models, walk_forward_models
+from src.entities import Alert, Fault
+from src.model_eval import EvalSpec, evaluate_models, published_bounds, walk_forward_models
 from src.sample_data import generate_multivariate, load_multivariate
 
 SPEC = EvalSpec(
@@ -77,3 +80,72 @@ def test_walk_forward_refits_on_the_past_only(tmp_path):
             assert fold["train_end"] == previous
         previous = fold["test_end"]
         assert "20" in fold["by_k"]
+    pooled = report["pooled"]
+    total = sum(fold["test_faults"] for fold in report["folds"])
+    for name in ("metric_model", "ranker", "both"):
+        row = pooled[name]
+        assert row["decision"] in ("keep", "drop", "skipped")
+        delta = row["per_fault_catch_delta"]
+        if row["decision"] == "skipped":
+            assert delta is None
+        else:
+            assert delta["n"] == total
+            assert row["decision"] == ("keep" if delta["low"] > 0 else "drop")
+
+
+def test_the_scoring_window_ends_at_the_last_alert_not_the_last_metric():
+    """The published queue stops one second after the last alert.
+
+    A metric series that ends first must not drop a later fault. The split
+    starts at the first alert, which is what load_gaia uses.
+    """
+    t0 = pd.Timestamp("2026-01-01", tz="UTC")
+    first_alert = t0 + pd.Timedelta(hours=1)
+    metric_end = t0 + pd.Timedelta(days=10)
+    last_alert = t0 + pd.Timedelta(days=12, hours=3)
+    stamps = pd.date_range(t0, metric_end, freq="1h", inclusive="left")
+    metrics = pd.DataFrame(
+        {
+            "timestamp": stamps,
+            "value": [1.0] * len(stamps),
+            "service": "api",
+            "series_id": "api",
+        }
+    )
+    alerts = [
+        Alert("a0", first_alert, "api", "log", "info", "start"),
+        Alert("a1", last_alert, "api", "log", "error", "late"),
+    ]
+    faults = [
+        Fault("early", t0 + pd.Timedelta(days=8), t0 + pd.Timedelta(days=8, hours=1), "api"),
+        Fault("late", metric_end + pd.Timedelta(hours=2), metric_end + pd.Timedelta(hours=3), "api"),
+        Fault("after", last_alert + pd.Timedelta(hours=1), last_alert + pd.Timedelta(hours=2), "api"),
+    ]
+    origin, stop, how = published_bounds(metrics, alerts)
+    assert how == "last alert"
+    assert origin == first_alert
+    assert stop == last_alert + pd.Timedelta(seconds=1)
+    report = evaluate_models(
+        metrics,
+        alerts,
+        faults,
+        config=Config(split_day=7, leak_window_minutes=None, memory_gap_minutes=10),
+        spec=EvalSpec(
+            freq="1h",
+            window=4,
+            stride=4,
+            hidden=4,
+            dilations=(1,),
+            epochs=1,
+            backend="pointwise",
+            max_windows=8,
+            budget_ks=(5,),
+            n_draw=50,
+        ),
+        dataset="synthetic",
+    )
+    assert report["window_end"] == "last alert"
+    assert report["train_end"] == (first_alert + pd.Timedelta(days=7)).isoformat()
+    assert report["test_end"] == stop.isoformat()
+    assert report["test_fault_ids"] == ["early", "late"]
+    assert report["test_faults"] == 2

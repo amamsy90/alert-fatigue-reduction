@@ -66,6 +66,25 @@ def _utc(stamp: pd.Timestamp) -> pd.Timestamp:
     return value.tz_convert("UTC")
 
 
+def published_bounds(
+    metrics: pd.DataFrame,
+    alerts: list[Alert],
+) -> tuple[pd.Timestamp, pd.Timestamp, str]:
+    """Origin and exclusive stop, matching ``load_gaia`` / ``run_queue_eval``.
+
+    The published queue starts at the first alert and stops one second after
+    the last alert. Ending at the last metric point drops faults that still
+    have a later alert. With no alerts, the metric span is the window.
+    """
+    metric_origin = _utc(metrics["timestamp"].min())
+    metric_stop = _utc(metrics["timestamp"].max()) + pd.Timedelta(seconds=1)
+    if not alerts:
+        return metric_origin, metric_stop, "last metric"
+    origin = min(_utc(alert.timestamp) for alert in alerts)
+    stop = max(_utc(alert.timestamp) for alert in alerts) + pd.Timedelta(seconds=1)
+    return origin, stop, "last alert"
+
+
 def _decision(base: set[str], cand: set[str] | None, faults: list[Fault], spec: EvalSpec, status: str) -> dict:
     if status != "scored" or cand is None:
         return {
@@ -129,9 +148,13 @@ def evaluate_models(
     spec = spec or EvalSpec()
     frame = metrics.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
-    origin = _utc(frame["timestamp"].min())
+    origin, default_stop, window_end = published_bounds(frame, alerts)
     boundary = _utc(train_end) if train_end is not None else origin + pd.Timedelta(days=config.split_day)
-    stop = _utc(test_end) if test_end is not None else _utc(frame["timestamp"].max()) + pd.Timedelta(seconds=1)
+    if test_end is not None:
+        stop = _utc(test_end)
+        window_end = "caller"
+    else:
+        stop = default_stop
     frame = frame[frame["timestamp"] < stop]
     train_alerts = [alert for alert in alerts if alert.timestamp < boundary]
     test_alerts = [alert for alert in alerts if boundary <= alert.timestamp < stop]
@@ -274,6 +297,7 @@ def evaluate_models(
                 entry = _row(name, baseline_queue, test_faults, n_days, cfg)
                 entry["decision"] = "baseline"
                 entry["status"] = "scored"
+                entry["caught_ids"] = sorted(base_caught)
             else:
                 reason = "scored"
                 if queue is None and name == "metric_model":
@@ -288,6 +312,7 @@ def evaluate_models(
                 else:
                     entry = _row(name, queue, test_faults, n_days, cfg)
                     caught = caught_fault_ids(queue, test_faults)
+                    entry["caught_ids"] = sorted(caught)
                 entry.update(_decision(base_caught, caught, test_faults, spec, "scored" if queue is not None else reason))
             block[name] = entry
         by_k[str(budget)] = block
@@ -300,6 +325,8 @@ def evaluate_models(
         "split_day": config.split_day,
         "train_end": boundary.isoformat(),
         "test_end": stop.isoformat(),
+        "window_end": window_end,
+        "test_fault_ids": [fault.fault_id for fault in test_faults],
         "test_faults": len(test_faults),
         "flags_default": "off",
         "flags_changed": False,
@@ -339,8 +366,7 @@ def walk_forward_models(
     week = EvalSpec(**{**spec.__dict__, "budget_ks": (20,)})
     frame = metrics.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
-    origin = _utc(frame["timestamp"].min())
-    end = _utc(frame["timestamp"].max()) + pd.Timedelta(seconds=1)
+    origin, end, _how = published_bounds(frame, alerts)
     test_start = origin + pd.Timedelta(days=config.split_day)
     folds = []
     while test_start < end:
@@ -363,6 +389,7 @@ def walk_forward_models(
                 "train_end": report["train_end"],
                 "test_end": report["test_end"],
                 "test_faults": report["test_faults"],
+                "test_fault_ids": report["test_fault_ids"],
                 "metric_model_status": report["metric_model"]["status"],
                 "by_k": report["by_k"],
             }
@@ -372,5 +399,55 @@ def walk_forward_models(
         "dataset": dataset,
         "gaia": "pending: this run did not score GAIA" if dataset != "gaia" else "scored",
         "folds": folds,
+        "pooled": _pooled_verdict(folds, spec),
         "flags_changed": False,
     }
+
+
+def _pooled_verdict(folds: list[dict], spec: EvalSpec) -> dict:
+    """One keep/drop for every test fault in every fold, not one per fold.
+
+    Each fault contributes one catch difference. The 95% interval is the same
+    bootstrap as a single split. A fold that did not score a variant skips
+    that variant's pool.
+    """
+    verdicts: dict[str, dict] = {}
+    for name in ("metric_model", "ranker", "both"):
+        deltas: list[float] = []
+        skipped: str | None = None
+        for fold in folds:
+            block = fold["by_k"].get("20") or next(iter(fold["by_k"].values()))
+            row = block[name]
+            if row.get("decision") == "skipped" or "caught_ids" not in row:
+                skipped = str(row.get("reason") or row.get("status") or "skipped")
+                break
+            base = set(block["baseline"].get("caught_ids") or [])
+            caught = set(row["caught_ids"])
+            for fault_id in fold["test_fault_ids"]:
+                deltas.append(float(fault_id in caught) - float(fault_id in base))
+        if skipped is not None or not deltas:
+            verdicts[name] = {
+                "status": skipped or "no held-out faults",
+                "decision": "skipped",
+                "reason": skipped or "no held-out faults",
+                "per_fault_catch_delta": None,
+            }
+            continue
+        interval = bootstrap_mean_ci(deltas, n_draw=spec.n_draw, seed=spec.seed)
+        kept = interval.low > 0
+        verdicts[name] = {
+            "status": "scored",
+            "decision": "keep" if kept else "drop",
+            "reason": (
+                "the 95% interval for the pooled per-fault catch difference lies above zero"
+                if kept
+                else "the 95% interval for the pooled per-fault catch difference does not lie above zero"
+            ),
+            "per_fault_catch_delta": {
+                "mean": round(interval.mean, 4),
+                "low": round(interval.low, 4),
+                "high": round(interval.high, 4),
+                "n": interval.n,
+            },
+        }
+    return verdicts
