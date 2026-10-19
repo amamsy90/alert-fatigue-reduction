@@ -23,12 +23,12 @@ import pandas as pd
 from src.config import Config
 from src.experiment import load_gaia
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults
-from src.llm_lora import FORMAT, META_NAME, WEIGHTS_NAME, load_base_pin, note_examples
+from src.llm_lora import FORMAT, META_NAME, WEIGHTS_NAME, example_tensors, load_base_pin, note_examples
 from src.sample_data import generate
 from src.weight_io import save_bytes
 
 
-def _examples(which: str, seed: int) -> list[dict[str, str]]:
+def _examples(which: str, seed: int) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     config = Config()
     if which == "gaia":
         if not (Path("data/gaia_raw").exists() and Path("data/gaia_metrics").exists()):
@@ -44,13 +44,14 @@ def _examples(which: str, seed: int) -> list[dict[str, str]]:
         alerts, _faults = align_alerts_to_faults(load_alerts(folder / "alerts.csv"), load_faults(folder / "faults.csv"))
     origin = min(alert.timestamp for alert in alerts)
     boundary = origin + pd.Timedelta(days=config.split_day)
-    rows = note_examples(alerts, [], until=boundary)
-    for row in rows:
+    train = note_examples(alerts, [], until=boundary)
+    held = note_examples(alerts, [], since=boundary)
+    for row in train + held:
         if "fault_id" in row["prompt"] or "\nlabel:" in row["prompt"]:
             raise SystemExit("refusing a training row whose prompt contains a label")
-    if not rows:
+    if not train:
         raise SystemExit("no decision-time rows in the training window")
-    return rows
+    return train, held
 
 
 def _load_model(base: str, revision: str, device: str):
@@ -118,7 +119,7 @@ def main() -> None:
     device = args.device
     if device.startswith("cuda") and not torch.cuda.is_available():
         device = "cpu"
-    rows = _examples(args.data, args.seed)
+    train_rows, held_rows = _examples(args.data, args.seed)
     tokenizer = AutoTokenizer.from_pretrained(base, revision=revision, local_files_only=Path(base).is_dir())
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -135,22 +136,26 @@ def main() -> None:
         ),
     )
     torch.manual_seed(args.seed)
-    model.train()
     optim = torch.optim.AdamW((param for param in model.parameters() if param.requires_grad), lr=1e-4)
-    for _epoch in range(max(1, args.epochs)):
-        for row in rows:
-            full = row["prompt"] + "\n" + row["reference"]
-            encoded = tokenizer(full, truncation=True, max_length=512, return_tensors="pt")
-            prompt_ids = tokenizer(row["prompt"] + "\n", truncation=True, max_length=512, add_special_tokens=True)
-            mask_to = min(len(prompt_ids["input_ids"]), encoded["input_ids"].shape[1] - 1)
-            labels = encoded["input_ids"].clone()
-            labels[:, :mask_to] = -100
-            encoded = {key: value.to(model.device) for key, value in encoded.items()}
+    train_loss = None
+    held_out_loss = None
+    for epoch in range(max(1, args.epochs)):
+        model.train()
+        total = 0.0
+        seen = 0
+        for row in train_rows:
+            input_ids, labels = example_tensors(tokenizer, row["prompt"], row["reference"])
+            input_ids = input_ids.to(model.device)
             labels = labels.to(model.device)
             optim.zero_grad(set_to_none=True)
-            loss = model(**encoded, labels=labels).loss
+            loss = model(input_ids=input_ids, labels=labels).loss
             loss.backward()
             optim.step()
+            total += float(loss.detach())
+            seen += 1
+        train_loss = total / seen if seen else None
+        held_out_loss = _held_out_loss(model, tokenizer, held_rows)
+        print(f"epoch={epoch + 1} train_loss={train_loss} held_out_loss={held_out_loss} held_out_rows={len(held_rows)}")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(out)
@@ -166,11 +171,38 @@ def main() -> None:
         "base_sha256": pin["sha256"],
         "weights_sha256": digest,
         "qlora": qlora,
-        "rows": len(rows),
+        "rows": len(train_rows),
+        "held_out_rows": len(held_rows),
+        "train_loss": train_loss,
+        "held_out_loss": held_out_loss,
         "device": device,
     }
     save_bytes(out / META_NAME, json.dumps(payload, sort_keys=True).encode("utf-8"))
-    print(f"rows={len(rows)} qlora={qlora} device={device} sha256={digest} pages=false")
+    print(
+        f"rows={len(train_rows)} held_out_rows={len(held_rows)} "
+        f"train_loss={train_loss} held_out_loss={held_out_loss} "
+        f"qlora={qlora} device={device} sha256={digest} pages=false"
+    )
+
+
+def _held_out_loss(model, tokenizer, rows: list[dict[str, str]]) -> float | None:
+    """Mean loss on later decision-time rows. Those rows do not update weights."""
+    import torch
+
+    if not rows:
+        return None
+    was_training = model.training
+    model.eval()
+    total = 0.0
+    try:
+        with torch.no_grad():
+            for row in rows:
+                input_ids, labels = example_tensors(tokenizer, row["prompt"], row["reference"])
+                loss = model(input_ids=input_ids.to(model.device), labels=labels.to(model.device)).loss
+                total += float(loss.detach())
+    finally:
+        model.train(was_training)
+    return total / len(rows)
 
 
 if __name__ == "__main__":

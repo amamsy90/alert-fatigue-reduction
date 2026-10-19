@@ -27,6 +27,48 @@ def test_trace_model_is_off_unless_the_flag_is_set(monkeypatch):
         assert trace_model_enabled() is True
 
 
+def test_a_clock_column_is_not_used_when_start_time_millis_is_present():
+    """RCAEval's `time` is text such as 21:24. The epoch is startTimeMillis."""
+    frame = pd.DataFrame(
+        {
+            "time": pd.Series(["21:24", "21:25", "21:26"], dtype="string"),
+            "startTimeMillis": [1735689600000, 1735689900000, 1735692000000],
+            "traceID": ["t1", "t2", "t3"],
+            "spanID": ["s1", "s2", "s3"],
+            "serviceName": ["web", "api", "db"],
+            "duration": [30, 20, 15],
+            "statusCode": [0, 0, 1],
+        }
+    )
+    spans = normalize_spans(frame)
+    assert spans["time"].iloc[0] == pd.Timestamp(1735689600, unit="s", tz="UTC")
+    assert spans["time"].iloc[1] == pd.Timestamp(1735689900, unit="s", tz="UTC")
+    assert int(spans.loc[spans["span_id"] == "s3", "error"].iloc[0]) == 1
+
+
+def test_a_clock_column_alone_is_refused():
+    frame = pd.DataFrame(
+        {
+            "time": pd.Series(["21:24", "21:25"], dtype="string"),
+            "serviceName": ["web", "db"],
+            "duration": [1, 2],
+        }
+    )
+    with pytest.raises(ValueError, match="21:24"):
+        normalize_spans(frame)
+
+
+def test_rcaeval_eval_names_the_cases_fetch_when_cases_are_missing(tmp_path):
+    from run_trace_eval import cases_missing_message
+
+    message = cases_missing_message(tmp_path)
+    assert message is not None
+    assert "fetch_rcaeval_re23.py" in message
+    assert "cases.parquet" in message
+    (tmp_path / "cases.parquet").write_bytes(b"")
+    assert cases_missing_message(tmp_path) is None
+
+
 def test_rcaeval_column_names_and_a_later_span_do_not_change_the_window():
     frame = normalize_spans(pd.read_csv(FIXTURE))
     assert list(frame["service"]) == ["web", "api", "db", "web", "api", "db", "web", "api", "db"]
