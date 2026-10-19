@@ -30,6 +30,7 @@ TEMPLATE_COLUMNS = ["tpl_h0", "tpl_h1", "tpl_h2", "tpl_h3", "tpl_prior"]
 HASH_ENCODER = "hash-v1"
 _ON = frozenset({"1", "true", "yes", "on"})
 _encoder_state: dict[str, str | None] = {"active": HASH_ENCODER, "requested": None, "error": None}
+_encoder_resolved = False
 
 
 class TemplateEncoder(Protocol):
@@ -63,21 +64,39 @@ class _ProjectedEncoder:
         self.name = name
         self._model = model
         self._proj: np.ndarray | None = None
+        self._cache: dict[str, tuple[float, float, float, float]] = {}
 
     def embed(self, template: str) -> tuple[float, float, float, float]:
+        cached = self._cache.get(template)
+        if cached is not None:
+            return cached
         raw = np.asarray(self._model.encode([template]), dtype=float).reshape(-1)
         if self._proj is None or self._proj.shape[1] != raw.shape[0]:
             self._proj = np.random.default_rng(0).normal(size=(DIM, raw.shape[0]))
         reduced = np.tanh(self._proj @ raw)
-        return (float(reduced[0]), float(reduced[1]), float(reduced[2]), float(reduced[3]))
+        values = (float(reduced[0]), float(reduced[1]), float(reduced[2]), float(reduced[3]))
+        self._cache[template] = values
+        return values
 
 
 def encoder_load_status() -> dict[str, str | None]:
-    """Last encoder resolution. ``error`` is set when a requested model did not load."""
+    """Last encoder resolution. ``error`` is set when a requested model did not load.
+
+    Before the first resolve, a set ``LLM_TEMPLATE_ENCODER`` is reported as the
+    requested path and ``active`` stays unset. That is not a claim that
+    ``hash-v1`` is loaded.
+    """
+    if not _encoder_resolved:
+        path = os.environ.get("LLM_TEMPLATE_ENCODER", "").strip() or None
+        if path:
+            return {"active": None, "requested": path, "error": None}
+        return {"active": HASH_ENCODER, "requested": None, "error": None}
     return dict(_encoder_state)
 
 
 def _record_encoder(active: str, requested: str | None, error: str | None) -> None:
+    global _encoder_resolved
+    _encoder_resolved = True
     _encoder_state["active"] = active
     _encoder_state["requested"] = requested
     _encoder_state["error"] = error
@@ -125,10 +144,14 @@ def template_rows(alerts: list[Alert], encoder: object | None = None) -> list[di
     chosen = resolve_encoder(encoder)
     templates = [normalize_message(alert.message) for alert in alerts]
     priors = prior_counts(templates, [alert.timestamp for alert in alerts])
+    embedded_by_template: dict[str, tuple[float, float, float, float]] = {}
     rows: list[dict[str, float]] = []
     for template, prior in zip(templates, priors):
-        embedded = _embed(chosen, template)
-        row = {f"tpl_h{index}": embedded[index] for index in range(DIM)}
+        embedded = embedded_by_template.get(template)
+        if embedded is None:
+            embedded = _embed(chosen, template)
+            embedded_by_template[template] = embedded
+        row = {f"tpl_h{index}": value for index, value in enumerate(embedded)}
         row["tpl_prior"] = float(prior)
         rows.append(row)
     return rows

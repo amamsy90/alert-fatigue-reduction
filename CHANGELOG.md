@@ -5,6 +5,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ## [Unreleased]
 
 ### Fixed
+- With template features on, a classifier that is not given an encoder reads `LLM_TEMPLATE_ENCODER`. It was building `hash-v1` whenever `template_encoder_name` was unset, so the ablation and the production flag ignored a pinned sentence model while `/health` could already show that model. `/health` now reports the requested path before the first load. Sentence embeddings are cached per normalised template. A saved `hash-v1` model still stays on the hash.
 - XGBoost 3.4 reports the device as `cuda:0`. The GPU fit accepts `cuda` and `cuda:N`. Any other device still falls back to sklearn, so a silent CPU fit is not labelled `xgboost-gpu`.
 - `ACCEL_BACKEND=auto` (the default) stays sklearn even when cuML is installed. On an RTX 5090 Laptop, three same-seed cuML fits differed by up to 0.0375 in probability, so cuML is opt-in (`ACCEL_BACKEND=cuml`). Explicit cuML on GAIA alerts still agrees with sklearn: mean |ΔP| 0.000410, Jaccard 0.9856.
 - A pinned sentence-transformer weight file is hashed, and the model loads from that file's folder. A failed load is logged and recorded (`encoder_load_status`, and `template_encoder` on `/health`) instead of only falling back to `hash-v1`.

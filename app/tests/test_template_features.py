@@ -221,3 +221,91 @@ def test_a_failed_sentence_encoder_load_is_recorded(tmp_path, monkeypatch, caplo
     monkeypatch.setenv("LLM_TEMPLATE_ENCODER", str(folder))
     assert resolve_encoder().name == "hash-v1"
     assert encoder_load_status()["error"] == "weights file missing"
+
+
+def test_env_encoder_reaches_the_fitted_model_and_the_ablation(tmp_path, monkeypatch):
+    """LLM_TEMPLATE_ENCODER is the encoder when the caller does not pass one."""
+    import sys
+    import types
+
+    from src.template_features import HashTemplateEncoder
+
+    folder = tmp_path / "all-MiniLM"
+    folder.mkdir()
+    weights = folder / "model.safetensors"
+    payload = b"weights"
+    weights.write_bytes(payload)
+
+    class _Fake:
+        def __init__(self, path: str) -> None:
+            self.path = path
+
+        def encode(self, texts):
+            return np.full((len(list(texts)), 6), 0.25)
+
+    module = types.ModuleType("sentence_transformers")
+    module.SentenceTransformer = _Fake
+    monkeypatch.setitem(sys.modules, "sentence_transformers", module)
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER", str(weights))
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER_SHA256", hashlib.sha256(payload).hexdigest())
+    monkeypatch.setenv("ACCEL_BACKEND", "sklearn")
+
+    sample = tmp_path / "sample"
+    generate(sample, seed=1, days=10)
+    alerts = load_alerts(sample / "alerts.csv")
+    faults = load_faults(sample / "faults.csv")
+    alerts, faults = align_alerts_to_faults(alerts, faults)
+    config = Config(budget_k=20)
+    train, test = time_split(alerts, config.split_day)
+    _, test_faults = time_split(faults, config.split_day)
+    model = AlertClassifier(config, template_features=True, backend="sklearn")
+    model.fit(train)
+    assert model.template_encoder_name is not None
+    assert model.template_encoder_name.startswith("sentence-transformers@")
+    used = build_feature_frame(train, config, template_features=True, encoder=model._template_encoder)
+    hashed = build_feature_frame(train, config, template_features=True, encoder=HashTemplateEncoder())
+    assert float(used.loc[0, "tpl_h0"]) != float(hashed.loc[0, "tpl_h0"])
+
+    origin = min(alert.timestamp for alert in alerts)
+    boundary = origin + pd.Timedelta(days=config.split_day)
+    end = max(alert.timestamp for alert in test) + pd.Timedelta(seconds=1)
+    report = evaluate_template_features(
+        train,
+        test,
+        test_faults,
+        config,
+        n_days=n_days_between(boundary, end, config),
+        dataset="synthetic-env-encoder",
+    )
+    assert report["encoder"] == model.template_encoder_name
+
+
+def test_encoder_path_is_visible_before_the_first_load(monkeypatch):
+    import src.template_features as features
+
+    monkeypatch.setattr(features, "_encoder_resolved", False)
+    path = "/models/all-MiniLM/model.safetensors"
+    monkeypatch.setenv("LLM_TEMPLATE_ENCODER", path)
+    status = features.encoder_load_status()
+    assert status == {"active": None, "requested": path, "error": None}
+
+
+def test_sentence_embeddings_are_cached_per_normalised_template():
+    from src.template_features import _ProjectedEncoder, template_rows
+
+    calls = {"n": 0}
+
+    class _Model:
+        def encode(self, texts):
+            calls["n"] += len(list(texts))
+            return np.ones((len(list(texts)), 5))
+
+    encoder = _ProjectedEncoder(_Model(), "sentence-transformers@cached")
+    alerts = [
+        _alert("a", 0, "disk full on host 10.0.0.1"),
+        _alert("b", 1, "disk full on host 10.0.0.2"),
+        _alert("c", 2, "cpu warm"),
+    ]
+    template_rows(alerts, encoder)
+    template_rows(alerts, encoder)
+    assert calls["n"] == 2
