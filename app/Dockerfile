@@ -1,3 +1,4 @@
+# CPU image. CI builds this file. The optional CUDA image is Dockerfile.gpu.
 FROM python:3.12-slim
 
 WORKDIR /app

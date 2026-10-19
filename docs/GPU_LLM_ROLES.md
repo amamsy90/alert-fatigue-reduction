@@ -1,6 +1,6 @@
 # GPU library and tiny LLM: roles
 
-**Status:** Phase 0 locked. Phase 1 (optional GPU training), Phase 2a (shadow notes), Phase 2b (optional template features, dropped for the default queue) and Phase 3 (pinned local LLM) are in the tree. Phase 4 is not implemented.
+**Status:** Phase 0 locked. Phase 1 (optional GPU training), Phase 2a (shadow notes), Phase 2b (optional template features, dropped for the default queue), Phase 3 (pinned local LLM) and Phase 4 (optional CUDA image, health fields, LLM and GPU metrics) are in the tree. The default image stays CPU. Explanations and template features stay off.
 
 The queue that pages is still the cost-sensitive logistic classifier plus the jump ranker, at most K items a day, saved as a skops archive, shadow mode unless Live is armed. GPU training and a later local LLM are optional layers. Neither is allowed to become a hard dependency, and neither decides Live paging.
 
@@ -136,8 +136,43 @@ cd app
 python run_classifier_ablation.py --template-features
 ```
 
-## Later phases (not in this change)
+## Deployment and monitoring (Phase 4)
 
-- **Phase 4.** Optional `Dockerfile.gpu`. The default image stays CPU. Metrics for LLM latency, timeout, fallback and GPU memory. Health shows the active backend.
+The default image is `app/Dockerfile` (`python:3.12-slim`). CI runs `docker build` on that file. `app/Dockerfile.gpu` is an optional CUDA runtime image (`nvidia/cuda:12.6.3-runtime-ubuntu24.04`) that installs the same hash-pinned CPU lock. It does not install cuML, the `gpu` group, or `llama-cpp-python`. This environment did not pull that base image; the file is checked for the CPU `FROM` line staying on the default Dockerfile, and for the Compose profile naming `Dockerfile.gpu`.
 
-Version stays 1.0.5 until a release that includes those phases.
+```bash
+cd app
+docker compose up --build
+```
+
+That starts `oncall-queue` only. The GPU service is profile `gpu`. Name it so the CPU service stays down (both publish `127.0.0.1:8080`):
+
+```bash
+cd app
+docker compose --profile gpu up --build oncall-queue-gpu
+```
+
+The same image without Compose:
+
+```bash
+cd app
+docker build -f Dockerfile.gpu -t oncall-queue:gpu .
+docker run --gpus all -p 127.0.0.1:8080:8080 oncall-queue:gpu
+```
+
+`/health` keeps `status`, `db_ok`, `shadow_mode`, `login_required`, `pagerduty_configured`, and `channels`. It adds:
+
+| Field | Meaning |
+|---|---|
+| `accel.backend` | `sklearn`, `cuml`, or `xgboost-gpu`, from `active_backend()` (the same choice as `get_backend`, cached so the probe is not repeated on every check) |
+| `llm.enabled` | True only when `LLM_EXPLAIN` is on |
+| `llm.weights` | `missing` (no file), `present` (file exists, explanations off, so it is not hashed), `hash-ok`, `hash-mismatch`, `unreadable`, or `error` |
+| `llm.last_error` | Last failed note status (`timeout`, `missing`, `hash`, `no-backend`, `error`, …), or null after a clean run |
+
+`/health` does not probe Prometheus and does not query GPU memory. While explanations are off it does not hash the GGUF.
+
+`/metrics` adds `oncall_llm_explain_duration_seconds` (latency), `oncall_llm_explain_total{outcome}`, `oncall_llm_timeout_rate`, `oncall_llm_fallback_rate`, and `oncall_gpu_memory_mebibytes` when `nvidia-smi` reports used memory. Attempts are counted only when explanations are on. `timeout` is a timed-out completion. `fallback` is a note that was not produced because the pin, the file, or `llama-cpp-python` was unusable. An unset flag is not an attempt, so the default process does not show a 100% fallback rate.
+
+`/monitoring` adds check `template_feature_drift`. It is `n/a` while `LLM_TEMPLATE_FEATURES` is off, including when older jobs happen to store a mean. When the flag is on, a job stores the mean of `tpl_prior` (each value counted only from rows at or before that alert) and the check uses the same 0.5–2 band as alert volume. The flag stays off after the Phase 2b drop.
+
+Version stays 1.0.5 until a release that includes this work.

@@ -35,6 +35,7 @@ from src.queue import (
     spike_items,
     tune_confirm_thresholds,
 )
+from src.template_features import template_prior_mean
 
 from .inputs import (  # noqa: F401 — re-exported for callers of product.pipeline
     JobInputs,
@@ -736,7 +737,7 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
     def shown(kind: str) -> int:
         return sum(1 for j in jumps if j["kind"] == kind and j["shown"])
 
-    return {
+    meta = {
         "alert_count": len(result.alerts),
         "escalate": sum(1 for d in decisions if d.action.value == "escalate"),
         "review": sum(1 for d in decisions if d.action.value == "review"),
@@ -760,6 +761,10 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         "would_have_paged": whp,
         **feedback_stats,
     }
+    prior_mean = template_prior_mean(result.alerts)
+    if prior_mean is not None:
+        meta["template_prior_mean"] = prior_mean
+    return meta
 
 
 def _run_job_locked(
