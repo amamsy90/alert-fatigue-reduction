@@ -13,7 +13,7 @@ This page explains how the AI part of the system is versioned, reproduced, updat
 | **Configuration** | Defaults in `src/config.py` (reviewed like code); per-environment values in `app/deploy/*.env`; settings chosen on *Evaluate my data* saved to `settings.json` with the evaluation id and time they came from | `app/src/config.py`, `app/deploy/`, `product/data/settings.json` |
 | **Data** | Public benchmarks (GAIA, NAB, SMD, RCAEval) are downloaded by scripts in `tools/` (GAIA and RCAEval RE2/RE3 with SHA-256 checks), not stored in git; each experiment run records a **fingerprint** of its input files. Each trained model records a fingerprint of its training alerts and labels | `results/experiments.jsonl`, `models/registry.json` |
 | **Models** | Every trained model is kept as `models/vNNNN.pkl` (a zip of JSON and a skops file, not a pickle) with a SHA-256 and a **model card** in `models/registry.json`; one version is active (`model.pkl`). A corrupt registry is refused (503); `POST /models/reset` with `confirm=RESET` quarantines it | `product/data/models/` (Docker volume) |
-| **Prompts** | Shadow notes use template `explain-v1` (`product/llm.py`). A record that has a note stores `prompt_version` and `llm_version`. Notes are off unless `LLM_EXPLAIN` is set, and they are not an input to the queue. The weight file is pinned by name, revision and SHA-256 | `product/llm_pin.json`, `scripts/fetch_llm.py` |
+| **Prompts** | Shadow notes use template `explain-v1` (`product/llm.py`). A record that has a note stores `prompt_version` and `llm_version`. Notes are off unless `LLM_EXPLAIN` is set, and they are not an input to the queue. The weight file is pinned by name, revision and SHA-256. `/health` reports whether that file is missing, present, or hash-ok, and `/metrics` records note latency, timeout rate and fallback rate | `product/llm_pin.json`, `scripts/fetch_llm.py`, `product/monitoring.py` |
 
 A model card records: version, training time, label source (real labels, on-call marks), number of training alerts, thresholds, training-data fingerprint, code version (git commit), held-out precision / recall / false positives / misses, the active model's result on the same held-out alerts, and the promotion decision with its reason.
 
@@ -26,7 +26,8 @@ git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigu
 uv sync --group dev                   # exact versions from uv.lock
 uv run pytest -q                      # 300 tests (+1 integration), no network needed (integration: see test_plan.md)
 uv run python run_validate.py         # the report's 195 checked numbers match the committed results
-docker compose up -d                  # the app, built from the hash-pinned lock (dev settings)
+docker compose up -d                  # the CPU app, built from the hash-pinned lock (dev settings)
+# optional GPU machine: docker compose --profile gpu up --build oncall-queue-gpu
 ```
 
 To regenerate the published results they also need the GAIA files (`app/data/gaia_raw`, `app/data/gaia_metrics`), which `python tools/fetch_gaia.py` downloads from https://github.com/CloudWise-OpenSource/GAIA-DataSet and checks by SHA-256 (`FINAL_REPORT.md` §C1), and run the `run_*.py` scripts; `tools/fetch_nab.py`, `tools/fetch_smd.py` and `tools/fetch_rcaeval_mem.py` download the other benchmarks. Every environment variable is listed in `app/README.md`; containers are defined by `app/Dockerfile` and `app/docker-compose.yml`.

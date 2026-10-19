@@ -62,6 +62,12 @@ Docker (bound to localhost; set `APP_PASSWORD` before sharing — behind a rever
 docker compose up --build
 ```
 
+That builds the CPU image (`Dockerfile`). A CUDA image is optional and is not what CI builds:
+
+```bash
+docker compose --profile gpu up --build oncall-queue-gpu
+```
+
 ## Connect it to your stack
 
 | What | How |
