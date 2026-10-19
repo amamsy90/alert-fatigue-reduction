@@ -795,7 +795,14 @@ def _run_job_locked(
     )
     real_marks = store.feedback_summary()["real"]
     saved = _save_trained_model(result, real_marks, loaded)
-    page, whp = page_job(mode, shadow_mode, result.alerts, result.decisions, result.shown_spikes or [])
+    page, whp = page_job(
+        mode,
+        shadow_mode,
+        result.alerts,
+        result.decisions,
+        result.shown_spikes or [],
+        model=result.model,
+    )
     job_id = store.save_job(
         source=inputs.source,
         budget_k=budget_k,
