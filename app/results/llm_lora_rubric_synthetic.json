@@ -1,0 +1,26 @@
+{
+  "dataset": "synthetic",
+  "gaia": "pending: this run did not score GAIA",
+  "pages": false,
+  "flags_changed": false,
+  "reference_notes": 945,
+  "reference_passed": 945,
+  "bad_note_passed": false,
+  "bad_note": {
+    "passed": false,
+    "mentions_top_signals": false,
+    "no_invented_numbers": false,
+    "invented_numbers": [
+      "99999"
+    ],
+    "length_ok": true,
+    "length": 64,
+    "no_instruction_following": false,
+    "instruction_tokens": [
+      "paged-now",
+      "reply"
+    ],
+    "structure_stable": false
+  },
+  "split": "first week only; later alerts were not training rows"
+}
