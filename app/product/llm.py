@@ -329,10 +329,14 @@ def annotate_shadow(
         "status": weights.code,
         "notes": [],
     }
-    if weights.code != "ok":
+    from src.llm_lora import lora_enabled, remember_adapter_status
+
+    adapter_ready = lora_enabled() and remember_adapter_status() == "ok"
+    if weights.code != "ok" and not adapter_ready:
         log.error("llm weights are not usable (%s)", weights.code)
         _remember(weights.code)
         _record(_outcome(weights.code), started)
+        _attach_lora(record)
         return record
     notes: list[dict[str, str]] = []
     items = whp.get("items")
@@ -361,6 +365,7 @@ def annotate_shadow(
         _record(_outcome(exc.status), item_started)
         record["status"] = exc.status
         record["notes"] = []
+        _attach_lora(record)
         return record
     except Exception:
         log.exception("llm explain failed")
@@ -368,11 +373,21 @@ def annotate_shadow(
         _record("error", item_started)
         record["status"] = "error"
         record["notes"] = []
+        _attach_lora(record)
         return record
     _remember("ok")
     record["status"] = "ok"
     record["notes"] = notes
+    _attach_lora(record)
     return record
+
+
+def _attach_lora(record: dict[str, object]) -> None:
+    """Record the adapter outcome only when the flag is on. Off leaves the record unchanged."""
+    from src.llm_lora import lora_enabled, lora_outcome
+
+    if lora_enabled():
+        record["lora"] = lora_outcome()
 
 
 def generate(prompt: str) -> str:
@@ -415,10 +430,16 @@ def _explain_text(context: Mapping[str, object]) -> str:
         raise ExplainError("error")
     if not explain_enabled():
         raise ExplainError("off")
+    prompt = render_prompt(context)
+    from src.llm_lora import generate_with_adapter, lora_enabled
+
+    if lora_enabled():
+        adapted = generate_with_adapter(prompt)
+        if adapted:
+            return _clean_note(adapted)
     weights = weight_status()
     if weights.code != "ok":
         raise ExplainError(weights.code)
-    prompt = render_prompt(context)
     return _clean_note(_generate_bounded(prompt))
 
 

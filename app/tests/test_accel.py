@@ -110,6 +110,13 @@ def test_training_modules_do_not_import_pickle():
         "optional_models",
         "model_eval",
         "weight_io",
+        "trace_graph",
+        "trace_model",
+        "trace_eval",
+        "trace_gnn",
+        "log_encoder",
+        "log_encoder_torch",
+        "llm_lora",
     ):
         path = Path(__file__).parents[1] / "src" / f"{module_name}.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

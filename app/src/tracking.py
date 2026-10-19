@@ -120,6 +120,9 @@ def ml_snapshot() -> dict:
         "cuda": cuda_version(),
         "metric_model": os.environ.get("METRIC_MODEL", "").strip().lower() or "off",
         "learned_ranker": os.environ.get("LEARNED_RANKER", "").strip().lower() or "off",
+        "trace_model": os.environ.get("TRACE_MODEL", "").strip().lower() or "off",
+        "llm_lora": os.environ.get("LLM_LORA", "").strip().lower() or "off",
+        "log_encoder": os.environ.get("LOG_ENCODER", "").strip().lower() or "off",
     }
 
 

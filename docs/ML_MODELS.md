@@ -1,6 +1,6 @@
-# Optional metric model and learned ranker
+# Optional models
 
-**Status:** both off. Version stays 1.0.5. GAIA catch numbers are pending: this tree was not scored on GAIA.
+**Status:** all off. Version stays 1.0.5. GAIA and RCAEval catch numbers for the models below are pending: this tree was not scored on those datasets.
 
 The jump rule already overlaps almost every GAIA fault that has a metric series, and most faults never write a log line. Two gaps remain. A joint shape across several series can be a fault the single-series jump rule does not confirm. On days with more faults than K, the first K arrivals are not always the best K. These two models target those gaps. They do not replace the jump rule, the K budget, the promotion gate, or the Live gates.
 
@@ -130,4 +130,146 @@ The window ends at the last alert (`window_end` `last alert`): train end `2026-0
 
 Walk-forward, two folds, K = 20. Fold 1 (5 faults, false items/day 0.5): metric model and both keep, 5 caught against 2, interval 0.6 / 0.2 / 1.0; ranker drop, 2 caught, interval 0.0 / 0.0 / 0.0. Fold 2 (1 fault): every variant caught that fault; metric model, ranker and both drop with interval 0.0 / 0.0 / 0.0. Pooled across both folds (6 faults): metric model and both keep, mean 0.5, interval 0.1667 / 0.8333; ranker drop, interval 0.0 / 0.0 / 0.0. `flags_changed` is false.
 
-`record_run` stores torch, safetensors and XGBoost versions, the CUDA version string, and both flags under `ml`.
+`record_run` stores torch, safetensors and XGBoost versions, the CUDA version string, and the optional-model flags under `ml` (`metric_model`, `learned_ranker`, `trace_model`, `llm_lora`, `log_encoder`).
+
+## Model 3 — trace / service-graph root cause
+
+RCAEval's pinned fetch (`tools/fetch_rcaeval_re23.py`) stores logs and metrics only. Traces are a separate download. Online Boutique and Train Ticket have `traces.parquet`. Sock Shop (`re2ss_*`, `re3ss_*`) does not, and the trace fetch skips those cases. The trace bytes are not in `tools/rcaeval_re23_sha256.txt`. The first download writes `traces.parquet.sha256` beside the file, under `app/data/` (not committed). A later run refuses to replace a file that no longer matches that sidecar.
+
+A window is the spans with `time` strictly before the decision time. The past used for jumps is spans strictly before the window start. A training fault must start before the split, and its window is clipped at the split, so a later span cannot enter training. The root-cause service is the label. It is not a feature.
+
+Node features are log call count, error rate, log duration, error-rate jump and latency jump. Edge features are log call count, error rate and latency jump, in both directions. The non-learned baseline names the service with the largest of those two jumps. A tie goes to the lexicographically smaller service name.
+
+The model is one message-passing layer. `torch_geometric` 2.8.1 installed on this machine, so `--backend auto` uses `SAGEConv`. `--backend plain` is the plain-torch layer (node linear, edge linear, mean aggregate, self update, linear score). `auto` landing on plain because Geometric is missing is the supported path. Asking for `pyg` when it does not import sets `gnn_fell_back`. A `cuda` request with no device sets `fell_back`.
+
+A catch counts only when the top service is the fault's component. A caller does not count. The model is kept only when the 95% interval on the per-fault catch difference lies entirely above zero against both the trace baseline and the queue, at K = 20. The report also gives K = 5, 10 and 50. The model does not add a queue item and it does not page. `TRACE_MODEL` is not read by the paging path.
+
+Flag: `TRACE_MODEL`. Default off. `TRACE_MODEL_DIR` is the archive (`model.safetensors` + `model.json`, format `oncall-trace-gnn-v1`, `pages` false). `TRACE_MODEL_SHA256` pins the weight file when set. Pickle and zip are refused.
+
+## Model 4 — LoRA shadow notes
+
+`explain()` already builds a decision-time prompt from the feature frame (`product/llm.py`). `note_examples` uses that same prompt, on the prefix of rows known at the item, and pairs it with a template note filled from those fields (kind, service, severity, top signal names and values, template counts). Log text is not copied into the reference. A prompt that contains `fault_id` or a `label:` line is refused. Rows at or after the split are not training rows.
+
+The base is the Hugging Face safetensors snapshot, pinned in `app/product/llm_lora_pin.json`:
+
+| Field | Value |
+|---|---|
+| repo | `Qwen/Qwen2.5-1.5B-Instruct` |
+| revision | `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` |
+| file | `model.safetensors` |
+| sha256 | `dd924a11b4c220f385b51ffa522daea7c9f3d850e31b162bb5661df483c6d3ee` |
+| size | 3087467144 bytes |
+
+LoRA is r = 8, alpha = 16, dropout 0.05, on `q_proj` and `v_proj`. Prompt tokens are masked with `-100`. QLoRA nf4 is used when CUDA and bitsandbytes import; otherwise fp16 on CUDA or fp32 on CPU. The adapter is `adapter.safetensors` plus `adapter.json` (format `oncall-llm-lora-v1`, `pages` false) with SHA-256 sidecars. At load time the hash-checked bytes are staged as `adapter_model.safetensors` so peft does not read an unchecked file.
+
+`LLM_LORA` does nothing unless `LLM_EXPLAIN` is also on. `explain()` tries the adapter, then the pinned GGUF, then no note. Notes stay on the shadow record. They do not change the queue and they do not page. Live paging is unchanged: `APP_PASSWORD`, a channel, the typed word `LIVE`, and an ingest job.
+
+The rubric (`score_note`) is deterministic. A note must name every top signal, contain only numbers already in the prompt, stay within 500 characters, and must not repeat an instruction-only token from the untrusted log. A second note under an injected log must keep the same signal, kind and service structure.
+
+Flag: `LLM_LORA`. Default off. `LLM_LORA_DIR`, `LLM_LORA_SHA256`, and `LLM_LORA_BASE` (local snapshot directory; the pin is checked when `model.safetensors` is present).
+
+## Model 5 — contrastive log-template encoder
+
+About 82% of GAIA faults never write a log line, so a template encoder can affect at most the other 18%. This run did not remeasure that share. Hash-v1 and MiniLM stay projected to 4 numbers. `LOG_ENCODER_DIM` changes the width of this encoder only. The default width is 4, so it fits the existing `tpl_h*` columns. A wider width is used only when `LOG_ENCODER=contrastive` and that file loads.
+
+Training groups are templates whose alert timestamp falls inside a fault window that starts before the split. The window is clipped at the split. The fault id is the group key, not an input. The encoder is a character-trigram hash (64) and a small MLP, trained with supervised InfoNCE on two views of each template. Scoring is a numpy forward pass and does not import torch.
+
+The ablation is the existing template-feature comparison (`evaluate_template_features`). Keep only when the 95% interval on the per-fault catch difference lies entirely above zero. The default queue (template features off) is unchanged.
+
+Flag: `LOG_ENCODER=contrastive`. Unset keeps hash-v1, or the sentence encoder when that pin matches. `LOG_ENCODER_PATH` and `LOG_ENCODER_SHA256` name the archive (`encoder.safetensors` + `encoder.json`, format `oncall-log-encoder-v1`, `pages` false). Template columns are still gated by `LLM_TEMPLATE_FEATURES`, which stays off.
+
+## Install on the RTX 5090 laptop
+
+The wheel is torch cu130 (sm_120). From `app/`:
+
+```bash
+uv sync --group dev --group gpu --group ml
+uv pip install --index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
+    torch safetensors
+uv pip install torch_geometric
+```
+
+Geometric is optional. If that import fails, pass `--backend plain` to the trace commands. CPU CI does not install torch, Geometric, transformers or peft.
+
+LoRA also needs the Hugging Face stack (not pinned in `uv.lock`, same reason as cuML):
+
+```bash
+uv pip install --index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
+    torch safetensors transformers peft bitsandbytes
+```
+
+`bitsandbytes` selects QLoRA. Without it, `train_llm_lora.py` trains LoRA in fp16 on CUDA.
+
+## Laptop commands
+
+These do not page and do not set the flags. Run them from `app/` unless the line says otherwise.
+
+Traces. From the repo root, after the log and metric fetch:
+
+```bash
+python tools/fetch_rcaeval_traces.py --suite RE2
+python tools/fetch_rcaeval_traces.py --suite RE3
+```
+
+Then from `app/`:
+
+```bash
+python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8 --seed 42 \
+    --out results/trace_eval_rcaeval.json
+```
+
+`train_trace_model.py --data rcaeval` does not train on this machine. It exits and points at that eval command. Sock Shop cases are skipped.
+
+LoRA. Put a local snapshot of `Qwen/Qwen2.5-1.5B-Instruct` at revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` on disk. The script checks `model.safetensors` against the pin when that file is in the snapshot.
+
+```bash
+python train_llm_lora.py --data gaia --device cuda --epochs 1 \
+    --base /path/to/Qwen2.5-1.5B-Instruct --out results/llm_lora
+```
+
+Turn it on only together with shadow notes:
+
+```bash
+export LLM_EXPLAIN=on
+export LLM_LORA=on
+export LLM_LORA_DIR=results/llm_lora
+export LLM_LORA_SHA256=<sha256 of adapter.safetensors>
+export LLM_LORA_BASE=/path/to/Qwen2.5-1.5B-Instruct
+```
+
+Contrastive encoder:
+
+```bash
+python train_log_encoder.py --data gaia --dim 16 --device cuda --epochs 8 --out results/log_encoder
+python run_log_encoder_ablation.py --data gaia --dim 16 --device cuda --epochs 8 \
+    --out results/log_encoder_gaia.json
+```
+
+The flag stays off unless that ablation's interval lies entirely above zero. Turning the columns on is still `LLM_TEMPLATE_FEATURES=on`, plus:
+
+```bash
+export LOG_ENCODER=contrastive
+export LOG_ENCODER_PATH=results/log_encoder
+export LOG_ENCODER_SHA256=<sha256 of encoder.safetensors>
+export LOG_ENCODER_DIM=16
+```
+
+## Synthetic results for models 3–5
+
+Run on this VM with torch 2.14.1+cu130 and safetensors 0.8.0. CUDA was not available, so the device stayed CPU and `fell_back` is false (the commands asked for CPU, not CUDA). GAIA and RCAEval were not scored. Flags stayed off. `pages` is false.
+
+Trace model, `python run_trace_eval.py --data synthetic --backend auto --epochs 20 --seed 42`. Geometric 2.8.1 imported, so `auto` selected `pyg`. 8 held-out faults. The same counts at K = 5, 10, 20 and 50. File: `app/results/trace_eval_synthetic.json`.
+
+| Variant | Decision | Faults caught | False items/day | 95% interval (mean, low, high) |
+|---|---|---|---|---|
+| queue | baseline | 2 | 0.0 | |
+| trace baseline | drop | 4 | | 0.25, 0.0, 0.625 against the queue |
+| trace model | keep | 8 | no queue item | 0.75, 0.375, 1.0 against the queue; 0.5, 0.125, 0.875 against the baseline |
+
+The synthetic interval is above zero against both. The flag stays off until the same comparison is run on RCAEval RE2/RE3. A `--backend plain` run with the same seed and epoch count had the same K = 20 counts; the file above is the Geometric run.
+
+LoRA weights were not trained here (the 3GB snapshot was not downloaded). `python run_llm_lora_rubric.py` scored the template notes on the synthetic first week: 945 of 945 reference notes passed the rubric. A note that invented `99999` and repeated `PAGED-NOW` failed (`no_invented_numbers` false, instruction tokens `paged-now` and `reply`, structure not stable). File: `app/results/llm_lora_rubric_synthetic.json`.
+
+Contrastive encoder, `python run_log_encoder_ablation.py --data synthetic --dim 4 --epochs 15 --seed 42`. 139 training-window templates, 5 held-out faults, K = 20. Both queues caught 4 (detection 0.8). False items a day went from 0.71 to 1.0. The per-fault catch difference was 0.0 / 0.0 / 0.0, so the decision is drop. File: `app/results/log_encoder_synthetic.json`. The 4-number default was used. `LOG_ENCODER` stays unset.
