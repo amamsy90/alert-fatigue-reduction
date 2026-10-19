@@ -1,6 +1,6 @@
 # GPU library and tiny LLM: roles
 
-**Status:** Phase 0 locked. Phase 1 (optional GPU training, CPU fallback), Phase 2a (shadow notes) and Phase 3 (pinned local LLM) are in the tree. Phase 2b and Phase 4 are not implemented.
+**Status:** Phase 0 locked. Phase 1 (optional GPU training), Phase 2a (shadow notes), Phase 2b (optional template features, dropped for the default queue) and Phase 3 (pinned local LLM) are in the tree. Phase 4 is not implemented.
 
 The queue that pages is still the cost-sensitive logistic classifier plus the jump ranker, at most K items a day, saved as a skops archive, shadow mode unless Live is armed. GPU training and a later local LLM are optional layers. Neither is allowed to become a hard dependency, and neither decides Live paging.
 
@@ -9,7 +9,7 @@ The queue that pages is still the cost-sensitive logistic classifier plus the ju
 | Component | Role | Not allowed to |
 |---|---|---|
 | GPU library (cuML, or XGBoost on a CUDA device) | Faster training and experiment sweeps. Optionally a stronger classifier, and only when that backend is requested. | Become a hard dependency. CI stays green on CPU with `uv sync --group dev`. |
-| Tiny LLM (Qwen2.5-1.5B-Instruct, Q4_K_M GGUF) | Write a short "why this item" note beside each shadow queue entry, when `LLM_EXPLAIN` is on. A later phase may turn raw log lines into a feature, after a time-split ablation. | Decide what gets paged. Live paging stays under the existing Live rules (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). |
+| Tiny LLM (Qwen2.5-1.5B-Instruct, Q4_K_M GGUF) | Write a short "why this item" note beside each shadow queue entry, when `LLM_EXPLAIN` is on. Optional template-hash columns (`LLM_TEMPLATE_FEATURES`) were measured and are not part of the default queue. | Decide what gets paged. Live paging stays under the existing Live rules (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). |
 
 ## What the GPU is for, honestly
 
@@ -18,7 +18,7 @@ Daily GAIA frames are small. One logistic fit will not show a large GPU speedup,
 ## Requirements
 
 - **FR-21.** No output path without a CPU fallback. `get_backend()` returns `sklearn` when CUDA or the requested library is missing. `AlertClassifier.fit` retrains with sklearn if the GPU fit fails. The object stored for `load_model` is always a scikit-learn pipeline (skops). Pickle stays banned.
-- **FR-22.** The LLM never changes the queue unless an evaluated feature flag is on. That flag is Phase 2b and does not exist yet. Shadow notes are off by default and are stored beside the would-have-paged list after the page decision. `classifier_decisions` takes the alerts, the scores and the config, and nothing else.
+- **FR-22.** The LLM never changes the queue unless `LLM_TEMPLATE_FEATURES` is on. That flag is off. The time-split ablation did not clear the bar to turn it on (see below). Shadow notes stay off by default and are stored beside the would-have-paged list after the page decision. `classifier_decisions` takes the alerts, the scores and the config, and nothing else.
 - **FR-23.** No future text and no realised labels in an LLM prompt. `product/llm.py` builds the note from item features, the strongest of those features, and counts of the same log template on earlier lines. The realised `label` / `fault_id` columns are not model inputs (`test_realised_label_is_not_a_model_feature`, `test_explanation_input_has_no_labels_or_later_rows`).
 
 ## Backend selection
@@ -106,9 +106,38 @@ python scripts/fetch_llm.py --check product/data/llm/qwen2.5-1.5b-instruct-q4_k_
 
 `--check` exits `1` when the file is missing or the hash differs. `*.gguf` and `*.safetensors` are gitignored. `product/data/` already is, which is where the default download lands. The script writes a `<file>.sha256` sidecar only after the hash matches.
 
+## Template features (Phase 2b) — drop for the default queue
+
+`LLM_TEMPLATE_FEATURES` (`1` / `true` / `yes` / `on`) adds five numeric columns to the alert classifier: `tpl_h0`–`tpl_h3`, a SHA-256 of the normalised log template mapped into [-1, 1), and `tpl_prior`, how many earlier rows share that template. A later row does not change an earlier row. The realised fault id is not an input. Shadow notes do not feed these columns.
+
+The default encoder is `hash-v1` (no weights). A sentence-transformer file is used only when both are set:
+
+- `LLM_TEMPLATE_ENCODER` — path to the weight file
+- `LLM_TEMPLATE_ENCODER_SHA256` — expected SHA-256
+
+A missing file, a hash mismatch, or a missing `sentence-transformers` install skips that file and uses `hash-v1`. Nothing is downloaded at train or score time. The flag is off when the variable is unset, and a model saved with it off still scores with the current columns after it is loaded.
+
+`run_classifier_ablation.py` trains on the first week and scores the later days, the same split as the other classifier ablations. At K = 20 it can also score the GAIA full queue (jumps, leaks, gaps, and log alerts) and write `results/template_feature_ablation_gaia.json` without changing `classifier_ablation_gaia.csv`. The keep rule is the project's 95% bootstrap interval (`src.eval_stats.bootstrap_mean_ci`) on the per-fault catch difference. Keep only when the whole interval is above zero.
+
+This machine has no `data/gaia_raw` or `data/gaia_metrics`, so that full-queue run was not done. `run_validate.py` still checks the published GAIA report numbers; it does not measure this feature.
+
+What was run: `python run_classifier_ablation.py --template-features` on the built-in synthetic sample (`sample_data.generate`, seed 42, 14 days, K = 20). That queue is alerts only. It is not the GAIA full queue.
+
+| | Baseline (current columns) | `hash-v1` template columns |
+|---|---:|---:|
+| Held-out faults caught | 4 / 5 (0.8) | 4 / 5 (0.8) |
+| False items a day | 0.71 | 1.0 |
+| Per-fault catch difference, 95% interval | | mean 0.0, low 0.0, high 0.0 (n = 5) |
+
+Train 945 alerts, test 921 alerts, 5 held-out faults. The interval does not lie above zero, and the false-item rate is higher, so the decision is **drop**. `LLM_TEMPLATE_FEATURES` stays off. A later GAIA run can revisit that; this sample does not justify turning the flag on.
+
+```bash
+cd app
+python run_classifier_ablation.py --template-features
+```
+
 ## Later phases (not in this change)
 
-- **Phase 2b.** Optional numeric features from log templates, time-split, kept only if `eval_stats` shows a gain. Off unless that evaluated flag is on. Notes do not feed this.
 - **Phase 4.** Optional `Dockerfile.gpu`. The default image stays CPU. Metrics for LLM latency, timeout, fallback and GPU memory. Health shows the active backend.
 
 Version stays 1.0.5 until a release that includes those phases.

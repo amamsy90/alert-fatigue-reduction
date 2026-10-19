@@ -18,11 +18,20 @@ product's promotion gate decides when it trains the classifier on GAIA.
 
 Usage:
     python run_classifier_ablation.py
+    python run_classifier_ablation.py --template-features
+
+`--template-features` compares the current classifier with the optional
+template-hash columns on the same first-week split. When the GAIA folders
+are absent it scores the synthetic alert sample and says the full GAIA queue
+was not run. The published classifier_ablation_gaia.csv rows are unchanged.
 """
 from __future__ import annotations
 
 import json
+import sys
+import tempfile
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,12 +40,15 @@ import pandas as pd
 from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
 from src.config import Config
-from src.entities import Action, Alert, Decision
+from src.entities import Action, Alert, Decision, Fault
+from src.eval_stats import bootstrap_mean_ci
 from src.experiment import load_gaia
 from src.features import build_feature_frame
+from src.ingestion import align_alerts_to_faults, load_alerts, load_faults, time_split
 from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
 from src.queue import (
+    QueueItem,
     alert_items,
     build_queue,
     n_days_between,
@@ -44,6 +56,7 @@ from src.queue import (
     spike_items,
     tune_confirm_thresholds,
 )
+from src.scoring import faults_by_service, spike_hits
 from src.tracking import GAIA_INPUTS, record_run
 
 VARIANTS = ("classifier", "severity", "no_alerts")
@@ -115,6 +128,7 @@ def main() -> None:
 
     rows = []
     notes: dict = {}
+    template_report: dict | None = None
     for k in config.budget_sweep:
         # Same per-K setup as run_queue_eval.run_window, so `classifier` == `proposed`.
         cfg = replace(config, budget_k=k)
@@ -152,6 +166,19 @@ def main() -> None:
                 f"false/day {row['false_items_per_day']:4.2f}  precision {row['precision']:.1%}  "
                 f"alerts attached {row.get('attached_alerts')}"
             )
+        if k == 20:
+            # Side report only. The CSV rows above stay the published comparison.
+            template_report = evaluate_template_features(
+                train_alerts,
+                test_alerts,
+                test_faults,
+                tuned,
+                n_days=n_days,
+                dataset="gaia",
+                train_spikes=train_jumps,
+                test_spikes=test_jumps,
+                metric_items=metric_items,
+            )
 
     out = Path("results") / "classifier_ablation_gaia.csv"
     out.parent.mkdir(exist_ok=True)
@@ -168,6 +195,13 @@ def main() -> None:
             print(f"K={k:2d}  classifier row matches published `proposed`: {'yes' if same else 'NO'}")
 
     notes["promotion_gate"] = promotion_gate_on_gaia()
+    if template_report is not None:
+        side = Path("results") / "template_feature_ablation_gaia.json"
+        side.write_text(json.dumps(template_report, indent=2) + "\n", encoding="utf-8")
+        print(
+            f"template features K=20: {template_report['decision']} "
+            f"delta {template_report['per_fault_catch_delta']} -> {side}"
+        )
     notes_path = Path("results") / "classifier_ablation_gaia.json"
     notes_path.write_text(json.dumps(notes, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(notes, indent=2))
@@ -182,5 +216,196 @@ def main() -> None:
     )
 
 
+def _fresh_metric_items(metric_items: Callable[[], list[QueueItem]] | list[QueueItem] | None) -> list[QueueItem]:
+    if metric_items is None:
+        return []
+    if callable(metric_items):
+        return list(metric_items())
+    return list(metric_items)
+
+
+def _caught(shown: list[QueueItem], faults: list[Fault]) -> set[str]:
+    known = {fault.fault_id for fault in faults}
+    by_service = faults_by_service(faults)
+    caught: set[str] = set()
+    for item in shown:
+        if item.kind == "gap":
+            continue
+        if item.kind == "alert":
+            fault_id = item.alert.fault_id
+            if fault_id in known:
+                caught.add(fault_id)
+        else:
+            caught.update(
+                fault.fault_id for fault in spike_hits(item.spike, by_service) if fault.fault_id in known
+            )
+    return caught
+
+
+def _score_variant(
+    name: str,
+    train_alerts: list[Alert],
+    test_alerts: list[Alert],
+    test_faults: list[Fault],
+    config: Config,
+    n_days: int,
+    *,
+    template_features: bool,
+    encoder: object | None,
+    train_spikes: list | None,
+    test_spikes: list | None,
+    metric_items: Callable[[], list[QueueItem]] | list[QueueItem] | None,
+) -> tuple[dict, set[str], str | None]:
+    model = AlertClassifier(
+        config,
+        template_features=template_features,
+        encoder=encoder if template_features else None,
+    )
+    model.fit(train_alerts, train_spikes)
+    threshold = tune_threshold(train_alerts, model.predict_proba(train_alerts, train_spikes), config)
+    proba = model.predict_proba(test_alerts, test_spikes)
+    if test_spikes is None:
+        in_spike = [False] * len(test_alerts)
+    else:
+        flags = build_feature_frame(test_alerts, config, test_spikes)["during_memory_spike"]
+        in_spike = [bool(value) for value in flags]
+    decisions = spike_review_decisions(
+        test_alerts, proba, config, threshold, bayes_threshold(config), in_spike
+    )
+    shown = build_queue(_fresh_metric_items(metric_items) + alert_items(test_alerts, decisions), config)
+    row = score_queue(name, shown, test_faults, n_days, config)
+    return row, _caught(shown, test_faults), model.template_encoder_name
+
+
+def evaluate_template_features(
+    train_alerts: list[Alert],
+    test_alerts: list[Alert],
+    test_faults: list[Fault],
+    config: Config,
+    *,
+    n_days: int,
+    dataset: str,
+    encoder: object | None = None,
+    train_spikes: list | None = None,
+    test_spikes: list | None = None,
+    metric_items: Callable[[], list[QueueItem]] | list[QueueItem] | None = None,
+) -> dict:
+    """Time-split comparison of the current classifier and the template columns.
+
+    The split is the caller's: train on the first week, score the later days.
+    The queue metric is `score_queue` detection rate. The keep/drop rule is the
+    95% bootstrap interval (`bootstrap_mean_ci`) of the per-fault catch
+    difference (candidate minus baseline). Keep only when that interval lies
+    entirely above zero. Otherwise drop. The default queue is unchanged either way.
+    """
+    baseline, base_caught, _ = _score_variant(
+        "baseline",
+        train_alerts,
+        test_alerts,
+        test_faults,
+        config,
+        n_days,
+        template_features=False,
+        encoder=None,
+        train_spikes=train_spikes,
+        test_spikes=test_spikes,
+        metric_items=metric_items,
+    )
+    candidate, cand_caught, encoder_name = _score_variant(
+        "template",
+        train_alerts,
+        test_alerts,
+        test_faults,
+        config,
+        n_days,
+        template_features=True,
+        encoder=encoder,
+        train_spikes=train_spikes,
+        test_spikes=test_spikes,
+        metric_items=metric_items,
+    )
+    report: dict = {
+        "dataset": dataset,
+        "split": "first week train, later days test",
+        "split_day": config.split_day,
+        "budget_k": config.budget_k,
+        "encoder": encoder_name,
+        "train_alerts": len(train_alerts),
+        "test_alerts": len(test_alerts),
+        "test_faults": len(test_faults),
+        "baseline_detection_rate": baseline["detection_rate"],
+        "candidate_detection_rate": candidate["detection_rate"],
+        "baseline_false_items_per_day": baseline["false_items_per_day"],
+        "candidate_false_items_per_day": candidate["false_items_per_day"],
+        "baseline_faults_caught": baseline["faults_caught"],
+        "candidate_faults_caught": candidate["faults_caught"],
+    }
+    if not test_faults:
+        report["per_fault_catch_delta"] = None
+        report["decision"] = "drop"
+        report["reason"] = "no held-out faults to score"
+        return report
+    delta = [
+        float(fault.fault_id in cand_caught) - float(fault.fault_id in base_caught) for fault in test_faults
+    ]
+    interval = bootstrap_mean_ci(delta)
+    report["per_fault_catch_delta"] = {
+        "mean": round(interval.mean, 4),
+        "low": round(interval.low, 4),
+        "high": round(interval.high, 4),
+        "n": interval.n,
+    }
+    kept = interval.low > 0
+    report["decision"] = "keep" if kept else "drop"
+    report["reason"] = (
+        "the 95% interval for the per-fault catch difference lies above zero"
+        if kept
+        else "the 95% interval for the per-fault catch difference does not lie above zero"
+    )
+    return report
+
+
+def synthetic_template_ablation(days: int = 14, seed: int = 42, budget_k: int = 20) -> dict:
+    """Alert-only queue on the built-in sample. Not the GAIA full queue."""
+    from src.sample_data import generate
+
+    config = Config(budget_k=budget_k)
+    with tempfile.TemporaryDirectory() as folder:
+        generate(folder, seed=seed, days=days)
+        root = Path(folder)
+        alerts = load_alerts(root / "alerts.csv")
+        faults = load_faults(root / "faults.csv")
+    alerts, faults = align_alerts_to_faults(alerts, faults)
+    train_alerts, test_alerts = time_split(alerts, config.split_day)
+    _, test_faults = time_split(faults, config.split_day)
+    origin = min(alert.timestamp for alert in alerts)
+    boundary = origin + pd.Timedelta(days=config.split_day)
+    end = max(alert.timestamp for alert in test_alerts) + pd.Timedelta(seconds=1)
+    report = evaluate_template_features(
+        train_alerts,
+        test_alerts,
+        test_faults,
+        config,
+        n_days=n_days_between(boundary, end, config),
+        dataset="synthetic",
+    )
+    report["gaia"] = "skipped: data/gaia_raw and data/gaia_metrics are not in this run"
+    return report
+
+
+def main_template() -> None:
+    gaia = Path("data/gaia_raw").exists() and Path("data/gaia_metrics").exists()
+    if gaia:
+        print("GAIA folders are present. Scoring the full queue, including template features at K=20.")
+        main()
+        return
+    report = synthetic_template_ablation()
+    print(json.dumps(report, indent=2))
+    print("GAIA full-queue ablation was not run: data/gaia_raw and data/gaia_metrics are absent.")
+
+
 if __name__ == "__main__":
-    main()
+    if "--template-features" in sys.argv:
+        main_template()
+    else:
+        main()

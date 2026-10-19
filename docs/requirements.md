@@ -43,7 +43,7 @@ This document states what the system must do (functional requirements, FR), how 
 | **FR-19** | Every experiment run shall be logged with its code version, configuration, data fingerprint, outputs and metrics. | Should |
 | **FR-20** | Webhook rows without a usable timestamp or source shall be rejected with a reason and never block later jobs. | Must |
 | **FR-21** | GPU training shall be optional. The default install and CI shall run without the `gpu` dependency group. Every GPU path shall fall back to the scikit-learn classifier when CUDA or the GPU library is missing, and the saved model shall remain a skops archive that loads on CPU. | Must |
-| **FR-22** | An LLM shall not change which items are queued or paged unless an evaluated feature flag is on. Live paging rules are unchanged. Shadow notes are off by default and do not select items. The flag that would let an LLM change the queue is Phase 2b and is not implemented. | Must |
+| **FR-22** | An LLM shall not change which items are queued or paged unless `LLM_TEMPLATE_FEATURES` is on. Live paging rules are unchanged. The flag is off. A time-split ablation on the synthetic alert sample did not show a gain, and the GAIA full-queue run was not available, so the flag stays off. Shadow notes do not select items. | Must |
 | **FR-23** | An LLM prompt shall contain only fields known at decision time. Realised fault labels and later rows shall not be included. Shadow notes use that prompt. The classifier already excludes the realised label from its inputs. | Must |
 
 ## 3. Non-functional requirements
@@ -136,7 +136,7 @@ This document states what the system must do (functional requirements, FR), how 
 | FR-19 | all of `test_tracking.py` | `app/results/experiments.jsonl` |
 | FR-20 | all of `test_ai_inputs.py` | |
 | FR-21 | `test_missing_gpu_libraries_fall_back_to_sklearn`, `test_missing_gpu_backends_build_the_same_queue`, `test_a_failing_gpu_fit_is_retrained_on_sklearn`, `test_copied_coefficients_match_and_load_on_cpu`, `test_tree_head_round_trips_through_the_model_archive`, `test_training_modules_do_not_import_pickle` | `docs/GPU_LLM_ROLES.md`. cuML and XGBoost-GPU queue checks skip when there is no CUDA device. |
-| FR-22 | `test_queue_decisions_have_no_llm_argument`, `test_notes_do_not_change_queue_selection`, `test_explanations_are_off_unless_enabled`, `test_timeout_leaves_the_queue_without_notes` | Phase 2b flag is not in the code yet. `docs/GPU_LLM_ROLES.md` |
+| FR-22 | `test_queue_decisions_have_no_llm_argument`, `test_notes_do_not_change_queue_selection`, `test_explanations_are_off_unless_enabled`, `test_timeout_leaves_the_queue_without_notes`, `test_default_pipeline_matches_the_baseline_queue`, `test_template_features_use_only_rows_at_or_before_the_alert`, `test_template_ablation_accepts_a_stub_encoder` | Flag `LLM_TEMPLATE_FEATURES` is off. Drop decision: `docs/GPU_LLM_ROLES.md` |
 | FR-23 | `test_realised_label_is_not_a_model_feature`, `test_explanation_input_has_no_labels_or_later_rows`, `test_prompt_injection_does_not_change_the_note_record` | `product/llm.py`, prompt `explain-v1` |
 | NFR-11 | — | `app/results/perf/load_test_*_users.json` |
 | NFR-1 | all of `test_causality.py`, `test_later_data_does_not_change_the_window`, `test_counts_use_only_earlier_alerts`, `test_jump_features_look_only_backwards`, `test_test_window_cannot_move_a_series_threshold` | |

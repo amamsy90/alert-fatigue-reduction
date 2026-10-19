@@ -97,6 +97,9 @@ def _meta(saved: SavedModel, has_pipeline: bool) -> dict:
         "train_alerts": saved.train_alerts,
         "feedback_real": saved.feedback_real,
         "backend": None if saved.model is None else getattr(saved.model, "backend_used", "sklearn"),
+        # Absent on archives written before this field: load treats that as off.
+        "template_features": bool(getattr(saved.model, "template_features", False)),
+        "template_encoder": getattr(saved.model, "template_encoder_name", None),
     }
 
 
@@ -203,9 +206,11 @@ def load_model(path: Path | None = None) -> SavedModel | None:
                 pipe = _load_pipeline(archive.read("pipe.skops"))
                 if pipe is None:
                     return None
-                model = AlertClassifier()
+                model = AlertClassifier(template_features=bool(meta.get("template_features", False)))
                 model._pipe = pipe
                 model.backend_used = str(meta.get("backend") or "sklearn")
+                encoder_name = meta.get("template_encoder")
+                model.template_encoder_name = str(encoder_name) if encoder_name else None
         return SavedModel(
             model=model,
             escalate_threshold=float(meta["escalate_threshold"]),

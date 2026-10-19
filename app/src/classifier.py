@@ -31,37 +31,53 @@ from .accel import (
 from .config import Config, day_of
 from .entities import Action, Alert, Decision
 from .features import NUMERIC_COLUMNS, build_feature_frame
+from .template_features import TEMPLATE_COLUMNS, template_features_enabled
 
 log = logging.getLogger(__name__)
 
 
 class AlertClassifier:
-    def __init__(self, config: Config | None = None, *, backend: str | None = None) -> None:
+    def __init__(
+        self,
+        config: Config | None = None,
+        *,
+        backend: str | None = None,
+        template_features: bool | None = None,
+        encoder: object | None = None,
+    ) -> None:
         self.config = config or Config()
         self.backend = backend
         self.backend_used = "sklearn"
         self._pipe: Pipeline | None = None
+        # None follows LLM_TEMPLATE_FEATURES. The default is off, so a normal
+        # fit still uses NUMERIC_COLUMNS only (FR-22).
+        self.template_features = (
+            template_features_enabled() if template_features is None else bool(template_features)
+        )
+        self._template_encoder = encoder
+        self.template_encoder_name: str | None = getattr(encoder, "name", None)
 
     def fit(self, alerts: list[Alert], spikes: list | None = None) -> AlertClassifier:
-        frame = build_feature_frame(alerts, self.config, spikes)
+        frame = self._frame(alerts, spikes)
         labels = frame["label"].to_numpy()
         if len(np.unique(labels)) < 2:
             raise ValueError("Training data needs both fault and noise alerts")
         weights = np.where(labels == 1, self.config.miss_cost, self.config.false_alarm_cost)
         chosen = get_backend(self.backend)
+        numeric = self._numeric_columns()
         # The sklearn path is the one the published queue uses. Keep it a
         # single pipeline.fit so a CPU install is unchanged.
         if chosen == "sklearn":
-            self._pipe = _fit_sklearn(frame, labels, weights, self.config.random_seed)
+            self._pipe = _fit_sklearn(frame, labels, weights, self.config.random_seed, numeric)
             self.backend_used = "sklearn"
             return self
         try:
-            self._pipe = _fit_gpu(chosen, frame, labels, weights, self.config.random_seed)
+            self._pipe = _fit_gpu(chosen, frame, labels, weights, self.config.random_seed, numeric)
             self.backend_used = chosen
         except Exception:
             # FR-21: a GPU failure must still produce the sklearn queue.
             log.warning("accel: %s fit failed; using sklearn", chosen, exc_info=True)
-            self._pipe = _fit_sklearn(frame, labels, weights, self.config.random_seed)
+            self._pipe = _fit_sklearn(frame, labels, weights, self.config.random_seed, numeric)
             self.backend_used = "sklearn"
         return self
 
@@ -70,8 +86,35 @@ class AlertClassifier:
         `spikes=None` the jump feature is 0 (training jumps are never reused)."""
         if self._pipe is None:
             raise RuntimeError("Classifier has not been fit")
-        frame = build_feature_frame(alerts, self.config, spikes)
+        frame = self._frame(alerts, spikes)
         return self._pipe.predict_proba(frame)[:, 1]
+
+    def _numeric_columns(self) -> list[str] | None:
+        if not self.template_features:
+            return None
+        return list(NUMERIC_COLUMNS) + list(TEMPLATE_COLUMNS)
+
+    def _frame(self, alerts: list[Alert], spikes: list | None) -> pd.DataFrame:
+        return build_feature_frame(
+            alerts,
+            self.config,
+            spikes,
+            template_features=self.template_features,
+            encoder=self._active_encoder(),
+        )
+
+    def _active_encoder(self) -> object | None:
+        if not self.template_features:
+            return None
+        if self._template_encoder is None:
+            from .template_features import HASH_ENCODER, HashTemplateEncoder, resolve_encoder
+
+            if self.template_encoder_name in (None, HASH_ENCODER):
+                self._template_encoder = HashTemplateEncoder()
+            else:
+                self._template_encoder = resolve_encoder(None)
+            self.template_encoder_name = str(getattr(self._template_encoder, "name", HASH_ENCODER))
+        return self._template_encoder
 
 
 def classifier_decisions(
@@ -115,8 +158,14 @@ def classifier_decisions(
     return decisions  # type: ignore[return-value]
 
 
-def _fit_sklearn(frame: pd.DataFrame, labels: np.ndarray, weights: np.ndarray, seed: int) -> Pipeline:
-    pipe = _make_pipeline(seed)
+def _fit_sklearn(
+    frame: pd.DataFrame,
+    labels: np.ndarray,
+    weights: np.ndarray,
+    seed: int,
+    numeric: list[str] | None = None,
+) -> Pipeline:
+    pipe = _make_pipeline(seed, numeric)
     pipe.fit(frame, labels, clf__sample_weight=weights)
     return pipe
 
@@ -127,6 +176,7 @@ def _fit_gpu(
     labels: np.ndarray,
     weights: np.ndarray,
     seed: int,
+    numeric: list[str] | None = None,
 ) -> Pipeline:
     """Train the head on the GPU, then store a sklearn pipeline.
 
@@ -135,7 +185,7 @@ def _fit_gpu(
     ``LogisticRegression``. An XGBoost booster is replaced by
     ``TreeEnsembleClassifier`` (skops cannot persist the booster).
     """
-    pipe = _make_pipeline(seed)
+    pipe = _make_pipeline(seed, numeric)
     features = pipe.named_steps["features"]
     features.fit(frame)
     transformed = features.transform(frame)
@@ -150,10 +200,12 @@ def _fit_gpu(
     raise AccelUnavailable(backend)
 
 
-def _make_pipeline(seed: int) -> Pipeline:
+def _make_pipeline(seed: int, numeric: list[str] | None = None) -> Pipeline:
+    # None keeps the published numeric block. Extra columns are opt-in.
+    columns = list(NUMERIC_COLUMNS if numeric is None else numeric)
     features = ColumnTransformer(
         [
-            ("num", StandardScaler(), NUMERIC_COLUMNS),
+            ("num", StandardScaler(), columns),
             (
                 "cat",
                 OneHotEncoder(handle_unknown="ignore"),
