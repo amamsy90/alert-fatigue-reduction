@@ -1,0 +1,354 @@
+{
+  "dataset": "synthetic",
+  "gaia": "pending: this run did not score GAIA",
+  "split": "first week train, later days test",
+  "split_day": 7,
+  "train_end": "2026-01-12T00:00:00+00:00",
+  "test_end": "2026-01-18T23:59:01+00:00",
+  "test_faults": 5,
+  "flags_default": "off",
+  "flags_changed": false,
+  "flags_reason": "A synthetic or partial run does not turn METRIC_MODEL or LEARNED_RANKER on. Both stay off until a GAIA run at K=20 has a 95% interval entirely above zero.",
+  "metric_model": {
+    "status": "trained",
+    "device": "cpu",
+    "device_requested": "cpu",
+    "fell_back": false,
+    "channels": [
+      "cpu",
+      "error",
+      "latency",
+      "memory"
+    ],
+    "normal_only": true,
+    "versions": {
+      "torch": "2.14.1+cpu",
+      "safetensors": "0.8.0"
+    },
+    "pages": false
+  },
+  "ranker": {
+    "backend": "pointwise",
+    "device": "cpu",
+    "pages": false
+  },
+  "by_k": {
+    "5": {
+      "baseline": {
+        "faults_caught": 2,
+        "faults": 5,
+        "detection_rate": 0.4,
+        "false_items_per_day": 0.57,
+        "items_per_day": 0.86,
+        "precision": 0.3333,
+        "decision": "baseline",
+        "status": "scored"
+      },
+      "metric_model": {
+        "faults_caught": 5,
+        "faults": 5,
+        "detection_rate": 1.0,
+        "false_items_per_day": 0.57,
+        "items_per_day": 1.29,
+        "precision": 0.5556,
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval for the per-fault catch difference lies above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.6,
+          "low": 0.2,
+          "high": 1.0,
+          "n": 5
+        }
+      },
+      "ranker": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      },
+      "both": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      }
+    },
+    "10": {
+      "baseline": {
+        "faults_caught": 2,
+        "faults": 5,
+        "detection_rate": 0.4,
+        "false_items_per_day": 0.57,
+        "items_per_day": 0.86,
+        "precision": 0.3333,
+        "decision": "baseline",
+        "status": "scored"
+      },
+      "metric_model": {
+        "faults_caught": 5,
+        "faults": 5,
+        "detection_rate": 1.0,
+        "false_items_per_day": 0.57,
+        "items_per_day": 1.29,
+        "precision": 0.5556,
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval for the per-fault catch difference lies above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.6,
+          "low": 0.2,
+          "high": 1.0,
+          "n": 5
+        }
+      },
+      "ranker": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      },
+      "both": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      }
+    },
+    "20": {
+      "baseline": {
+        "faults_caught": 2,
+        "faults": 5,
+        "detection_rate": 0.4,
+        "false_items_per_day": 0.57,
+        "items_per_day": 0.86,
+        "precision": 0.3333,
+        "decision": "baseline",
+        "status": "scored"
+      },
+      "metric_model": {
+        "faults_caught": 5,
+        "faults": 5,
+        "detection_rate": 1.0,
+        "false_items_per_day": 0.57,
+        "items_per_day": 1.29,
+        "precision": 0.5556,
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval for the per-fault catch difference lies above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.6,
+          "low": 0.2,
+          "high": 1.0,
+          "n": 5
+        }
+      },
+      "ranker": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      },
+      "both": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      }
+    },
+    "50": {
+      "baseline": {
+        "faults_caught": 2,
+        "faults": 5,
+        "detection_rate": 0.4,
+        "false_items_per_day": 0.57,
+        "items_per_day": 0.86,
+        "precision": 0.3333,
+        "decision": "baseline",
+        "status": "scored"
+      },
+      "metric_model": {
+        "faults_caught": 5,
+        "faults": 5,
+        "detection_rate": 1.0,
+        "false_items_per_day": 0.57,
+        "items_per_day": 1.29,
+        "precision": 0.5556,
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval for the per-fault catch difference lies above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.6,
+          "low": 0.2,
+          "high": 1.0,
+          "n": 5
+        }
+      },
+      "ranker": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      },
+      "both": {
+        "faults_caught": 1,
+        "faults": 5,
+        "detection_rate": 0.2,
+        "false_items_per_day": 0.0,
+        "items_per_day": 0.14,
+        "precision": 1.0,
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": -0.2,
+          "low": -0.6,
+          "high": 0.0,
+          "n": 5
+        }
+      }
+    }
+  },
+  "headline_k": 20,
+  "headline": {
+    "baseline": {
+      "faults_caught": 2,
+      "faults": 5,
+      "detection_rate": 0.4,
+      "false_items_per_day": 0.57,
+      "items_per_day": 0.86,
+      "precision": 0.3333,
+      "decision": "baseline",
+      "status": "scored"
+    },
+    "metric_model": {
+      "faults_caught": 5,
+      "faults": 5,
+      "detection_rate": 1.0,
+      "false_items_per_day": 0.57,
+      "items_per_day": 1.29,
+      "precision": 0.5556,
+      "status": "scored",
+      "decision": "keep",
+      "reason": "the 95% interval for the per-fault catch difference lies above zero",
+      "per_fault_catch_delta": {
+        "mean": 0.6,
+        "low": 0.2,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    "ranker": {
+      "faults_caught": 1,
+      "faults": 5,
+      "detection_rate": 0.2,
+      "false_items_per_day": 0.0,
+      "items_per_day": 0.14,
+      "precision": 1.0,
+      "status": "scored",
+      "decision": "drop",
+      "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+      "per_fault_catch_delta": {
+        "mean": -0.2,
+        "low": -0.6,
+        "high": 0.0,
+        "n": 5
+      }
+    },
+    "both": {
+      "faults_caught": 1,
+      "faults": 5,
+      "detection_rate": 0.2,
+      "false_items_per_day": 0.0,
+      "items_per_day": 0.14,
+      "precision": 1.0,
+      "status": "scored",
+      "decision": "drop",
+      "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+      "per_fault_catch_delta": {
+        "mean": -0.2,
+        "low": -0.6,
+        "high": 0.0,
+        "n": 5
+      }
+    }
+  },
+  "walk_forward": null
+}

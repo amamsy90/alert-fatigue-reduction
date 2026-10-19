@@ -34,6 +34,13 @@ gpu = [
 ]
 # llama-cpp-python is not a dependency of this group or of `dev`.
 # Shadow notes import it only when LLM_EXPLAIN is on. See docs/GPU_LLM_ROLES.md.
+# Optional metric model and learned ranker. `uv sync` and CI do not install
+# this group. Torch is not pinned: the CPU wheel and the CUDA 13 wheel come
+# from different indexes (the same reason cuML is not pinned). safetensors is
+# the weight format. Install commands are in docs/ML_MODELS.md.
+ml = [
+    "safetensors>=0.4,<1",
+]
 
 [tool.uv]
 # An application, not a library: `uv sync` installs the dependencies only.
@@ -45,11 +52,17 @@ pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "gpu: needs a CUDA device and the optional gpu libraries (skipped otherwise)",
+    "ml: needs torch (skipped otherwise)",
 ]
 
 [tool.coverage.run]
 source = ["src", "product"]
-omit = ["product/datasets.py"]  # downloads NAB over the network
+omit = [
+    "product/datasets.py",  # downloads NAB over the network
+    "*/metric_tcn.py",  # optional torch body; imported only when torch is installed
+    "*/ranker_torch.py",
+    "*/ranker_xgb.py",
+]
 
 [tool.coverage.report]
 show_missing = true
@@ -78,3 +91,7 @@ files = ["src", "product"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["src.metric_tcn", "src.ranker_torch", "src.ranker_xgb"]
+ignore_errors = true
