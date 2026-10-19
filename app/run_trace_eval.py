@@ -6,6 +6,8 @@ only on the root-cause service. The flag stays off. GAIA is not a trace
 dataset here. RCAEval is scored only when ``traces.parquet`` is on disk.
 
     python run_trace_eval.py --data synthetic --backend plain --epochs 20
+    python tools/fetch_rcaeval_re23.py
+    python tools/fetch_rcaeval_traces.py --suite RE2
     python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8
 """
 from __future__ import annotations
@@ -24,6 +26,19 @@ from src.tracking import record_run
 ROOT = Path("data/rcaeval_re23")
 # Sock Shop recordings have no traces in RCAEval. Online Boutique and Train Ticket do.
 _TRACED = {"ob", "tt"}
+
+
+def cases_missing_message(root: Path | None = None) -> str | None:
+    """``cases.parquet`` comes from ``tools/fetch_rcaeval_re23.py``, not the trace fetch."""
+    folder = root if root is not None else ROOT
+    if (folder / "cases.parquet").is_file():
+        return None
+    return (
+        "RCAEval cases.parquet is not in data/rcaeval_re23. Nothing was scored. "
+        "From the repo root, run python tools/fetch_rcaeval_re23.py first "
+        "(it writes cases.parquet), then python tools/fetch_rcaeval_traces.py, "
+        "then from app/ python run_trace_eval.py --data rcaeval."
+    )
 
 
 def _traces_present() -> bool:
@@ -92,6 +107,9 @@ def main() -> None:
     args = parser.parse_args()
     skipped: list[str] = []
     if args.data == "rcaeval":
+        missing = cases_missing_message()
+        if missing:
+            raise SystemExit(missing)
         if not _traces_present():
             raise SystemExit(
                 "RCAEval traces are not in this run (data/rcaeval_re23/*/traces.parquet). "

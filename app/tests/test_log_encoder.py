@@ -43,6 +43,28 @@ def test_contrastive_is_off_and_the_hash_stays_four_wide(monkeypatch):
     assert [column for column in frame.columns if str(column).startswith("tpl_")] == TEMPLATE_COLUMNS
 
 
+def test_the_queue_window_stops_at_the_last_alert():
+    """A fault after the last alert is not a test fault. The 2b window is this cut."""
+    from run_log_encoder_ablation import queue_split
+
+    alerts = [_alert("early", 1, "disk full"), _alert("late", 8, "later template")]
+    origin = alerts[0].timestamp
+    last = alerts[1].timestamp
+    faults = [
+        Fault("train", T0 + pd.Timedelta(days=1), T0 + pd.Timedelta(days=1, hours=1), "db", "mem"),
+        Fault("held", T0 + pd.Timedelta(days=8), T0 + pd.Timedelta(days=8, hours=1), "db", "mem"),
+        Fault("after", last + pd.Timedelta(hours=2), last + pd.Timedelta(hours=3), "db", "mem"),
+    ]
+    _train_alerts, test_alerts, train_faults, test_faults, train_end, test_end = queue_split(
+        alerts, faults, origin, last, Config().split_day
+    )
+    assert [fault.fault_id for fault in train_faults] == ["train"]
+    assert [fault.fault_id for fault in test_faults] == ["held"]
+    assert [alert.alert_id for alert in test_alerts] == ["late"]
+    assert train_end == origin + pd.Timedelta(days=7)
+    assert test_end == last + pd.Timedelta(seconds=1)
+
+
 def test_groups_use_only_the_training_window():
     alerts = [
         _alert("train", 1, "disk full on db", fault_id="f-train"),

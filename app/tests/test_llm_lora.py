@@ -11,6 +11,7 @@ from product.llm import decision_context, render_prompt
 from product.paging import page_job
 from src.entities import Action, Alert, Decision, Fault
 from src.llm_lora import (
+    format_note_chat,
     generate_with_adapter,
     inspect_adapter,
     load_base_pin,
@@ -191,6 +192,33 @@ def test_rubric_and_adapter_refuse_before_any_model_library(tmp_path, monkeypatc
         assert "hash mismatch" in str(exc)
     else:
         raise AssertionError("a local base with the wrong hash must be refused")
+
+
+def test_training_text_is_the_generation_prefix_plus_an_end_token():
+    """Train and generate share one chat string. The note is followed by end-of-text."""
+    prompt = "alert on web. Top signals: severity_rank 3."
+    note = "alert on web (error). Top signals: severity_rank 3."
+    prefix = format_note_chat(None, prompt)
+    trained = format_note_chat(None, prompt, note)
+    assert trained.startswith(prefix)
+    assert prefix.endswith("<|im_start|>assistant\n")
+    assert note in trained
+    assert trained.endswith("<|endoftext|>")
+
+    class _Tokenizer:
+        eos_token = "<|endoftext|>"
+
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+            body = "|".join(message["role"] for message in messages)
+            if add_generation_prompt:
+                return f"GEN:{body}|assistant"
+            return "TRAIN:" + "|".join(f"{message['role']}={message['content']}" for message in messages)
+
+    again = format_note_chat(_Tokenizer(), prompt, note)
+    assert format_note_chat(_Tokenizer(), prompt) == "GEN:system|user|assistant"
+    assert again.startswith("TRAIN:")
+    assert again.endswith("<|endoftext|>")
+    assert note in again
 
 
 def test_lora_rows_do_not_include_a_fault_that_starts_later():
