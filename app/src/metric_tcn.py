@@ -80,6 +80,16 @@ def train_state(
     from torch import nn
 
     torch.manual_seed(seed)
+    if str(device).startswith("cuda"):
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        # warn_only: a CUDA kernel with no deterministic implementation must
+        # not abort the fit. Two CUDA trains can still differ; see docs/ML_MODELS.md.
+        try:
+            torch.use_deterministic_algorithms(True, warn_only=True)
+        except TypeError:
+            torch.use_deterministic_algorithms(True)
     model = _build(n_channels, hidden, kernel, dilations).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()

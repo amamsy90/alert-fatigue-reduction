@@ -80,15 +80,19 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"dataset": report["dataset"], "gaia": report["gaia"], "out": str(out)}, indent=2))
-    headline = report["headline"]
-    for name in ("baseline", "metric_model", "ranker", "both"):
-        row = headline[name]
-        caught = row.get("faults_caught")
-        false_items = row.get("false_items_per_day")
-        print(
-            f"K={report['headline_k']} {name:14s} decision={row.get('decision')} "
-            f"caught={caught} false/day={false_items} delta={row.get('per_fault_catch_delta')}"
-        )
+    for budget, block in report["by_k"].items():
+        for name in ("baseline", "metric_model", "ranker", "both"):
+            row = block[name]
+            print(
+                f"K={budget} {name:14s} decision={row.get('decision')} "
+                f"caught={row.get('faults_caught')} false/day={row.get('false_items_per_day')} "
+                f"delta={row.get('per_fault_catch_delta')}"
+            )
+    walk = report.get("walk_forward") or {}
+    pooled = walk.get("pooled") if isinstance(walk, dict) else None
+    if pooled:
+        for name, row in pooled.items():
+            print(f"walk-forward pooled {name:14s} decision={row.get('decision')} delta={row.get('per_fault_catch_delta')}")
     record_run(
         f"model_ablation_{which}",
         config=Config(),

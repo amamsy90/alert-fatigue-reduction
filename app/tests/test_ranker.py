@@ -123,6 +123,21 @@ def test_low_scores_do_not_fill_the_budget():
     assert [item.shown_at for item in chosen] == [real.shown_at]
 
 
+def test_a_day_that_fits_in_k_keeps_low_scores():
+    """K=50-style: two candidates and a large budget show both, even below the threshold."""
+    early = _jump("api", 1, 1.0)
+    late = _jump("db", 4, 2.0)
+    config = Config(budget_k=5)
+    scores = [0.1, 0.2]
+    ranked = select_by_score([early, late], scores, config, threshold=0.9)
+    base = build_queue(
+        [QueueItem(item.shown_at, item.kind, item.service, item.payload) for item in (early, late)],
+        config,
+    )
+    assert [(item.shown_at, item.service) for item in ranked] == [(item.shown_at, item.service) for item in base]
+    assert len(ranked) == 2
+
+
 def test_a_later_fault_does_not_change_the_fit():
     items = [_jump("api", 1, 1.0), _jump("api", 4, 30.0), _jump("db", 2, 1.0), _jump("db", 6, 30.0)]
     faults = [
