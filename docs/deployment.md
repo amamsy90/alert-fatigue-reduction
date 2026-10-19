@@ -6,7 +6,7 @@
 
 | Part | Where | Notes |
 |---|---|---|
-| Web app and API (FastAPI, uvicorn) | One Docker container on the team's own server or VM | Non-root user, health check on `/health`, image built from hash-pinned `requirements.lock` |
+| Web app and API (FastAPI, uvicorn) | One Docker container on the team's own server or VM | Non-root user, health check on `/health`, image built from hash-pinned `requirements.lock`. Optional CUDA image: `Dockerfile.gpu` and `docker compose --profile gpu up --build oncall-queue-gpu`. The default image stays CPU |
 | Database | SQLite file on a Docker volume (`queue-data`) next to the app | One process; ADR 0003 explains why and what would change to scale out |
 | AI model | In the same container: scikit-learn logistic regression, loaded from the model registry on the same volume | No external AI API. Nothing leaves the server to be scored |
 | Metrics source | The team's Prometheus (pulled) and Alertmanager (pushes to `/ingest/alertmanager`) | The Prometheus URL is SSRF-checked |

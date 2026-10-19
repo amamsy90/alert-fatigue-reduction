@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections.abc import Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
@@ -82,6 +83,68 @@ _weight_cache: dict[tuple[str, int | None, int | None], WeightStatus] = {}
 
 def explain_enabled() -> bool:
     return os.environ.get("LLM_EXPLAIN", "").strip().lower() in _ON
+
+
+_last_error: str | None = None
+_FALLBACK = frozenset({"missing", "hash", "unreadable", "no-backend"})
+
+
+def last_error() -> str | None:
+    """Short status from the last failed note attempt. None after a clean run."""
+    return _last_error
+
+
+def llm_health() -> dict[str, object]:
+    """Enabled flag, weight state, and the last error. No Prometheus call.
+
+    Explanations that are off do not hash the weight file. A file that is
+    merely present is reported as ``present``. ``hash-ok`` is only claimed
+    after the pin check, which runs when explanations are on.
+    """
+    enabled = explain_enabled()
+    return {
+        "enabled": enabled,
+        "weights": _weights_label(enabled),
+        "last_error": _last_error,
+    }
+
+
+def _remember(status: str) -> None:
+    global _last_error
+    _last_error = None if status == "ok" else status
+
+
+def _outcome(status: str) -> str:
+    if status == "timeout":
+        return "timeout"
+    if status in _FALLBACK:
+        return "fallback"
+    return "error"
+
+
+def _record(outcome: str, started: float) -> None:
+    from product.monitoring import record_llm
+
+    record_llm(outcome, max(0.0, time.perf_counter() - started))
+
+
+def _weights_label(enabled: bool) -> str:
+    try:
+        path = weights_path()
+    except (OSError, ValueError, json.JSONDecodeError, KeyError):
+        return "error"
+    if not path.is_file():
+        return "missing"
+    if not enabled:
+        return "present"
+    code = weight_status().code
+    if code == "ok":
+        return "hash-ok"
+    if code == "hash":
+        return "hash-mismatch"
+    if code == "missing":
+        return "missing"
+    return code if code in {"unreadable", "error"} else "error"
 
 
 def empty_explanations(status: str) -> dict[str, object]:
@@ -249,10 +312,13 @@ def annotate_shadow(
     """Notes for the shadow record. A failure clears every note and leaves the items alone."""
     if not explain_enabled():
         return empty_explanations("off")
+    started = time.perf_counter()
     try:
         pin = load_pin()
     except (OSError, ValueError, json.JSONDecodeError, KeyError):
         log.error("llm pin is unreadable")
+        _remember("error")
+        _record("fallback", started)
         return empty_explanations("error")
     weights = weight_status()
     record: dict[str, object] = {
@@ -265,17 +331,22 @@ def annotate_shadow(
     }
     if weights.code != "ok":
         log.error("llm weights are not usable (%s)", weights.code)
+        _remember(weights.code)
+        _record(_outcome(weights.code), started)
         return record
     notes: list[dict[str, str]] = []
     items = whp.get("items")
     if not isinstance(items, list):
         items = []
+    item_started = started
     try:
         for item in items:
             if not isinstance(item, Mapping):
                 continue
             context = decision_context(item, alerts, spikes, model)
+            item_started = time.perf_counter()
             text = _explain_text(context)
+            _record("ok", item_started)
             if not text:
                 continue
             notes.append(
@@ -286,14 +357,19 @@ def annotate_shadow(
                 }
             )
     except ExplainError as exc:
+        _remember(exc.status)
+        _record(_outcome(exc.status), item_started)
         record["status"] = exc.status
         record["notes"] = []
         return record
     except Exception:
         log.exception("llm explain failed")
+        _remember("error")
+        _record("error", item_started)
         record["status"] = "error"
         record["notes"] = []
         return record
+    _remember("ok")
     record["status"] = "ok"
     record["notes"] = notes
     return record

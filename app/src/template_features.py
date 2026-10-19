@@ -91,6 +91,19 @@ def prior_counts(templates: list[str], timestamps: list[pd.Timestamp]) -> list[i
     return priors
 
 
+def template_prior_mean(alerts: list[Alert], encoder: object | None = None) -> float | None:
+    """Mean of ``tpl_prior`` for this batch, or None when the flag is off.
+
+    The mean is a summary of the causal columns: each alert's count uses only
+    rows at or before that alert. The production drift check stores it on the
+    job and skips the check entirely when the flag is off.
+    """
+    if not template_features_enabled() or not alerts:
+        return None
+    rows = template_rows(alerts, encoder)
+    return sum(row["tpl_prior"] for row in rows) / len(rows)
+
+
 def template_rows(alerts: list[Alert], encoder: object | None = None) -> list[dict[str, float]]:
     """One dict of TEMPLATE_COLUMNS per alert, using only rows at or before it."""
     chosen = resolve_encoder(encoder)

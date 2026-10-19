@@ -1,26 +1,49 @@
+# Shared by the CPU service and the optional GPU profile.
+x-oncall: &oncall
+  ports:
+    # Bound to this machine only. Change to "8080:8080" to share it, and set a password first.
+    - "127.0.0.1:8080:8080"
+  # Settings per environment: ENV_FILE=deploy/prod.env docker compose up -d (default: dev).
+  env_file:
+    - ${ENV_FILE:-deploy/dev.env}
+  environment:
+    # Only the database path is fixed here; everything else comes from the env file
+    # (deploy/dev.env, deploy/test.env, deploy/prod.env) so one file describes an environment.
+    QUEUE_DB: /app/product/data/queue.db
+  volumes:
+    - queue-data:/app/product/data
+    - ./data/gaia_raw:/app/data/gaia_raw:ro
+    - ./data/gaia_metrics:/app/data/gaia_metrics:ro
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+    interval: 30s
+    timeout: 3s
+    retries: 3
+    start_period: 15s
+
 services:
   oncall-queue:
+    <<: *oncall
     build: .
-    ports:
-      # Bound to this machine only. Change to "8080:8080" to share it, and set a password first.
-      - "127.0.0.1:8080:8080"
-    # Settings per environment: ENV_FILE=deploy/prod.env docker compose up -d (default: dev).
-    env_file:
-      - ${ENV_FILE:-deploy/dev.env}
+
+  # Not started by `docker compose up`. Name the service so the CPU container stays down:
+  #   docker compose --profile gpu up --build oncall-queue-gpu
+  oncall-queue-gpu:
+    <<: *oncall
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
     environment:
-      # Only the database path is fixed here; everything else comes from the env file
-      # (deploy/dev.env, deploy/test.env, deploy/prod.env) so one file describes an environment.
       QUEUE_DB: /app/product/data/queue.db
-    volumes:
-      - queue-data:/app/product/data
-      - ./data/gaia_raw:/app/data/gaia_raw:ro
-      - ./data/gaia_metrics:/app/data/gaia_metrics:ro
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
+      NVIDIA_VISIBLE_DEVICES: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 volumes:
   queue-data:

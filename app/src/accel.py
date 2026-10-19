@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Literal
 
@@ -55,6 +56,9 @@ NODE_DTYPE = np.dtype(
 )
 
 _cuda_cache: bool | None = None
+_backend_choice: dict[str, BackendName] = {}
+_gpu_mem_cache: tuple[float, float | None] | None = None
+_GPU_MEM_TTL_S = 15.0
 
 
 class AccelUnavailable(RuntimeError):
@@ -63,8 +67,10 @@ class AccelUnavailable(RuntimeError):
 
 def clear_backend_cache() -> None:
     """Forget the CUDA probe. Tests use this after patching the probe."""
-    global _cuda_cache
+    global _cuda_cache, _gpu_mem_cache
     _cuda_cache = None
+    _gpu_mem_cache = None
+    _backend_choice.clear()
 
 
 def parse_cuda_version(nvidia_smi_text: str) -> str | None:
@@ -157,6 +163,71 @@ def available_backends() -> dict[str, bool]:
         "cuml": cuml_usable(),
         "xgboost-gpu": xgboost_gpu_usable(),
     }
+
+
+def active_backend() -> BackendName:
+    """The backend ``get_backend`` would pick, cached for this process.
+
+    ``/health`` calls this on a timer. The choice is logged once per requested
+    name, not on every probe. ``clear_backend_cache`` forgets it.
+    """
+    requested = (os.environ.get("ACCEL_BACKEND") or "auto").strip().lower() or "auto"
+    chosen = _backend_choice.get(requested)
+    if chosen is None:
+        chosen = get_backend(requested)
+        _backend_choice[requested] = chosen
+    return chosen
+
+
+def parse_gpu_memory_mib(text: str) -> float | None:
+    """Sum ``memory.used`` lines from ``nvidia-smi --query-gpu=memory.used``.
+
+    Non-numeric lines (a GPU that reports ``[N/A]``) are skipped. None when
+    no device reported a number.
+    """
+    total = 0.0
+    found = False
+    for line in text.splitlines():
+        token = line.strip().split()[0].replace(",", "") if line.strip() else ""
+        if not token:
+            continue
+        try:
+            total += float(token)
+        except ValueError:
+            continue
+        found = True
+    return total if found else None
+
+
+def gpu_memory_mib() -> float | None:
+    """Used GPU memory in MiB, or None when nvidia-smi does not answer.
+
+    The result is cached for a few seconds so a scrape does not spawn the
+    tool on every request. A miss is cached too.
+    """
+    global _gpu_mem_cache
+    now = time.monotonic()
+    if _gpu_mem_cache is not None and now - _gpu_mem_cache[0] < _GPU_MEM_TTL_S:
+        return _gpu_mem_cache[1]
+    value = _query_gpu_memory_mib()
+    _gpu_mem_cache = (now, value)
+    return value
+
+
+def _query_gpu_memory_mib() -> float | None:
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return parse_gpu_memory_mib(out.stdout or "")
 
 
 def get_backend(prefer: str | None = None) -> BackendName:
