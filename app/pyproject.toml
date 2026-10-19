@@ -32,6 +32,8 @@ dev = [
 gpu = [
     "xgboost>=2.1,<4",
 ]
+# llama-cpp-python is not a dependency of this group or of `dev`.
+# Shadow notes import it only when LLM_EXPLAIN is on. See docs/GPU_LLM_ROLES.md.
 
 [tool.uv]
 # An application, not a library: `uv sync` installs the dependencies only.

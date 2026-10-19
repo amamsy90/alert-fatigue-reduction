@@ -2,6 +2,11 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [Unreleased]
+
+### Added
+- Shadow-only explanations, off unless `LLM_EXPLAIN` is set. A local GGUF may write a short note beside `would_have_paged`. The note uses decision-time fields only. Missing weights, a hash mismatch, or a timeout leave the same queue with no notes, and the note cannot page or reorder items. The model is pinned by name, revision, and SHA-256 in `app/product/llm_pin.json`. `app/scripts/fetch_llm.py` downloads it and checks the hash. Weights (`*.gguf`, `*.safetensors`) are not committed. Version stays 1.0.5 until this work is released.
+
 ## [1.0.5]
 
 ### Changed
