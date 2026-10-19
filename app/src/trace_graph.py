@@ -64,6 +64,12 @@ def _is_error(value: object) -> int:
     return 0 if text in _OK_STATUS else 1
 
 
+def _error_flags(series: pd.Series) -> np.ndarray:
+    """Same rule as ``_is_error``, without a Python loop over the rows."""
+    text = series.astype("string").str.strip().str.lower().fillna("")
+    return (~text.isin(_OK_STATUS)).to_numpy(dtype=np.int64)
+
+
 def _clock_column(series: pd.Series) -> bool:
     """True when the values are clock text such as ``21:24``, not an epoch."""
     if pd.api.types.is_numeric_dtype(series):
@@ -160,7 +166,7 @@ def normalize_spans(frame: pd.DataFrame) -> pd.DataFrame:
         else np.zeros(len(frame), dtype=np.float64)
     )
     if status_col:
-        error = np.asarray([_is_error(value) for value in frame[status_col]], dtype=np.int64)
+        error = _error_flags(frame[status_col])
     else:
         error = np.zeros(len(frame), dtype=np.int64)
 
@@ -213,7 +219,7 @@ def _rates(part: pd.DataFrame) -> dict[str, tuple[int, float, float]]:
     return out
 
 
-def build_graph(spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> CallGraph:
+def _build_graph_loops(spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> CallGraph:
     """Graph of spans with `start <= time < end`.
 
     Baseline rates use only spans with `time < start`. A parent span is an
@@ -320,6 +326,171 @@ def _pair_means(past: pd.DataFrame, parent_service: dict[str, str]) -> dict[tupl
             continue
         totals.setdefault((parent, child), []).append(float(duration))
     return {pair: float(np.mean(values)) for pair, values in totals.items() if values}
+
+
+def _as_utc(stamp: pd.Timestamp) -> pd.Timestamp:
+    value = pd.Timestamp(stamp)
+    if value.tzinfo is None:
+        return value.tz_localize("UTC")
+    return value.tz_convert("UTC")
+
+
+def _empty_graph() -> CallGraph:
+    return CallGraph([], np.zeros((0, 5)), np.zeros((2, 0), dtype=np.int64), np.zeros((0, 3)), {}, {})
+
+
+def _service_rates(part: pd.DataFrame) -> pd.DataFrame:
+    """One row per service: calls, error rate, mean duration. Sorted by name."""
+    if part.empty:
+        return pd.DataFrame(columns=["calls", "error_rate", "mean_duration"])
+    grouped = part.groupby("service", sort=True)
+    rates = grouped.agg(calls=("error", "size"), error_rate=("error", "mean"), mean_duration=("duration", "mean"))
+    rates.index = rates.index.map(str)
+    return rates
+
+
+def _parent_lookup(visible: pd.DataFrame) -> pd.DataFrame:
+    """Earliest span id -> service. A repeated id keeps the earliest row."""
+    columns = ["parent_span_id", "parent_service"]
+    if visible.empty or "span_id" not in visible.columns:
+        return pd.DataFrame(columns=columns)
+    keep = visible.loc[visible["span_id"].astype(str).str.len() > 0, ["time", "span_id", "service"]]
+    if keep.empty:
+        return pd.DataFrame(columns=columns)
+    keep = keep.sort_values("time", kind="mergesort")
+    keep = keep.drop_duplicates("span_id", keep="first")
+    lookup = keep.rename(columns={"span_id": "parent_span_id", "service": "parent_service"})
+    lookup["parent_span_id"] = lookup["parent_span_id"].astype(str)
+    lookup["parent_service"] = lookup["parent_service"].astype(str)
+    return lookup[columns]
+
+
+def _with_parent(part: pd.DataFrame, lookup: pd.DataFrame) -> pd.DataFrame:
+    """Attach the parent service by merging parentSpanID onto spanID."""
+    if part.empty:
+        return part.assign(parent_service=pd.Series(dtype=str))
+    frame = part.copy()
+    frame["parent_span_id"] = frame["parent_span_id"].astype(str)
+    frame["service"] = frame["service"].astype(str)
+    if lookup.empty:
+        frame["parent_service"] = ""
+        return frame
+    return frame.merge(lookup, on="parent_span_id", how="left")
+
+
+def _pair_stats(part: pd.DataFrame, lookup: pd.DataFrame, services: set[str] | None) -> pd.DataFrame:
+    """Call counts and sums for each parent -> child pair. ``services`` limits the window edges."""
+    empty = pd.DataFrame(columns=["count", "duration_sum", "error_sum"])
+    if part.empty:
+        return empty
+    frame = _with_parent(part, lookup)
+    parent = frame["parent_service"].fillna("").astype(str)
+    child = frame["service"].astype(str)
+    mask = (parent != "") & (parent != child)
+    if services is not None:
+        mask = mask & parent.isin(services) & child.isin(services)
+    frame = frame.loc[mask]
+    if frame.empty:
+        return empty
+    frame = frame.assign(parent_service=parent.loc[mask], service=child.loc[mask])
+    grouped = frame.groupby(["parent_service", "service"], sort=True)
+    return grouped.agg(count=("duration", "size"), duration_sum=("duration", "sum"), error_sum=("error", "sum"))
+
+
+def _graph_vectorized(window: pd.DataFrame, past: pd.DataFrame, visible: pd.DataFrame) -> CallGraph:
+    current = _service_rates(window)
+    if current.empty:
+        return _empty_graph()
+    history = _service_rates(past)
+    services = [str(name) for name in current.index]
+    error_jump: dict[str, float] = {}
+    latency_jump: dict[str, float] = {}
+    rows: list[list[float]] = []
+    for service in services:
+        calls = int(current.at[service, "calls"])
+        error_rate = float(current.at[service, "error_rate"])
+        mean_duration = float(current.at[service, "mean_duration"])
+        if service not in history.index:
+            err_j, lat_j = 0.0, 0.0
+        else:
+            past_calls = int(history.at[service, "calls"])
+            past_error = float(history.at[service, "error_rate"])
+            past_duration = float(history.at[service, "mean_duration"])
+            err_j = error_rate - past_error
+            lat_j = 0.0 if past_calls == 0 else (mean_duration - past_duration) / max(past_duration, 1e-6)
+        error_jump[service] = float(err_j)
+        latency_jump[service] = float(lat_j)
+        rows.append(
+            [
+                float(np.log1p(calls)),
+                float(error_rate),
+                float(np.log1p(max(mean_duration, 0.0))),
+                float(err_j),
+                float(lat_j),
+            ]
+        )
+    node_x = np.asarray(rows, dtype=np.float64)
+    lookup = _parent_lookup(visible)
+    allowed = set(services)
+    pairs = _pair_stats(window, lookup, allowed)
+    if pairs.empty:
+        return CallGraph(
+            services,
+            node_x,
+            np.zeros((2, 0), dtype=np.int64),
+            np.zeros((0, 3), dtype=np.float64),
+            error_jump,
+            latency_jump,
+        )
+    past_pairs = _pair_stats(past, lookup, None)
+    past_mean: dict[tuple[str, str], float] = {}
+    for key, row in past_pairs.iterrows():
+        count = int(row["count"])
+        if count:
+            past_mean[(str(key[0]), str(key[1]))] = float(row["duration_sum"]) / count
+    index = {service: position for position, service in enumerate(services)}
+    src: list[int] = []
+    dst: list[int] = []
+    attr: list[list[float]] = []
+    for key, row in pairs.iterrows():
+        parent, child = str(key[0]), str(key[1])
+        count = int(row["count"])
+        error_rate = float(row["error_sum"]) / count
+        mean_duration = float(row["duration_sum"]) / count
+        previous = past_mean.get((parent, child))
+        latency = 0.0 if previous is None else (mean_duration - previous) / max(previous, 1e-6)
+        features = [float(np.log1p(count)), float(error_rate), float(latency)]
+        src.extend((index[parent], index[child]))
+        dst.extend((index[child], index[parent]))
+        attr.extend((features, features))
+    return CallGraph(
+        services,
+        node_x,
+        np.asarray([src, dst], dtype=np.int64),
+        np.asarray(attr, dtype=np.float64),
+        error_jump,
+        latency_jump,
+    )
+
+
+def build_graph(spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> CallGraph:
+    """Graph of spans with `start <= time < end`.
+
+    Baseline rates use only spans with `time < start`. A parent span is an
+    edge only when that parent was recorded before `end`. Node and edge
+    aggregates are pandas groupby; the parent service is a merge of
+    ``parent_span_id`` onto ``span_id``.
+    """
+    frame = spans if "error" in spans.columns else normalize_spans(spans)
+    if frame.empty:
+        return _empty_graph()
+    start_ts = _as_utc(start)
+    end_ts = _as_utc(end)
+    times = frame["time"]
+    window = frame[(times >= start_ts) & (times < end_ts)]
+    past = frame[times < start_ts]
+    visible = frame[times < end_ts]
+    return _graph_vectorized(window, past, visible)
 
 
 def baseline_service(graph: CallGraph) -> str | None:

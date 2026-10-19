@@ -23,7 +23,7 @@ import pandas as pd
 from src.config import Config
 from src.experiment import load_gaia
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults
-from src.llm_lora import FORMAT, META_NAME, WEIGHTS_NAME, example_tensors, load_base_pin, note_examples
+from src.llm_lora import FORMAT, META_NAME, WEIGHTS_NAME, example_tensors, load_base_pin, split_note_examples
 from src.sample_data import generate
 from src.weight_io import save_bytes
 
@@ -44,8 +44,8 @@ def _examples(which: str, seed: int) -> tuple[list[dict[str, str]], list[dict[st
         alerts, _faults = align_alerts_to_faults(load_alerts(folder / "alerts.csv"), load_faults(folder / "faults.csv"))
     origin = min(alert.timestamp for alert in alerts)
     boundary = origin + pd.Timedelta(days=config.split_day)
-    train = note_examples(alerts, [], until=boundary)
-    held = note_examples(alerts, [], since=boundary)
+    # Held-out is every alert on or after the split, not one day. One pass.
+    train, held = split_note_examples(alerts, [], boundary=boundary)
     for row in train + held:
         if "fault_id" in row["prompt"] or "\nlabel:" in row["prompt"]:
             raise SystemExit("refusing a training row whose prompt contains a label")

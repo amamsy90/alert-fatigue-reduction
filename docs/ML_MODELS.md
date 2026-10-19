@@ -138,6 +138,8 @@ RCAEval's pinned fetch (`tools/fetch_rcaeval_re23.py`) stores logs and metrics o
 
 `run_trace_eval.py --data rcaeval` needs `cases.parquet` from `tools/fetch_rcaeval_re23.py` before `tools/fetch_rcaeval_traces.py`. If that file is missing the eval exits and names the fetch. It does not invent a score.
 
+Each RCAEval case is its own recording. The eval reads one `traces.parquet` at a time, and only the columns the graph uses. It builds that case's window once (pandas groupby for the rates, a merge of `parentSpanID` onto `spanID` for the edges) and reuses the graph for training, the jump baseline, and the model. Span tables are not concatenated. `--suite RE2` or `--suite RE3` selects one suite. `--max-cases N` reads the first N cases (`0` means all). Each case prints a progress line (spans, services, train or test, elapsed seconds, RSS). The target for RE2+RE3 is well under 30 minutes and under 16 GB.
+
 RCAEval `traces.parquet` has a text `time` column such as `21:24`. That clock is not a span time. The timestamp is `startTimeMillis` or `startTime` (or another numeric epoch). A clock column is never parsed as the span time.
 
 A window is the spans with `time` strictly before the decision time. The past used for jumps is spans strictly before the window start. A training fault must start before the split, and its window is clipped at the split, so a later span cannot enter training. The root-cause service is the label. It is not a feature.
@@ -164,11 +166,11 @@ The base is the Hugging Face safetensors snapshot, pinned in `app/product/llm_lo
 | sha256 | `dd924a11b4c220f385b51ffa522daea7c9f3d850e31b162bb5661df483c6d3ee` |
 | size | 3087467144 bytes |
 
-Training and generation share `format_note_chat`. That is the tokenizer chat template when the tokenizer provides one, otherwise the Qwen chat string. The generation prefix leaves the assistant header open. The training string is that same prefix plus the template note and an end-of-text token, so the adapter learns to stop. Prompt tokens are masked with `-100`. The loaded base and the loaded adapter are cached for the process. `train_llm_lora.py` prints `train_loss` and `held_out_loss` each epoch (held-out rows are decision-time template notes after the split; they do not update weights) and stores both in `adapter.json`.
+Training and generation share `format_note_chat`. That is the tokenizer chat template when the tokenizer provides one, otherwise the Qwen chat string. The generation prefix leaves the assistant header open. The training string is that same prefix plus the template note and an end-of-text token, so the adapter learns to stop. Prompt tokens are masked with `-100`. The loaded base and the loaded adapter are cached for the process. `train_llm_lora.py` prints `train_loss` and `held_out_loss` each epoch (held-out rows are decision-time template notes after the split; they do not update weights) and stores both in `adapter.json`. The feature frame for those rows is built once. Held-out is every alert on or after the split, not a single day.
 
 LoRA is r = 8, alpha = 16, dropout 0.05, on `q_proj` and `v_proj`. QLoRA nf4 is used when CUDA and bitsandbytes import; otherwise fp16 on CUDA or fp32 on CPU. The adapter is `adapter.safetensors` plus `adapter.json` (format `oncall-llm-lora-v1`, `pages` false) with SHA-256 sidecars. At load time the hash-checked bytes are staged as `adapter_model.safetensors` so peft does not read an unchecked file.
 
-`run_llm_lora_rubric.py` with no flags scores template notes and loads no model. That is the CPU CI path. `--generate` scores the base and the LoRA adapter on held-out GAIA alerts (pass rate, invented numbers, injection cases). It exits without a score when GAIA or the weights are missing.
+`run_llm_lora_rubric.py` with no flags scores template notes and loads no model. That is the CPU CI path. `--generate` scores the base and the LoRA adapter on held-out GAIA alerts (pass rate, invented numbers, injection cases). The default `--limit` is 60. `--limit 0` scores every held-out alert. Each row in the JSON includes why it failed. It exits without a score when GAIA or the weights are missing.
 
 `LLM_LORA` does nothing unless `LLM_EXPLAIN` is also on. `explain()` tries the adapter, then the pinned GGUF, then no note. Notes stay on the shadow record. They do not change the queue and they do not page. Live paging is unchanged: `APP_PASSWORD`, a channel, the typed word `LIVE`, and an ingest job.
 
@@ -227,7 +229,10 @@ Then from `app/`:
 ```bash
 uv run --no-sync python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8 --seed 42 \
     --out results/trace_eval_rcaeval.json
+uv run --no-sync python run_trace_eval.py --data rcaeval --suite RE2 --max-cases 2 --device cuda --epochs 1
 ```
+
+The full command reads RE2 and RE3 one case at a time and prints progress. `--suite` and `--max-cases` are optional.
 
 `train_trace_model.py --data rcaeval` does not train on this machine. It exits and points at that eval command. Sock Shop cases are skipped. A missing `cases.parquet` exits before any score.
 
@@ -240,7 +245,7 @@ uv run --no-sync python run_llm_lora_rubric.py --generate --data gaia \
     --base /path/to/Qwen2.5-1.5B-Instruct
 ```
 
-`run_llm_lora_rubric.py` with no flags stays the template-only check and loads no model.
+`--generate` defaults to `--limit 60`. Pass `--limit 0` to score every held-out alert. `run_llm_lora_rubric.py` with no flags stays the template-only check and loads no model. Training's held-out set is every later day, built in one pass.
 
 Turn it on only together with shadow notes:
 

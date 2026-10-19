@@ -18,6 +18,7 @@ from src.llm_lora import (
     note_examples,
     reference_note,
     score_note,
+    split_note_examples,
 )
 from src.memory_spikes import Spike
 
@@ -192,6 +193,80 @@ def test_rubric_and_adapter_refuse_before_any_model_library(tmp_path, monkeypatc
         assert "hash mismatch" in str(exc)
     else:
         raise AssertionError("a local base with the wrong hash must be refused")
+
+
+def test_note_rows_match_the_decision_context_in_one_pass(monkeypatch):
+    """Held-out prompts stay causal, and the feature frame is not rebuilt per alert."""
+    import src.features as features
+
+    alerts = [
+        _alert("a0", 0, "disk full on web"),
+        _alert("a1", 0, "disk full on web"),
+        _alert("a2", 3, "disk full again"),
+        _alert("a3", 30, "unique-later-token"),
+    ]
+    spikes = [_spike(0)]
+    calls = {"n": 0}
+    real = features.build_feature_frame
+
+    def wrapped(rows, *args, **kwargs):
+        calls["n"] += 1
+        return real(rows, *args, **kwargs)
+
+    monkeypatch.setattr(features, "build_feature_frame", wrapped)
+    boundary = T0 + pd.Timedelta(minutes=10)
+    rows = note_examples(alerts, spikes, until=boundary)
+    assert calls["n"] == 1
+    ordered = sorted(alerts, key=lambda alert: (alert.timestamp, alert.alert_id))
+    kept = [alert for alert in ordered if alert.timestamp < boundary]
+    assert len(rows) == len(kept) + 1
+    for index, alert in enumerate(kept):
+        prefix = [item for item in ordered if (item.timestamp, item.alert_id) <= (alert.timestamp, alert.alert_id)]
+        past = [spike for spike in spikes if spike.shown_at <= alert.timestamp]
+        context = decision_context(
+            {"kind": "alert", "dedup_key": alert.alert_id[:255], "service": alert.source, "severity": alert.severity},
+            prefix,
+            past,
+            None,
+        )
+        assert rows[index]["prompt"] == render_prompt(context)
+        assert rows[index]["reference"] == reference_note(context)
+    assert "unique-later-token" not in rows[0]["prompt"]
+
+
+def test_held_out_is_every_later_day():
+    alerts = [
+        Alert(f"d{day}", T0 + pd.Timedelta(days=day), "web", "oom", "error", f"disk {day}") for day in range(10)
+    ]
+    boundary = T0 + pd.Timedelta(days=7)
+    train, held = split_note_examples(alerts, [], boundary=boundary)
+    assert len(train) == 7
+    assert len(held) == 3
+    assert "disk 7" not in train[-1]["prompt"]
+    assert "disk 9" not in held[0]["prompt"]
+    assert note_examples(alerts, [], since=boundary)[0]["prompt"] == held[0]["prompt"]
+    assert note_examples(alerts, [], until=boundary)[0]["prompt"] == train[0]["prompt"]
+
+
+def test_generate_limit_defaults_to_sixty_and_keeps_fail_reasons():
+    from run_llm_lora_rubric import _fail_reasons, _row_score, build_parser
+
+    assert build_parser().parse_args(["--generate"]).limit == 60
+    assert build_parser().parse_args([]).limit == 60
+    alert = _alert("a1", 0, "disk full")
+    context = decision_context(
+        {"kind": "alert", "dedup_key": "a1", "service": "web", "severity": "error"},
+        [alert],
+        [],
+        None,
+    )
+    bad = score_note("alert on web. Top signals: severity_rank 99999.", context)
+    reasons = _fail_reasons(bad)
+    assert "invented_numbers" in reasons
+    scored = _row_score(bad)
+    assert scored["passed"] is False
+    assert scored["invented_numbers"] == ["99999"]
+    assert scored["reasons"] == reasons
 
 
 def test_training_text_is_the_generation_prefix_plus_an_end_token():

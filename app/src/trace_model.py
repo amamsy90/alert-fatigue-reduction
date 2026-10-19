@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
@@ -75,14 +76,10 @@ class TraceArchive:
     versions: dict[str, str | None] = field(default_factory=dict)
     weights_sha256: str = ""
 
-    def score_window(self, spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> list[tuple[str, float]]:
-        """Services and scores for spans that finished before ``end``.
-
-        The label is not read. Scoring imports torch.
-        """
+    def rank_graph(self, graph: CallGraph) -> list[tuple[str, float]]:
+        """Services and scores for a graph that was already built. Scoring imports torch."""
         from .trace_gnn import resolve_torch_device, score_graph
 
-        graph = build_graph(spans, start, end)
         if not graph.services:
             return []
         device, _fell = resolve_torch_device(self.device)
@@ -90,8 +87,19 @@ class TraceArchive:
         order = np.argsort(-logits)
         return [(graph.services[int(index)], float(logits[int(index)])) for index in order]
 
+    def score_window(self, spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> list[tuple[str, float]]:
+        """Services and scores for spans that finished before ``end``.
+
+        The label is not read. Scoring imports torch.
+        """
+        return self.rank_graph(build_graph(spans, start, end))
+
     def predict_service(self, spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> str | None:
         ranked = self.score_window(spans, start, end)
+        return ranked[0][0] if ranked else None
+
+    def predict_graph(self, graph: CallGraph) -> str | None:
+        ranked = self.rank_graph(graph)
         return ranked[0][0] if ranked else None
 
 
@@ -106,14 +114,16 @@ def training_graphs(
     spans: pd.DataFrame,
     faults: list[Fault],
     train_end: pd.Timestamp,
+    graphs: Mapping[str, CallGraph] | None = None,
 ) -> tuple[list[CallGraph], list[int]]:
     """Windows that close at or before ``train_end``. The label is the node index.
 
     A fault that starts before the split is clipped at the split, so a span
-    after the split cannot enter a training window.
+    after the split cannot enter a training window. ``graphs`` is a window
+    already built for that fault (one RCAEval recording); it is not rebuilt.
     """
     boundary = _utc(train_end)
-    graphs: list[CallGraph] = []
+    built: list[CallGraph] = []
     labels: list[int] = []
     for fault in faults:
         if _utc(fault.start) >= boundary:
@@ -121,12 +131,15 @@ def training_graphs(
         end = _window_end(fault, boundary)
         if end <= _utc(fault.start):
             continue
-        graph = build_graph(spans, fault.start, end)
+        if graphs is not None and fault.fault_id in graphs:
+            graph = graphs[fault.fault_id]
+        else:
+            graph = build_graph(spans, fault.start, end)
         if fault.component not in graph.services:
             continue
-        graphs.append(graph)
+        built.append(graph)
         labels.append(graph.services.index(fault.component))
-    return graphs, labels
+    return built, labels
 
 
 def fit_trace_model(
@@ -139,19 +152,20 @@ def fit_trace_model(
     seed: int = 42,
     device: str = "cpu",
     backend: str = "auto",
+    graphs: Mapping[str, CallGraph] | None = None,
 ) -> tuple[TraceArchive | None, str]:
     """Train on fault windows that start before ``train_end``."""
     if not torch_stack_available():
         return None, "torch-missing"
     from .trace_gnn import resolve_gnn_backend, resolve_torch_device, train_state
 
-    graphs, labels = training_graphs(spans, faults, train_end)
-    if len(graphs) < MIN_WINDOWS:
+    windows, labels = training_graphs(spans, faults, train_end, graphs)
+    if len(windows) < MIN_WINDOWS:
         return None, "too-few-windows"
     used, fell_back = resolve_torch_device(device)
     gnn_backend, gnn_fell_back = resolve_gnn_backend(backend)
     state = train_state(
-        graphs,
+        windows,
         labels,
         hidden=hidden,
         epochs=epochs,
@@ -178,15 +192,22 @@ def predict_services(
     faults: list[Fault],
     *,
     not_before: pd.Timestamp | None = None,
+    graphs: Mapping[str, CallGraph] | None = None,
 ) -> dict[str, str | None]:
-    """Top service per fault. A span at or after the fault's end is ignored."""
+    """Top service per fault. A span at or after the fault's end is ignored.
+
+    A prebuilt graph is scored as it stands. The span table is not read again.
+    """
     out: dict[str, str | None] = {}
     floor = _utc(not_before) if not_before is not None else None
     for fault in faults:
         start = _utc(fault.start)
         if floor is not None and start < floor:
             continue
-        out[fault.fault_id] = archive.predict_service(spans, start, _utc(fault.end))
+        if graphs is not None and fault.fault_id in graphs:
+            out[fault.fault_id] = archive.predict_graph(graphs[fault.fault_id])
+        else:
+            out[fault.fault_id] = archive.predict_service(spans, start, _utc(fault.end))
     return out
 
 
