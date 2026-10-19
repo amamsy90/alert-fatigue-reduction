@@ -11,8 +11,9 @@ that outcome; it does not assume a speedup.
     python perf/bench_accel.py
     python perf/bench_accel.py --out perf/ACCEL_BENCH.md
 
-GPU columns are ``N/A`` when ``get_backend()`` is sklearn or the requested
-GPU library cannot run. CPU always runs.
+GPU columns are ``N/A`` when neither cuML nor XGBoost-on-CUDA can run.
+The default queue stays sklearn (``auto`` does not select a GPU). This
+script still times an explicit GPU backend when one is usable. CPU always runs.
 """
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ if str(_APP_ROOT) not in sys.path:
 
 import numpy as np  # noqa: E402
 
-from src.accel import available_backends, get_backend  # noqa: E402
+from src.accel import available_backends  # noqa: E402
 from src.classifier import AlertClassifier  # noqa: E402
 from src.config import Config  # noqa: E402
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults  # noqa: E402
@@ -152,12 +153,10 @@ def main() -> None:
     usable = available_backends()
     gpu_backend = None
     gpu = None
-    # Prefer the logistic GPU path. Time trees only when that is the resolved backend.
-    chosen = get_backend()
-    if chosen == "cuml" and usable["cuml"]:
+    # The default queue is sklearn. Time a GPU head only as a measurement:
+    # logistic cuML when it can run, otherwise the explicit tree backend.
+    if usable["cuml"]:
         gpu_backend = "cuml"
-    elif chosen == "xgboost-gpu" and usable["xgboost-gpu"]:
-        gpu_backend = "xgboost-gpu"
     elif usable["xgboost-gpu"]:
         gpu_backend = "xgboost-gpu"
     if gpu_backend is not None:

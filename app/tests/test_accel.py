@@ -149,15 +149,17 @@ def test_missing_gpu_libraries_fall_back_to_sklearn(monkeypatch: pytest.MonkeyPa
     assert "sklearn" in caplog.text
 
 
-def test_auto_selects_cuml_and_leaves_trees_opt_in(monkeypatch: pytest.MonkeyPatch):
+def test_auto_stays_sklearn_when_cuml_is_usable(monkeypatch: pytest.MonkeyPatch):
+    """cuML same-seed fits are not the published queue. GPU is opt-in."""
     monkeypatch.delenv("ACCEL_BACKEND", raising=False)
     monkeypatch.setattr("src.accel.cuml_usable", lambda: True)
     monkeypatch.setattr("src.accel.xgboost_gpu_usable", lambda: True)
-    assert get_backend() == "cuml"
-    assert get_backend("xgboost-gpu") == "xgboost-gpu"
-    monkeypatch.setattr("src.accel.cuml_usable", lambda: False)
-    # Trees are available, but auto must not swap the logistic queue for them.
     assert get_backend() == "sklearn"
+    assert get_backend("auto") == "sklearn"
+    assert get_backend("cuml") == "cuml"
+    assert get_backend("xgboost-gpu") == "xgboost-gpu"
+    monkeypatch.setenv("ACCEL_BACKEND", "cuml")
+    assert get_backend() == "cuml"
 
 
 def test_environment_variable_selects_and_falls_back(monkeypatch: pytest.MonkeyPatch):
@@ -285,6 +287,60 @@ def test_a_cyclic_tree_is_refused():
         head.predict_proba(np.zeros((2, 1)))
 
 
+def test_xgboost_device_accepts_a_cuda_index():
+    """XGBoost 3.4 saves ``cuda:0``. That is a GPU fit. ``cpu`` is not."""
+    from src.accel import AccelUnavailable, is_cuda_device, xgboost_gpu_ensemble
+
+    assert is_cuda_device("cuda")
+    assert is_cuda_device("cuda:0")
+    assert is_cuda_device("CUDA:1")
+    assert is_cuda_device("cpu") is False
+    assert is_cuda_device("cuda:") is False
+    assert is_cuda_device(None) is False
+
+    import sys
+    import types
+
+    class _Booster:
+        def __init__(self, device: str) -> None:
+            self._device = device
+
+        def save_config(self) -> str:
+            return json.dumps({"learner": {"generic_param": {"device": self._device}}})
+
+    class _XGB:
+        device = "cuda:0"
+
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def fit(self, *_args, **_kwargs):
+            return self
+
+        def get_booster(self) -> _Booster:
+            return _Booster(type(self).device)
+
+    class _Head:
+        def fit(self, *_args, **_kwargs):
+            return self
+
+    fake = types.ModuleType("xgboost")
+    fake.XGBClassifier = _XGB
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setitem(sys.modules, "xgboost", fake)
+    monkeypatch.setattr("src.accel.ensemble_from_booster", lambda _booster: _Head())
+    try:
+        x = np.zeros((4, 2))
+        y = np.array([0, 1, 0, 1])
+        got = xgboost_gpu_ensemble(x, y, np.ones(4), 0)
+        assert isinstance(got, _Head)
+        _XGB.device = "cpu"
+        with pytest.raises(AccelUnavailable, match="not cuda"):
+            xgboost_gpu_ensemble(x, y, np.ones(4), 0)
+    finally:
+        monkeypatch.undo()
+
+
 def test_base_score_accepts_the_xgboost_config_shapes():
     assert base_margin_from_xgb("[5E-1]") == pytest.approx(0.0)
     assert base_margin_from_xgb(0.5) == pytest.approx(0.0)
@@ -300,7 +356,7 @@ def test_model_card_records_the_accelerator(tmp_path, monkeypatch: pytest.Monkey
     saved = SavedModel(None, 0.5, 0.1, "real", pd.Timestamp.now("UTC").isoformat(), 4, 0)
     entry = register_model(saved, {}, promote=True)
     accel = entry["accelerator"]
-    assert accel["backend"] in {"sklearn", "cuml", "xgboost-gpu"}
+    assert accel["backend"] == "sklearn"
     assert "cuda" in accel
     assert accel["libraries"]["scikit-learn"]
     assert set(accel["available"]) == {"sklearn", "cuml", "xgboost-gpu"}

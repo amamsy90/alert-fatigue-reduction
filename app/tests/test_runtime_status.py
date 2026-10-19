@@ -54,8 +54,13 @@ def test_gpu_memory_is_cached_and_absent_when_nvidia_smi_fails(monkeypatch):
 def test_health_adds_backend_and_llm_without_hashing_or_gpu_memory(tmp_path, monkeypatch):
     for name in ("QUEUE_DB", "MODEL_PATH", "SETTINGS_PATH", "OPS_PATH"):
         monkeypatch.setenv(name, str(tmp_path / name.lower()))
-    for name in ("APP_PASSWORD", "ALLOW_OPEN_ACCESS", "INGEST_TOKEN", "LLM_EXPLAIN", "LLM_TEMPLATE_FEATURES"):
+    for name in (
+        "APP_PASSWORD", "ALLOW_OPEN_ACCESS", "INGEST_TOKEN", "LLM_EXPLAIN",
+        "LLM_TEMPLATE_FEATURES", "ACCEL_BACKEND",
+    ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("src.accel.cuml_usable", lambda: True)
+    clear_backend_cache()
     weights = tmp_path / "weights.gguf"
     weights.write_bytes(b"present-but-not-hashed")
     monkeypatch.setenv("LLM_GGUF", str(weights))
@@ -174,7 +179,7 @@ def test_default_image_stays_cpu_and_gpu_profile_is_optional():
     gpu = (root / "Dockerfile.gpu").read_text(encoding="utf-8")
     compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
     assert [line for line in default.splitlines() if line.startswith("FROM ")] == ["FROM python:3.12-slim"]
-    assert "FROM nvidia/cuda:" in gpu
+    assert "FROM docker.io/nvidia/cuda:12.6.3-runtime-ubuntu24.04" in gpu
     assert "PROM_ALLOW_PRIVATE=0" in gpu
     assert "SHADOW_MODE=1" in gpu
     assert "profiles: [\"gpu\"]" in compose
