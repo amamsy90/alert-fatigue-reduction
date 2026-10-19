@@ -9,18 +9,23 @@ dataset here. RCAEval is scored only when ``traces.parquet`` is on disk.
     python tools/fetch_rcaeval_re23.py
     python tools/fetch_rcaeval_traces.py --suite RE2
     python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8
+    python run_trace_eval.py --data rcaeval --suite RE2 --max-cases 2
 """
 from __future__ import annotations
 
 import argparse
 import json
+import resource
+import time
 from pathlib import Path
 
 import pandas as pd
 
 from src.config import Config
+from src.entities import Alert, Fault
 from src.trace_eval import TraceSpec, evaluate_traces, synthetic_traces
-from src.trace_graph import normalize_spans
+from src.trace_graph import CallGraph, build_graph, normalize_spans
+from src.trace_model import _utc, _window_end
 from src.tracking import record_run
 
 ROOT = Path("data/rcaeval_re23")
@@ -47,58 +52,183 @@ def _traces_present() -> bool:
     return any(ROOT.glob("*/traces.parquet"))
 
 
-def _load_rcaeval(suite: str | None) -> tuple[pd.DataFrame, pd.DataFrame, list, list, Config]:
-    """Lay cases out the way ``run_rcaeval_logs`` does. Missing traces are skipped."""
+def limit_cases(cases: list, max_cases: int | None) -> list:
+    """The first ``max_cases`` recordings. Zero or None keeps every case."""
+    if max_cases is None or max_cases <= 0:
+        return list(cases)
+    return list(cases[:max_cases])
+
+
+def wanted_span_columns(names: list[str]) -> list[str]:
+    """Columns the graph needs. Tags and logs stay on disk."""
+    keys = {
+        "traceid",
+        "spanid",
+        "parentspanid",
+        "parentspan",
+        "servicename",
+        "service",
+        "duration",
+        "durationms",
+        "latency",
+        "statuscode",
+        "status",
+        "responsecode",
+        "starttimemillis",
+        "starttimeunixnano",
+        "starttimeunixmicro",
+        "starttime",
+        "timestamp",
+        "time",
+    }
+    chosen: list[str] = []
+    for name in names:
+        raw = str(name).strip().lower()
+        key = raw.replace("_", "")
+        if key in keys or "time" in raw or "timestamp" in raw:
+            chosen.append(str(name))
+    return chosen
+
+
+def _read_spans(path: Path) -> pd.DataFrame:
+    """One recording, projected to the graph columns. The file is not kept open."""
+    try:
+        import pyarrow.parquet as pq
+
+        names = list(pq.ParquetFile(path).schema_arrow.names)
+        columns = wanted_span_columns(names)
+        if columns:
+            return pd.read_parquet(path, columns=columns)
+    except ImportError:
+        pass
+    return pd.read_parquet(path)
+
+
+def _rss_gb() -> float:
+    # Linux reports ru_maxrss in kilobytes.
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
+
+
+def _case_graph(case, end: pd.Timestamp) -> tuple[CallGraph | None, int]:
+    """Build this recording's window and drop the span table."""
     from run_rcaeval_logs import ROOT as CASE_ROOT
+
+    path = CASE_ROOT / case.case / "traces.parquet"
+    raw = _read_spans(path)
+    frame = normalize_spans(raw)
+    del raw
+    n_spans = int(len(frame))
+    if frame.empty:
+        return None, 0
+    origin = pd.Timestamp(case.start, unit="s", tz="UTC")
+    frame["time"] = frame["time"] + (case.at(case.start) - origin)
+    start = _utc(case.as_fault().start)
+    stop = _utc(end)
+    if stop <= start:
+        return None, n_spans
+    frame = frame.loc[frame["time"] < stop]
+    graph = build_graph(frame, start, stop)
+    del frame
+    return graph, n_spans
+
+
+def _load_rcaeval(
+    suite: str | None,
+    max_cases: int | None,
+) -> tuple[dict[str, CallGraph], pd.DataFrame, list[Fault], list[Alert], Config, pd.Timestamp, list[str]]:
+    """One graph per recording. Span tables are not concatenated.
+
+    Each RCAEval case is its own experiment. The graph uses that case's spans
+    only, and the same graph is what fit, the baseline, and prediction score.
+    """
     from run_rcaeval_logs import base_config, case_alerts, case_metrics, load_cases
 
-    spans = []
-    metrics = []
-    alerts = []
-    faults = []
-    skipped = []
+    config = base_config()
+    planned = []
+    skipped: list[str] = []
     suites = (suite,) if suite else ("RE2", "RE3")
     for one_suite in suites:
         for system in ("ob", "ss", "tt"):
             if system not in _TRACED:
                 skipped.append(f"{one_suite}-{system}: no traces in RCAEval")
                 continue
-            cases = load_cases(one_suite, system)
-            for case in cases:
-                path = CASE_ROOT / case.case / "traces.parquet"
-                if not path.is_file():
-                    skipped.append(case.case)
-                    continue
-                raw = normalize_spans(pd.read_parquet(path))
-                if raw.empty:
-                    skipped.append(case.case)
-                    continue
-                origin = pd.Timestamp(case.start, unit="s", tz="UTC")
-                raw = raw.copy()
-                raw["time"] = raw["time"] + (case.at(case.start) - origin)
-                spans.append(raw)
-                metrics.append(case_metrics(case))
-                alerts.extend(case_alerts(case))
-                faults.append(case.as_fault())
-    if not spans:
+            planned.extend(load_cases(one_suite, system))
+    planned = limit_cases(planned, max_cases)
+    if not planned:
+        raise SystemExit(
+            "No RCAEval trace cases were selected. Nothing was scored. "
+            "Sock Shop has no traces. Pass --suite RE2 or RE3."
+        )
+    layout_origin = min(case.at(case.start) for case in planned)
+    boundary = layout_origin + pd.Timedelta(days=config.split_day)
+    graphs: dict[str, CallGraph] = {}
+    metrics = []
+    alerts: list[Alert] = []
+    faults: list[Fault] = []
+    started = time.perf_counter()
+    print(
+        f"rcaeval cases={len(planned)} suite={suite or 'RE2+RE3'} "
+        f"boundary={boundary.isoformat()} rss_gb={_rss_gb():.2f}",
+        flush=True,
+    )
+    for index, case in enumerate(planned, start=1):
+        from run_rcaeval_logs import ROOT as CASE_ROOT
+
+        path = CASE_ROOT / case.case / "traces.parquet"
+        if not path.is_file():
+            skipped.append(case.case)
+            print(f"trace case {index}/{len(planned)} {case.case} missing traces.parquet", flush=True)
+            continue
+        fault = case.as_fault()
+        end = _window_end(fault, boundary) if _utc(fault.start) < boundary else _utc(fault.end)
+        print(f"trace case {index}/{len(planned)} {case.case} loading", flush=True)
+        try:
+            graph, n_spans = _case_graph(case, end)
+        except (OSError, ValueError, KeyError) as exc:
+            skipped.append(case.case)
+            print(f"trace case {index}/{len(planned)} {case.case} skipped: {exc}", flush=True)
+            continue
+        if graph is None:
+            skipped.append(case.case)
+            print(f"trace case {index}/{len(planned)} {case.case} no spans in the window", flush=True)
+            continue
+        graphs[fault.fault_id] = graph
+        faults.append(fault)
+        metrics.append(case_metrics(case))
+        alerts.extend(case_alerts(case))
+        role = "train" if _utc(fault.start) < boundary else "test"
+        print(
+            f"trace case {index}/{len(planned)} {case.case} spans={n_spans} "
+            f"services={len(graph.services)} split={role} "
+            f"elapsed_s={time.perf_counter() - started:.1f} rss_gb={_rss_gb():.2f}",
+            flush=True,
+        )
+    if not graphs:
         raise SystemExit(
             "No RCAEval traces.parquet files are in data/rcaeval_re23. Nothing was scored. "
             "On the laptop, from the repo root: python tools/fetch_rcaeval_traces.py --suite RE2 "
             "and python tools/fetch_rcaeval_traces.py --suite RE3"
         )
-    return (
-        pd.concat(spans, ignore_index=True),
-        pd.concat(metrics, ignore_index=True),
-        faults,
-        alerts,
-        base_config(),
-    ), skipped  # type: ignore[return-value]
+    # A training window that crosses the split was clipped above. Reload is not
+    # required: _window_end was applied before the graph was built.
+    print(
+        f"rcaeval graphs={len(graphs)} skipped={len(skipped)} "
+        f"elapsed_s={time.perf_counter() - started:.1f} rss_gb={_rss_gb():.2f}",
+        flush=True,
+    )
+    return graphs, pd.concat(metrics, ignore_index=True), faults, alerts, config, boundary, skipped
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Time-split eval of the optional trace model.")
     parser.add_argument("--data", choices=("synthetic", "rcaeval"), default="synthetic")
     parser.add_argument("--suite", choices=("RE2", "RE3"), default=None)
+    parser.add_argument(
+        "--max-cases",
+        type=int,
+        default=0,
+        help="Read only the first N trace cases (0 means every RE2/RE3 case with traces).",
+    )
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--backend", default="plain", choices=("auto", "plain", "pyg"))
     parser.add_argument("--epochs", type=int, default=20)
@@ -115,13 +245,15 @@ def main() -> None:
                 "RCAEval traces are not in this run (data/rcaeval_re23/*/traces.parquet). "
                 "Nothing was scored. On the laptop: python tools/fetch_rcaeval_traces.py --suite RE2"
             )
-        loaded, skipped = _load_rcaeval(args.suite)
-        spans, metrics, faults, alerts, config = loaded
+        graphs, metrics, faults, alerts, config, boundary, skipped = _load_rcaeval(args.suite, args.max_cases)
+        spans = pd.DataFrame()
         dataset = "rcaeval"
     else:
         spans, metrics, faults = synthetic_traces(seed=args.seed)
         alerts = []
         config = Config()
+        graphs = None
+        boundary = None
         dataset = "synthetic"
     spec = TraceSpec(
         epochs=args.epochs,
@@ -130,9 +262,21 @@ def main() -> None:
         seed=args.seed,
         hidden=16 if dataset == "rcaeval" else 8,
     )
+    print("scoring the trace model, the jump baseline, and the queue", flush=True)
     report = evaluate_traces(
-        spans, metrics, faults, alerts, config=config, spec=spec, dataset=dataset
+        spans,
+        metrics,
+        faults,
+        alerts,
+        config=config,
+        spec=spec,
+        dataset=dataset,
+        train_end=boundary,
+        graphs=graphs,
     )
+    if dataset == "rcaeval":
+        report["cases"] = len(faults)
+        report["max_cases"] = args.max_cases
     report["traces_skipped"] = skipped
     if dataset == "synthetic":
         report["rcaeval"] = "pending: this run did not score RCAEval"

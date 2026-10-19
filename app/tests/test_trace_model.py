@@ -12,7 +12,7 @@ import pytest
 from product.paging import page_job
 from src.config import Config
 from src.entities import Action, Alert, Decision, Fault
-from src.trace_graph import baseline_service, build_graph, normalize_spans, root_cause_hit
+from src.trace_graph import _build_graph_loops, baseline_service, build_graph, normalize_spans, root_cause_hit
 from src.trace_model import load_trace_model, trace_model_enabled
 
 T0 = pd.Timestamp("2026-01-05", tz="UTC")
@@ -85,6 +85,74 @@ def test_rcaeval_column_names_and_a_later_span_do_not_change_the_window():
     assert baseline_service(window) == "db"
     assert root_cause_hit("db", "db") is True
     assert root_cause_hit("api", "db") is False
+
+
+def _same_graph(left, right) -> None:
+    assert left.services == right.services
+    assert left.node_x.shape == right.node_x.shape
+    assert left.edge_index.shape == right.edge_index.shape
+    assert left.edge_attr.shape == right.edge_attr.shape
+    assert left.node_x.tolist() == right.node_x.tolist()
+    assert left.edge_index.tolist() == right.edge_index.tolist()
+    assert left.edge_attr.tolist() == right.edge_attr.tolist()
+    assert left.error_jump == right.error_jump
+    assert left.latency_jump == right.latency_jump
+
+
+def test_vectorised_graph_matches_the_loop_version_on_a_small_fixture():
+    """Groupby and the parent-span merge agree with the row loop."""
+    frame = normalize_spans(pd.read_csv(FIXTURE))
+    start = pd.Timestamp(1735689700, unit="s", tz="UTC")
+    end = pd.Timestamp(1735690000, unit="s", tz="UTC")
+    _same_graph(build_graph(frame, start, end), _build_graph_loops(frame, start, end))
+    rows = []
+    for stamp, api, db, error in (
+        (T0 - pd.Timedelta(minutes=5), 20.0, 15.0, 0),
+        (T0 + pd.Timedelta(minutes=5), 160.0, 18.0, 1),
+    ):
+        rows.extend(
+            [
+                {"time": stamp, "trace_id": "t", "span_id": f"{stamp}-w", "parent_span_id": "", "service": "web", "duration": 30.0, "error": 0},
+                {"time": stamp, "trace_id": "t", "span_id": f"{stamp}-a", "parent_span_id": f"{stamp}-w", "service": "api", "duration": api, "error": 0},
+                {"time": stamp, "trace_id": "t", "span_id": f"{stamp}-d", "parent_span_id": f"{stamp}-a", "service": "db", "duration": db, "error": error},
+            ]
+        )
+    decoy = pd.DataFrame(rows)
+    window = T0 + pd.Timedelta(minutes=10)
+    _same_graph(build_graph(decoy, T0, window), _build_graph_loops(decoy, T0, window))
+
+
+def test_a_prebuilt_case_graph_is_not_rebuilt(monkeypatch):
+    """Fit and the baseline reuse the recording's graph instead of walking spans again."""
+    frame = normalize_spans(pd.read_csv(FIXTURE))
+    start = pd.Timestamp(1735689600, unit="s", tz="UTC")
+    end = pd.Timestamp(1735690500, unit="s", tz="UTC")
+    graph = build_graph(frame, start, end)
+    fault = Fault("case-a", start, end, "db", "mem")
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("build_graph should not run when the case graph is already built")
+
+    monkeypatch.setattr("src.trace_model.build_graph", boom)
+    monkeypatch.setattr("src.trace_eval.build_graph", boom)
+    from src.trace_eval import _baseline_ids
+    from src.trace_model import training_graphs
+
+    graphs, labels = training_graphs(pd.DataFrame(), [fault], end + pd.Timedelta(days=1), {"case-a": graph})
+    assert labels == [graph.services.index("db")]
+    assert graphs[0].services == graph.services
+    caught = _baseline_ids(pd.DataFrame(), [fault], {"case-a": graph})
+    assert ("case-a" in caught) is root_cause_hit(baseline_service(graph), "db")
+
+
+def test_max_cases_keeps_the_first_recordings():
+    from run_trace_eval import limit_cases, wanted_span_columns
+
+    assert limit_cases(["a", "b", "c"], 2) == ["a", "b"]
+    assert limit_cases(["a", "b"], 0) == ["a", "b"]
+    assert limit_cases(["a"], None) == ["a"]
+    columns = wanted_span_columns(["operationName", "startTimeMillis", "time", "tags", "serviceName", "spanID"])
+    assert columns == ["startTimeMillis", "time", "serviceName", "spanID"]
 
 
 def test_baseline_names_the_caller_when_its_latency_jump_is_larger():
