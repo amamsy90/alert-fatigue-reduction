@@ -3,9 +3,14 @@
 A missed fault weighs `miss_cost` times a false alarm. At decision time the
 daily budget is spent on the highest P(real) alerts; exact duplicates are
 suppressed first so they do not consume a review slot.
+
+Training may use an optional GPU backend (`src.accel`). The pipeline stored
+on this object is always scikit-learn, so `load_model` does not need the GPU
+libraries. If the requested backend cannot run, fit falls back to sklearn.
 """
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 
 import numpy as np
@@ -16,14 +21,25 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
+from .accel import (
+    AccelUnavailable,
+    cuml_logistic_coefficients,
+    get_backend,
+    install_linear_head,
+    xgboost_gpu_ensemble,
+)
 from .config import Config, day_of
 from .entities import Action, Alert, Decision
 from .features import NUMERIC_COLUMNS, build_feature_frame
 
+log = logging.getLogger(__name__)
+
 
 class AlertClassifier:
-    def __init__(self, config: Config | None = None) -> None:
+    def __init__(self, config: Config | None = None, *, backend: str | None = None) -> None:
         self.config = config or Config()
+        self.backend = backend
+        self.backend_used = "sklearn"
         self._pipe: Pipeline | None = None
 
     def fit(self, alerts: list[Alert], spikes: list | None = None) -> AlertClassifier:
@@ -32,8 +48,21 @@ class AlertClassifier:
         if len(np.unique(labels)) < 2:
             raise ValueError("Training data needs both fault and noise alerts")
         weights = np.where(labels == 1, self.config.miss_cost, self.config.false_alarm_cost)
-        self._pipe = _make_pipeline(self.config.random_seed)
-        self._pipe.fit(frame, labels, clf__sample_weight=weights)
+        chosen = get_backend(self.backend)
+        # The sklearn path is the one the published queue uses. Keep it a
+        # single pipeline.fit so a CPU install is unchanged.
+        if chosen == "sklearn":
+            self._pipe = _fit_sklearn(frame, labels, weights, self.config.random_seed)
+            self.backend_used = "sklearn"
+            return self
+        try:
+            self._pipe = _fit_gpu(chosen, frame, labels, weights, self.config.random_seed)
+            self.backend_used = chosen
+        except Exception:
+            # FR-21: a GPU failure must still produce the sklearn queue.
+            log.warning("accel: %s fit failed; using sklearn", chosen, exc_info=True)
+            self._pipe = _fit_sklearn(frame, labels, weights, self.config.random_seed)
+            self.backend_used = "sklearn"
         return self
 
     def predict_proba(self, alerts: list[Alert], spikes: list | None = None) -> np.ndarray:
@@ -84,6 +113,41 @@ def classifier_decisions(
                 alert.alert_id, Action.SUPPRESS, score, "below daily budget"
             )
     return decisions  # type: ignore[return-value]
+
+
+def _fit_sklearn(frame: pd.DataFrame, labels: np.ndarray, weights: np.ndarray, seed: int) -> Pipeline:
+    pipe = _make_pipeline(seed)
+    pipe.fit(frame, labels, clf__sample_weight=weights)
+    return pipe
+
+
+def _fit_gpu(
+    backend: str,
+    frame: pd.DataFrame,
+    labels: np.ndarray,
+    weights: np.ndarray,
+    seed: int,
+) -> Pipeline:
+    """Train the head on the GPU, then store a sklearn pipeline.
+
+    The text and category transformer stays on CPU. Only the linear or tree
+    head is trained on the device. cuML coefficients are copied onto
+    ``LogisticRegression``. An XGBoost booster is replaced by
+    ``TreeEnsembleClassifier`` (skops cannot persist the booster).
+    """
+    pipe = _make_pipeline(seed)
+    features = pipe.named_steps["features"]
+    features.fit(frame)
+    transformed = features.transform(frame)
+    if backend == "cuml":
+        coef, intercept = cuml_logistic_coefficients(transformed, labels, weights)
+        install_linear_head(pipe.named_steps["clf"], coef, intercept, np.unique(labels))
+        return pipe
+    if backend == "xgboost-gpu":
+        head = xgboost_gpu_ensemble(transformed, labels, weights, seed)
+        pipe.steps[-1] = ("clf", head)
+        return pipe
+    raise AccelUnavailable(backend)
 
 
 def _make_pipeline(seed: int) -> Pipeline:

@@ -21,9 +21,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from .accel import available_backends, cuda_version, get_backend
+
 LOG = Path("results") / "experiments.jsonl"
 GAIA_INPUTS = ("data/gaia_raw/run/run", "data/gaia_metrics")
 LIBRARIES = ("pandas", "numpy", "scikit-learn")
+# Optional. None when the extra is not installed; recorded either way.
+ACCEL_LIBRARIES = ("scikit-learn", "xgboost", "cuml", "lightgbm")
 
 
 def _git(*args: str) -> str | None:
@@ -73,6 +77,35 @@ def _plain(value):
     return value
 
 
+def _version(dist_name: str) -> str | None:
+    try:
+        return metadata.version(dist_name)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def accelerator_snapshot() -> dict:
+    """Backend, library versions and CUDA version for one experiment or model card.
+
+    ``backend`` is what ``get_backend()`` would train with on this machine
+    (sklearn unless cuML is usable, or ``ACCEL_BACKEND`` says otherwise).
+    ``libraries`` includes the optional GPU packages even when they are absent.
+    """
+    versions: dict[str, str | None] = {name: _version(name) for name in ACCEL_LIBRARIES}
+    if versions.get("cuml") is None:
+        for dist_name in ("cuml-cu12", "cuml-cu13", "cuml-cu11"):
+            found = _version(dist_name)
+            if found is not None:
+                versions["cuml"] = found
+                break
+    return {
+        "backend": get_backend(),
+        "cuda": cuda_version(),
+        "libraries": versions,
+        "available": available_backends(),
+    }
+
+
 def record_run(
     experiment: str,
     *,
@@ -84,12 +117,7 @@ def record_run(
     log: Path = LOG,
 ) -> dict:
     """Append one entry to the experiment log and return it."""
-    versions: dict[str, str | None] = {}
-    for lib in LIBRARIES:
-        try:
-            versions[lib] = metadata.version(lib)
-        except metadata.PackageNotFoundError:
-            versions[lib] = None
+    versions = {lib: _version(lib) for lib in LIBRARIES}
     entry = {
         "at": pd.Timestamp.now("UTC").isoformat(timespec="seconds"),
         "experiment": experiment,
@@ -97,6 +125,7 @@ def record_run(
         "code": code_state(),
         "python": platform.python_version(),
         "libraries": versions,
+        "accelerator": accelerator_snapshot(),
         "config": _plain(config) if config is not None else None,
         "data": fingerprint(data) if data else None,
         "outputs": {Path(p).name: _sha256(Path(p)) for p in outputs if Path(p).exists()},
