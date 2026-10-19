@@ -11,9 +11,12 @@ faults in the training window. The group is the on-call day.
 
 Backends, in order when ``auto`` is asked: XGBoost ``rank:ndcg`` (CUDA when
 the device is cuda and a device is visible, otherwise CPU), a tiny torch
-pairwise net, then a scikit-learn pointwise logistic model. The saved file is
-JSON. Tree boosters are stored as numeric node arrays, the same conversion as
-the alert classifier. Nothing is pickled.
+pairwise net, then a scikit-learn pointwise logistic model. The threshold is
+tuned at the budget K it will be scored with. On a day whose slot-taking
+candidates already fit in K, the score gate is not applied, so a large K
+keeps the first-come queue. The saved file is JSON. Tree boosters are stored
+as numeric node arrays, the same conversion as the alert classifier. Nothing
+is pickled.
 """
 from __future__ import annotations
 
@@ -241,6 +244,15 @@ def _fill(
         today = k + carry
         used = alerts_used = gaps_used = 0
         ordered = sorted(by_day.get(day, []), key=lambda it: (it.shown_at, _KIND_ORDER.get(it.kind, 5)))
+        # A score gate that skips items when the day already fits in K leaves
+        # slots empty and drops faults the first-come queue would have shown.
+        # Count candidates that are not already riding on an earlier jump.
+        takers = 0
+        for item in ordered:
+            if item.kind == "alert" and any(jump.open_at(item.shown_at) for jump in running.get(item.service, [])):
+                continue
+            takers += 1
+        day_threshold = threshold if takers > today else float("-inf")
         for item in ordered:
             if item.kind == "alert":
                 jumps = running.get(item.service, [])
@@ -248,7 +260,7 @@ def _fill(
                     item.attached = True
                     shown.append(item)
                     continue
-                if score_of[id(item)] < threshold or used >= today or alerts_used >= alert_cap:
+                if score_of[id(item)] < day_threshold or used >= today or alerts_used >= alert_cap:
                     continue
                 alerts_used += 1
             elif item.kind in METRIC_KINDS:
@@ -262,13 +274,13 @@ def _fill(
                     shown.append(item)
                     running.setdefault(item.service, []).append(item.spike)
                     continue
-                if score_of[id(item)] < threshold or used >= today:
+                if score_of[id(item)] < day_threshold or used >= today:
                     continue
             elif item.kind == "gap":
-                if score_of[id(item)] < threshold or used >= today or gaps_used >= gap_cap:
+                if score_of[id(item)] < day_threshold or used >= today or gaps_used >= gap_cap:
                     continue
                 gaps_used += 1
-            elif score_of[id(item)] < threshold or used >= today:
+            elif score_of[id(item)] < day_threshold or used >= today:
                 continue
             used += 1
             shown.append(item)

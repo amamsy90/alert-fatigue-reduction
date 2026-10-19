@@ -32,44 +32,64 @@ Flag: `LEARNED_RANKER`. Default off. `LEARNED_RANKER_PATH` is the JSON file. `LE
 
 ## Keep rule
 
-`run_model_ablation.py` compares four queues: the current causal queue, that queue plus metric-model proposals, that queue with the ranker choosing slots, and both. A variant is kept only when the 95% bootstrap interval on the per-fault catch difference (`src/eval_stats.py`) lies entirely above zero. The report also gives false items a day and catch at K = 5, 10, 20 and 50. `--walk-forward` refits on the past only, one week at a time.
+The ranker tunes its threshold at the same K it is scored with. On a day whose slot-taking candidates already fit in that K, it does not apply the score gate, so the queue matches first-come. The gate is used only when the day has more candidates than slots. Results are reported at each K in `by_k`, not only at K = 20.
+
+`run_model_ablation.py` compares four queues: the current causal queue, that queue plus metric-model proposals, that queue with the ranker choosing slots, and both. A variant is kept only when the 95% bootstrap interval on the per-fault catch difference (`src/eval_stats.py`) lies entirely above zero. The report also gives false items a day and catch at K = 5, 10, 20 and 50. `--walk-forward` refits on the past only, one week at a time, and adds `pooled`: one interval on every held-out fault across the folds. A fold that did not score a variant leaves that variant's pool skipped.
+
+The test window matches the published queue (`run_queue_eval.py`): it starts at the first alert and stops one second after the last alert. It does not stop at the last metric timestamp. `window_end` in the JSON is `last alert` for that default, or `caller` when `test_end` is passed in.
 
 A synthetic run does not turn either flag on, and it does not fill in GAIA numbers. The JSON field `gaia` stays `pending: this run did not score GAIA`.
+
+## GAIA channels
+
+The published GAIA extract is one channel per service. `tools/fetch_gaia.py` extracts only the 37 `docker_memory_usage_total` files. `load_metric_folder` ignores a CSV whose name does not contain `memory` or `mem`, and it stores `series_id` as the service name, so date chunks of the same memory series stay one series. On that folder the TCN's channel list is `["memory"]`. The 5090 run of this branch saw exactly that.
+
+A frame that already has a `metric` column, or distinct `series_id` values, is scored jointly. The synthetic sample has memory, cpu, latency and error. Feeding other GAIA metrics into `load_metric_folder` would also feed them to the byte jump rule, so this change does not do that.
+
+## CUDA weights
+
+Training sets `torch.manual_seed`, and on CUDA also `cuda.manual_seed_all`, `cudnn.deterministic` and `use_deterministic_algorithms(..., warn_only=True)`. That does not make the TCN bit-reproducible on CUDA. On the RTX 5090, two trains of the same command wrote different safetensors hashes (`7333d3a1…` and `30d8130b…`). The ranker JSON matched across those runs. Compare GAIA metric-model runs by the ablation table, not by the weight hash.
 
 ## Install
 
 CPU CI is `uv sync --group dev` from `app/`. It does not install the `ml` group or torch.
 
+`uv sync` without `--inexact` deletes every package that is not in the lock. cuML, torch and sentence-transformers are not locked (their wheels depend on the CUDA index), so `uv sync --group dev --group gpu --group ml` removes them from an existing GPU venv. Use `--inexact` to keep them, install torch after that, and run the scripts with `uv run --no-sync` so a later sync does not remove them again.
+
 On the laptop, from `app/`:
 
 ```bash
-uv sync --group dev --group gpu --group ml
+uv sync --inexact --group dev --group gpu --group ml
+uv pip install --extra-index-url https://pypi.nvidia.com cuml-cu13
 uv pip install --index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match \
-    torch safetensors
+    torch sentence-transformers
+# torch can downgrade the NVIDIA runtime libraries. If a cuML fit fails after
+# that, reinstall cuml-cu13 and check the fit again.
+uv run --no-sync python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-`torch` with the `cu130` index is the wheel for an RTX 5090 (sm_120). `safetensors` is also in the `ml` group. XGBoost is in the `gpu` group. If CUDA is missing, pass `--device cpu`. The metric model records `fell_back` when `cuda` was asked and torch has no device. The ranker does the same for XGBoost.
+`torch` with the `cu130` index is the wheel for an RTX 5090 (sm_120). `safetensors` is in the `ml` group. XGBoost is in the `gpu` group. cuML and sentence-transformers are optional for these two models; the lines above reinstall them so this sync does not wipe a venv that already uses `ACCEL_BACKEND=cuml` or `LLM_TEMPLATE_ENCODER`. If CUDA is missing, pass `--device cpu`. The metric model records `fell_back` when `cuda` was asked and torch has no device. The ranker does the same for XGBoost.
 
 CPU-only torch, when there is no GPU:
 
 ```bash
-uv sync --group dev --group ml
+uv sync --inexact --group dev --group ml
 uv pip install torch
 ```
 
 ## Train and score on GAIA
 
-From `app/`, with `data/gaia_raw` and `data/gaia_metrics` present. These commands do not page and do not set the flags.
+From `app/`, with `data/gaia_raw` and `data/gaia_metrics` present. These commands do not page and do not set the flags. `uv run --no-sync` keeps the torch and cuML wheels installed above.
 
 ```bash
-python train_metric_model.py --data gaia --device cuda --epochs 8 --out results/metric_model
-python train_ranker.py --data gaia --backend xgboost --device cuda --out results/ranker.json
-python train_ranker.py --data gaia --backend xgboost --device cuda \
+uv run --no-sync python train_metric_model.py --data gaia --device cuda --epochs 8 --out results/metric_model
+uv run --no-sync python train_ranker.py --data gaia --backend xgboost --device cuda --out results/ranker.json
+uv run --no-sync python train_ranker.py --data gaia --backend xgboost --device cuda \
     --metric-model results/metric_model --out results/ranker_both.json
-python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 \
+uv run --no-sync python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 \
     --out results/model_ablation_gaia.json
-python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 \
+uv run --no-sync python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 \
     --walk-forward --out results/model_ablation_gaia_walk.json
 ```
 
@@ -103,11 +123,11 @@ Run on this tree with CPU torch 2.14.1+cpu (no CUDA device), safetensors 0.8.0, 
 |---|---|---|---|---|
 | baseline | baseline | 2 | 0.57 | |
 | metric model | keep | 5 | 0.57 | 0.6, 0.2, 1.0 |
-| ranker | drop | 1 | 0.0 | −0.2, −0.6, 0.0 |
-| both | drop | 1 | 0.0 | −0.2, −0.6, 0.0 |
+| ranker | drop | 2 | 0.57 | 0.0, 0.0, 0.0 |
+| both | keep | 5 | 0.57 | 0.6, 0.2, 1.0 |
 
-The metric model trained on CPU (`fell_back` false, `normal_only` true) over channels cpu, error, latency and memory. It does not turn `METRIC_MODEL` on: the keep rule for the flag is a GAIA run at K = 20, and that run is pending.
+The window ends at the last alert (`window_end` `last alert`): train end `2026-01-12T03:00:00+00:00`, test end `2026-01-18T03:15:01+00:00`. The ranker matches the baseline at every K because each day already fits in K, so the score gate is not applied. The metric model trained on CPU (`fell_back` false, `normal_only` true) over channels cpu, error, latency and memory. It does not turn `METRIC_MODEL` on: the keep rule for the flag is a GAIA run at K = 20, and that run is pending.
 
-Walk-forward, two folds, K = 20. Fold 1 (5 faults): metric model keep, 5 caught against 2, interval 0.6 / 0.2 / 1.0; ranker and both drop, 1 caught, interval −0.2 / −0.6 / 0.0. Fold 2 (1 fault): every variant caught that fault; metric model, ranker and both drop with interval 0.0 / 0.0 / 0.0. `flags_changed` is false.
+Walk-forward, two folds, K = 20. Fold 1 (5 faults, false items/day 0.5): metric model and both keep, 5 caught against 2, interval 0.6 / 0.2 / 1.0; ranker drop, 2 caught, interval 0.0 / 0.0 / 0.0. Fold 2 (1 fault): every variant caught that fault; metric model, ranker and both drop with interval 0.0 / 0.0 / 0.0. Pooled across both folds (6 faults): metric model and both keep, mean 0.5, interval 0.1667 / 0.8333; ranker drop, interval 0.0 / 0.0 / 0.0. `flags_changed` is false.
 
 `record_run` stores torch, safetensors and XGBoost versions, the CUDA version string, and both flags under `ml`.
