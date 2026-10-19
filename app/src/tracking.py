@@ -107,6 +107,22 @@ def accelerator_snapshot() -> dict:
     }
 
 
+def ml_snapshot() -> dict:
+    """Torch, safetensors and XGBoost versions, plus the optional-model flags.
+
+    Versions are ``None`` when the package is not installed. The flags default
+    to off. This does not probe a GPU beyond the CUDA version string.
+    """
+    return {
+        "torch": _version("torch"),
+        "safetensors": _version("safetensors"),
+        "xgboost": _version("xgboost"),
+        "cuda": cuda_version(),
+        "metric_model": os.environ.get("METRIC_MODEL", "").strip().lower() or "off",
+        "learned_ranker": os.environ.get("LEARNED_RANKER", "").strip().lower() or "off",
+    }
+
+
 def record_run(
     experiment: str,
     *,
@@ -131,6 +147,7 @@ def record_run(
         "data": fingerprint(data) if data else None,
         "outputs": {Path(p).name: _sha256(Path(p)) for p in outputs if Path(p).exists()},
         "metrics": _plain(metrics or {}),
+        "ml": ml_snapshot(),
     }
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as fh:

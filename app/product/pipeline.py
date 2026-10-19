@@ -183,6 +183,8 @@ class ScoredQueue:
     # Promotion gate result for a model fit on this batch (None: nothing was fit).
     # A model that fails the gate is returned in `model` only to be kept as a candidate.
     promoted: bool | None = None
+    # Optional metric model / learned ranker. Both are "off" unless the flags are set.
+    optional_models: dict | None = None
 
 
 def _split(alerts: list[Alert], config: Config) -> tuple[list, list, pd.Timestamp]:
@@ -465,7 +467,9 @@ def score_alerts(
         spike_items(jumps, config) + spike_items(leaks, config) + spike_items(gaps, config)
         + alert_items(alerts, decisions)
     )
-    shown = build_queue(candidates, config)
+    from src.optional_models import finish_queue
+
+    shown, ml_status = finish_queue(candidates, metrics if has_metrics else None, config)
     shown_alerts = {id(item.payload): item for item in shown if item.kind == "alert"}
     final: list[Decision] = []
     for alert, decision in zip(alerts, decisions):
@@ -477,7 +481,13 @@ def score_alerts(
                                   f"{decision.reason}; inside a shown memory jump"))
         else:
             final.append(decision)
-    shown_spikes = {id(item.payload) for item in shown if item.kind != "alert"}
+    shown_ids = {id(item.payload) for item in shown if item.kind != "alert"}
+    known_ids = {id(spike) for spike in jumps + leaks + gaps}
+    extra_shown = [
+        item.payload
+        for item in shown
+        if item.kind != "alert" and isinstance(item.payload, Spike) and id(item.payload) not in known_ids
+    ]
     _ = shadow_mode  # recorded by caller in the store
     return ScoredQueue(
         alerts=alerts,
@@ -485,7 +495,9 @@ def score_alerts(
         escalate_threshold=escalate_threshold,
         review_threshold=review_threshold,
         spike_flags=flags,
-        jumps=_jump_items(jumps + leaks + gaps, alerts, final, shown_spikes, config, rise_unit),
+        jumps=_jump_items(
+            jumps + leaks + gaps + extra_shown, alerts, final, shown_ids, config, rise_unit
+        ),
         label_source=label_source,
         model_used=model_used,
         model=model if model_used == "trained" else candidate,
@@ -498,6 +510,7 @@ def score_alerts(
         rise_unit=rise_unit,
         detector_label=(detector.label() if detector is not None else "built-in memory-jump rule"),
         confirm_by_series=confirm_by_series,
+        optional_models=ml_status,
     )
 
 

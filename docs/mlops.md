@@ -17,6 +17,8 @@ This page explains how the AI part of the system is versioned, reproduced, updat
 
 A model card records: version, training time, label source (real labels, on-call marks), number of training alerts, thresholds, training-data fingerprint, code version (git commit), held-out precision / recall / false positives / misses, the active model's result on the same held-out alerts, and the promotion decision with its reason.
 
+The optional metric model and learned ranker are not versions in that registry. They are separate hash-checked files (`METRIC_MODEL_DIR`, `LEARNED_RANKER_PATH`), off unless those flags are set, and they do not pass the promotion gate because they do not replace the alert classifier. `docs/ML_MODELS.md` is the keep rule for turning them on.
+
 ## 2. Reproducibility
 
 If another team member receives the project tomorrow:
