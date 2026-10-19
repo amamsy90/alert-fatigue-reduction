@@ -15,8 +15,11 @@ import json
 import logging
 import os
 import re
+from collections import defaultdict, deque
 from collections.abc import Mapping
 from pathlib import Path
+
+import pandas as pd
 
 from .weight_io import load_bytes
 
@@ -98,6 +101,88 @@ def reference_note(context: Mapping[str, object]) -> str:
     )
 
 
+def _in_window(stamp, *, since, until) -> bool:
+    if since is not None and stamp < since:
+        return False
+    if until is not None and stamp >= until:
+        return False
+    return True
+
+
+def _template_count_deques():
+    """Earlier copies of the same template, in one pass. Same rule as ``product.llm._template_counts``."""
+    return {minutes: defaultdict(deque) for minutes in (5, 15, 60)}
+
+
+def _count_templates(history: dict, alert) -> dict[str, int]:
+    """Counts of the same source and template strictly before ``alert``."""
+    from src.features import normalize_message
+
+    template = normalize_message(alert.message)
+    key = (alert.source, template)
+    counts: dict[str, int] = {}
+    for minutes, buckets in history.items():
+        recent = buckets[key]
+        cutoff = alert.timestamp - pd.Timedelta(minutes=minutes)
+        while recent and recent[0] < cutoff:
+            recent.popleft()
+        ties = 0
+        while ties < len(recent) and recent[-1 - ties] >= alert.timestamp:
+            ties += 1
+        counts[f"count_{minutes}m"] = len(recent) - ties
+        recent.append(alert.timestamp)
+    return counts
+
+
+def _alert_note_rows(alerts: list, spikes: list, *, model: object | None):
+    """``(timestamp, row)`` for every alert. The feature frame is built once.
+
+    A later alert does not change an earlier row. Template counts use a deque
+    per source and template, so the whole table is linear in the number of alerts.
+    """
+    from product.llm import _top_signals, render_prompt
+    from src.features import NUMERIC_COLUMNS, build_feature_frame
+
+    ordered = sorted(alerts, key=lambda alert: (alert.timestamp, alert.alert_id))
+    if not ordered:
+        return []
+    frame = build_feature_frame(ordered, spikes=spikes)
+    history = _template_count_deques()
+    rows: list[tuple[object, dict[str, str]]] = []
+    for index, alert in enumerate(ordered):
+        counts = _count_templates(history, alert)
+        row = frame.iloc[index]
+        features = {name: float(row[name]) for name in NUMERIC_COLUMNS}
+        context = {
+            "kind": "alert",
+            "service": alert.source,
+            "shown_at": alert.timestamp.isoformat(),
+            "severity": alert.severity,
+            "features": features,
+            "top_signals": _top_signals(features, model),
+            "template_counts": counts,
+            "log_text": alert.message,
+        }
+        rows.append((alert.timestamp, _pair(context, render_prompt)))
+    return rows
+
+
+def _spike_note_rows(spikes: list, *, since, until, model: object | None) -> list[dict[str, str]]:
+    from product.llm import decision_context, render_prompt
+    from product.pagerduty import spike_key
+
+    rows: list[dict[str, str]] = []
+    ordered = sorted(spikes, key=lambda spike: (spike.shown_at, spike_key(spike)))
+    for index, spike in enumerate(ordered):
+        if not _in_window(spike.shown_at, since=since, until=until):
+            continue
+        prefix = ordered[: index + 1]
+        item = {"kind": spike.kind, "dedup_key": spike_key(spike), "service": spike.service}
+        context = decision_context(item, [], prefix, model)
+        rows.append(_pair(context, render_prompt))
+    return rows
+
+
 def note_examples(
     alerts: list,
     spikes: list,
@@ -106,42 +191,35 @@ def note_examples(
     since=None,
     model: object | None = None,
 ) -> list[dict[str, str]]:
-    """One prompt/reference pair per item at or before ``until``.
+    """One prompt/reference pair per item in ``[since, until)``.
 
-    Each prompt is ``render_prompt(decision_context(...))`` on the prefix of
-    rows known at that item. A later row is not in the prefix.
+    Each prompt is the decision-time text ``explain`` builds. A later row is
+    not an input. Alerts are scored in one pass, not once per prefix.
     """
-    from product.llm import decision_context, render_prompt
-    from product.pagerduty import spike_key
+    alert_rows = [row for stamp, row in _alert_note_rows(alerts, spikes, model=model) if _in_window(stamp, since=since, until=until)]
+    return alert_rows + _spike_note_rows(spikes, since=since, until=until, model=model)
 
-    rows: list[dict[str, str]] = []
-    ordered_alerts = sorted(alerts, key=lambda alert: (alert.timestamp, alert.alert_id))
-    for index, alert in enumerate(ordered_alerts):
-        if since is not None and alert.timestamp < since:
-            continue
-        if until is not None and alert.timestamp >= until:
-            continue
-        prefix = ordered_alerts[: index + 1]
-        past_spikes = [spike for spike in spikes if spike.shown_at <= alert.timestamp]
-        item = {
-            "kind": "alert",
-            "dedup_key": alert.alert_id[:255],
-            "service": alert.source,
-            "severity": alert.severity,
-        }
-        context = decision_context(item, prefix, past_spikes, model)
-        rows.append(_pair(context, render_prompt))
-    ordered_spikes = sorted(spikes, key=lambda spike: (spike.shown_at, spike_key(spike)))
-    for index, spike in enumerate(ordered_spikes):
-        if since is not None and spike.shown_at < since:
-            continue
-        if until is not None and spike.shown_at >= until:
-            continue
-        prefix = ordered_spikes[: index + 1]
-        item = {"kind": spike.kind, "dedup_key": spike_key(spike), "service": spike.service}
-        context = decision_context(item, [], prefix, model)
-        rows.append(_pair(context, render_prompt))
-    return rows
+
+def split_note_examples(
+    alerts: list,
+    spikes: list,
+    *,
+    boundary,
+    model: object | None = None,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """First week, then every later day. Held-out is not a single day and not a second quadratic scan.
+
+    The feature frame is built once. Training rows are timestamps before
+    ``boundary``. Held-out rows are the rest. Earlier alerts stay visible to a
+    later prompt; a future alert does not.
+    """
+    train: list[dict[str, str]] = []
+    held: list[dict[str, str]] = []
+    for stamp, row in _alert_note_rows(alerts, spikes, model=model):
+        (train if stamp < boundary else held).append(row)
+    train.extend(_spike_note_rows(spikes, since=None, until=boundary, model=model))
+    held.extend(_spike_note_rows(spikes, since=boundary, until=None, model=model))
+    return train, held
 
 
 NOTE_SYSTEM = (

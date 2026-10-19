@@ -30,7 +30,7 @@ from .queue import (
     tune_confirm_thresholds,
 )
 from .ranker import caught_fault_ids
-from .trace_graph import baseline_service, build_graph, root_cause_hit
+from .trace_graph import CallGraph, baseline_service, build_graph, root_cause_hit
 from .trace_model import caught_ids, fit_trace_model, predict_services
 
 ORIGIN = pd.Timestamp("2026-01-05", tz="UTC")
@@ -112,10 +112,17 @@ def _queue_scored(
     return caught_fault_ids(shown, test_faults), scored
 
 
-def _baseline_ids(spans: pd.DataFrame, faults: list[Fault]) -> set[str]:
+def _baseline_ids(
+    spans: pd.DataFrame,
+    faults: list[Fault],
+    graphs: dict[str, CallGraph] | None = None,
+) -> set[str]:
     caught: set[str] = set()
     for fault in faults:
-        graph = build_graph(spans, fault.start, fault.end)
+        if graphs is not None and fault.fault_id in graphs:
+            graph = graphs[fault.fault_id]
+        else:
+            graph = build_graph(spans, fault.start, fault.end)
         if root_cause_hit(baseline_service(graph), fault.component):
             caught.add(fault.fault_id)
     return caught
@@ -131,18 +138,31 @@ def evaluate_traces(
     spec: TraceSpec | None = None,
     dataset: str = "synthetic",
     train_end: pd.Timestamp | None = None,
+    graphs: dict[str, CallGraph] | None = None,
 ) -> dict:
-    """Train on faults that start before the split. Score the later faults."""
+    """Train on faults that start before the split. Score the later faults.
+
+    ``graphs`` are one window per fault, already built from that fault's own
+    spans. Fit, the baseline, and prediction reuse them and do not walk the
+    span table again.
+    """
     config = config or Config()
     spec = spec or TraceSpec()
     alerts = alerts or []
-    frame = spans.copy()
-    if "time" not in frame.columns or not str(frame["time"].dtype).startswith("datetime"):
-        from .trace_graph import normalize_spans
+    if graphs is None:
+        frame = spans.copy()
+        if "time" not in frame.columns or not str(frame["time"].dtype).startswith("datetime"):
+            from .trace_graph import normalize_spans
 
-        frame = normalize_spans(frame)
-    origin = _utc(frame["time"].min()) if not frame.empty else ORIGIN
-    boundary = _utc(train_end) if train_end is not None else origin + pd.Timedelta(days=config.split_day)
+            frame = normalize_spans(frame)
+    else:
+        frame = spans if isinstance(spans, pd.DataFrame) else pd.DataFrame()
+    if train_end is not None:
+        boundary = _utc(train_end)
+    elif not frame.empty and "time" in frame.columns:
+        boundary = _utc(frame["time"].min()) + pd.Timedelta(days=config.split_day)
+    else:
+        boundary = ORIGIN + pd.Timedelta(days=config.split_day)
     test_faults = [fault for fault in faults if boundary <= _utc(fault.start)]
     stop = max((_utc(fault.end) for fault in test_faults), default=boundary + pd.Timedelta(days=1))
     stop = stop + pd.Timedelta(seconds=1)
@@ -155,13 +175,14 @@ def evaluate_traces(
         seed=spec.seed,
         device=spec.device,
         backend=spec.backend,
+        graphs=graphs,
     )
     model_ids: set[str] | None = None
     if archive is not None:
-        predicted = predict_services(archive, frame, test_faults, not_before=boundary)
+        predicted = predict_services(archive, frame, test_faults, not_before=boundary, graphs=graphs)
         model_ids = caught_ids(predicted, test_faults)
         status = "trained"
-    baseline_ids = _baseline_ids(frame, test_faults)
+    baseline_ids = _baseline_ids(frame, test_faults, graphs)
     by_k: dict[str, dict] = {}
     for budget in spec.budget_ks:
         cfg = replace(config, budget_k=budget)
