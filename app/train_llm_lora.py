@@ -23,7 +23,16 @@ import pandas as pd
 from src.config import Config
 from src.experiment import load_gaia
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults
-from src.llm_lora import FORMAT, META_NAME, WEIGHTS_NAME, example_tensors, load_base_pin, split_note_examples
+from src.llm_lora import (
+    FORMAT,
+    META_NAME,
+    WEIGHTS_NAME,
+    dedupe_note_rows,
+    example_tensors,
+    load_base_pin,
+    note_diversity,
+    split_note_examples,
+)
 from src.sample_data import generate
 from src.weight_io import save_bytes
 
@@ -94,7 +103,7 @@ def _verify_base(base: str, filename: str, expected: str) -> None:
         raise SystemExit(f"base model sha256 {digest} does not match the pin {expected}")
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="LoRA fine-tune of the shadow-note model.")
     parser.add_argument("--data", choices=("synthetic", "gaia"), default="synthetic")
     parser.add_argument("--device", default="cuda")
@@ -102,7 +111,60 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--base", default=None, help="Local snapshot directory. Defaults to the pinned repo id.")
     parser.add_argument("--out", default="results/llm_lora")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--held-out-limit",
+        type=int,
+        default=500,
+        help="Earliest held-out rows scored for the loss. 0 scores every held-out row.",
+    )
+    parser.add_argument(
+        "--held-out-batch",
+        type=int,
+        default=8,
+        help="Rows per held-out loss batch. The training update stays one row per step.",
+    )
+    return parser
+
+
+def select_held_out_rows(rows: list, limit: int) -> list:
+    """Earliest held-out rows. Zero keeps every row."""
+    if limit <= 0:
+        return list(rows)
+    return list(rows[:limit])
+
+
+def held_out_loss_sample(rows: list, limit: int) -> list:
+    """One earliest row per note skeleton, then the cap.
+
+    Repeated template targets are not scored again. ``limit`` 0 keeps every
+    unique skeleton. ``held_out_rows`` stays the count before this cut.
+    """
+    return select_held_out_rows(dedupe_note_rows(rows), limit)
+
+
+def held_out_batches(rows: list, batch_size: int) -> list[list]:
+    size = max(1, batch_size)
+    return [rows[index : index + size] for index in range(0, len(rows), size)]
+
+
+def pad_token_batch(rows: list[tuple[list[int], list[int]]], pad_id: int) -> dict[str, list[list[int]]]:
+    """Pad a loss batch. Prompt labels stay ``-100``. Padding labels are ``-100`` too."""
+    if not rows:
+        return {"input_ids": [], "labels": [], "attention_mask": []}
+    width = max(len(ids) for ids, _labels in rows)
+    input_ids: list[list[int]] = []
+    labels: list[list[int]] = []
+    mask: list[list[int]] = []
+    for ids, labs in rows:
+        extra = width - len(ids)
+        input_ids.append(list(ids) + [pad_id] * extra)
+        labels.append(list(labs) + [-100] * extra)
+        mask.append([1] * len(ids) + [0] * extra)
+    return {"input_ids": input_ids, "labels": labels, "attention_mask": mask}
+
+
+def main() -> None:
+    args = build_parser().parse_args()
     try:
         import torch
         from peft import LoraConfig, get_peft_model
@@ -120,6 +182,11 @@ def main() -> None:
     if device.startswith("cuda") and not torch.cuda.is_available():
         device = "cpu"
     train_rows, held_rows = _examples(args.data, args.seed)
+    diversity = {
+        "train": note_diversity([row["reference"] for row in train_rows]),
+        "held_out": note_diversity([row["reference"] for row in held_rows]),
+    }
+    print(json.dumps({"target_diversity": diversity}), flush=True)
     tokenizer = AutoTokenizer.from_pretrained(base, revision=revision, local_files_only=Path(base).is_dir())
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -139,6 +206,8 @@ def main() -> None:
     optim = torch.optim.AdamW((param for param in model.parameters() if param.requires_grad), lr=1e-4)
     train_loss = None
     held_out_loss = None
+    held_out_loss_rows = 0
+    held_out_loss_tokens = 0
     for epoch in range(max(1, args.epochs)):
         model.train()
         total = 0.0
@@ -154,8 +223,18 @@ def main() -> None:
             total += float(loss.detach())
             seen += 1
         train_loss = total / seen if seen else None
-        held_out_loss = _held_out_loss(model, tokenizer, held_rows)
-        print(f"epoch={epoch + 1} train_loss={train_loss} held_out_loss={held_out_loss} held_out_rows={len(held_rows)}")
+        held_out_loss, held_out_loss_rows, held_out_loss_tokens = _held_out_loss(
+            model,
+            tokenizer,
+            held_rows,
+            batch_size=args.held_out_batch,
+            limit=args.held_out_limit,
+        )
+        print(
+            f"epoch={epoch + 1} train_loss={train_loss} held_out_loss={held_out_loss} "
+            f"held_out_rows={len(held_rows)} held_out_loss_rows={held_out_loss_rows} "
+            f"held_out_loss_tokens={held_out_loss_tokens}"
+        )
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(out)
@@ -173,6 +252,11 @@ def main() -> None:
         "qlora": qlora,
         "rows": len(train_rows),
         "held_out_rows": len(held_rows),
+        "held_out_loss_rows": held_out_loss_rows,
+        "held_out_loss_tokens": held_out_loss_tokens,
+        "held_out_limit": args.held_out_limit,
+        "held_out_loss_reduction": "mean over supervised tokens, one row per note skeleton",
+        "target_diversity": diversity,
         "train_loss": train_loss,
         "held_out_loss": held_out_loss,
         "device": device,
@@ -180,29 +264,82 @@ def main() -> None:
     save_bytes(out / META_NAME, json.dumps(payload, sort_keys=True).encode("utf-8"))
     print(
         f"rows={len(train_rows)} held_out_rows={len(held_rows)} "
+        f"held_out_loss_rows={held_out_loss_rows} held_out_loss_tokens={held_out_loss_tokens} "
         f"train_loss={train_loss} held_out_loss={held_out_loss} "
         f"qlora={qlora} device={device} sha256={digest} pages=false"
     )
 
 
-def _held_out_loss(model, tokenizer, rows: list[dict[str, str]]) -> float | None:
-    """Mean loss on later decision-time rows. Those rows do not update weights."""
-    import torch
+def _held_out_loss(
+    model,
+    tokenizer,
+    rows: list[dict[str, str]],
+    *,
+    batch_size: int = 8,
+    limit: int = 500,
+) -> tuple[float | None, int, int]:
+    """Per-token loss on a capped, de-duplicated held-out sample.
 
-    if not rows:
-        return None
+    The sample is the earliest row of each note skeleton, cut at ``limit``
+    (``0`` keeps every skeleton). The loss is the sum of supervised-token
+    cross-entropy divided by the number of those tokens, not a mean of row
+    means and not a mean over repeated copies of one template. Those rows
+    do not update weights.
+    """
+    import torch
+    import torch.nn.functional as functional
+
+    chosen = held_out_loss_sample(rows, limit)
+    if not chosen:
+        return None, 0, 0
     was_training = model.training
     model.eval()
     total = 0.0
+    tokens = 0
+    seen = 0
+    n_rows = len(chosen)
+    pad_id = int(tokenizer.pad_token_id or 0)
+    print(
+        f"held-out loss scoring {n_rows} unique skeletons of {len(rows)} rows "
+        f"batch={max(1, batch_size)}",
+        flush=True,
+    )
     try:
         with torch.no_grad():
-            for row in rows:
-                input_ids, labels = example_tensors(tokenizer, row["prompt"], row["reference"])
-                loss = model(input_ids=input_ids.to(model.device), labels=labels.to(model.device)).loss
-                total += float(loss.detach())
+            for batch in held_out_batches(chosen, batch_size):
+                encoded: list[tuple[list[int], list[int]]] = []
+                for row in batch:
+                    input_ids, labels = example_tensors(tokenizer, row["prompt"], row["reference"])
+                    encoded.append((input_ids.view(-1).tolist(), labels.view(-1).tolist()))
+                padded = pad_token_batch(encoded, pad_id)
+                labels = torch.tensor(padded["labels"], dtype=torch.long, device=model.device)
+                logits = model(
+                    input_ids=torch.tensor(padded["input_ids"], dtype=torch.long, device=model.device),
+                    attention_mask=torch.tensor(padded["attention_mask"], dtype=torch.long, device=model.device),
+                    labels=labels,
+                ).logits
+                shift_logits = logits[:, :-1, :]
+                shift_labels = labels[:, 1:]
+                step_tokens = int((shift_labels != -100).sum().item())
+                if step_tokens:
+                    total += float(
+                        functional.cross_entropy(
+                            shift_logits.reshape(-1, shift_logits.size(-1)),
+                            shift_labels.reshape(-1),
+                            reduction="sum",
+                            ignore_index=-100,
+                        ).detach()
+                    )
+                    tokens += step_tokens
+                seen += len(batch)
+                running = total / tokens if tokens else 0.0
+                print(
+                    f"held-out loss {seen}/{n_rows} tokens={tokens} running={running:.4f}",
+                    flush=True,
+                )
     finally:
         model.train(was_training)
-    return total / len(rows)
+    return (total / tokens if tokens else None), seen, tokens
 
 
 if __name__ == "__main__":
