@@ -231,15 +231,31 @@ def timeout_seconds() -> float:
 
 
 def sanitize_log(text: str) -> str:
-    """Drop instruction-like lines. What remains is data inside a delimited block."""
+    """Keep the log as data. Instruction phrases and wrapper tokens are removed.
+
+    A line that starts with an instruction is dropped. A line that has data
+    before an instruction keeps that data. The delimiter and chat markers
+    cannot close the data block from inside the log.
+    """
     kept: list[str] = []
     for line in str(text).splitlines():
-        if _INSTRUCTION.search(line):
-            continue
-        if _DELIMITER in line.upper():
-            continue
-        kept.append(line)
+        cleaned = _clean_log_line(line)
+        if cleaned:
+            kept.append(cleaned)
     return "\n".join(kept).strip()[:_MAX_LOG_CHARS]
+
+
+def _clean_log_line(line: str) -> str:
+    text = line.replace("<|im_start|>", " ").replace("<|im_end|>", " ")
+    text = re.sub(re.escape(_DELIMITER), " ", text, flags=re.IGNORECASE)
+    match = _INSTRUCTION.search(text)
+    if match is not None and match.start() == 0:
+        return ""
+    if match is not None:
+        text = text[: match.start()]
+    text = re.sub(r"paged-now", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[/?INST\]|<<\/?SYS>>", " ", text, flags=re.IGNORECASE)
+    return " ".join(text.split())
 
 
 def render_prompt(context: Mapping[str, object]) -> str:
@@ -431,16 +447,18 @@ def _explain_text(context: Mapping[str, object]) -> str:
     if not explain_enabled():
         raise ExplainError("off")
     prompt = render_prompt(context)
-    from src.llm_lora import generate_with_adapter, lora_enabled
+    from src.llm_lora import deliver_note, generate_with_adapter, lora_enabled
 
     if lora_enabled():
         adapted = generate_with_adapter(prompt)
         if adapted:
-            return _clean_note(adapted)
+            text, _fell_back = deliver_note(adapted, context)
+            return _clean_note(text)
     weights = weight_status()
     if weights.code != "ok":
         raise ExplainError(weights.code)
-    return _clean_note(_generate_bounded(prompt))
+    text, _fell_back = deliver_note(_generate_bounded(prompt), context)
+    return _clean_note(text)
 
 
 def _generate_bounded(prompt: str) -> str:

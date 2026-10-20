@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import tempfile
 from pathlib import Path
 
@@ -120,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--held-out-batch",
         type=int,
-        default=8,
+        default=2,
         help="Rows per held-out loss batch. The training update stays one row per step.",
     )
     return parser
@@ -131,6 +132,18 @@ def select_held_out_rows(rows: list, limit: int) -> list:
     if limit <= 0:
         return list(rows)
     return list(rows[:limit])
+
+
+def random_held_out_sample(rows: list, limit: int, seed: int) -> list:
+    """A random cap of the held-out rows. Zero keeps every row.
+
+    The same seed returns the same rows. They stay in time order.
+    """
+    if limit <= 0 or limit >= len(rows):
+        return list(rows)
+    rng = random.Random(seed)
+    picked = sorted(rng.sample(range(len(rows)), limit))
+    return [rows[index] for index in picked]
 
 
 def held_out_loss_sample(rows: list, limit: int) -> list:
@@ -208,6 +221,9 @@ def main() -> None:
     held_out_loss = None
     held_out_loss_rows = 0
     held_out_loss_tokens = 0
+    held_out_loss_random = None
+    held_out_loss_random_rows = 0
+    held_out_loss_random_tokens = 0
     for epoch in range(max(1, args.epochs)):
         model.train()
         total = 0.0
@@ -223,17 +239,26 @@ def main() -> None:
             total += float(loss.detach())
             seen += 1
         train_loss = total / seen if seen else None
-        held_out_loss, held_out_loss_rows, held_out_loss_tokens = _held_out_loss(
+        losses = _held_out_loss(
             model,
             tokenizer,
             held_rows,
             batch_size=args.held_out_batch,
             limit=args.held_out_limit,
+            seed=args.seed,
         )
+        held_out_loss = losses["skeleton_loss"]
+        held_out_loss_rows = losses["skeleton_rows"]
+        held_out_loss_tokens = losses["skeleton_tokens"]
+        held_out_loss_random = losses["random_loss"]
+        held_out_loss_random_rows = losses["random_rows"]
+        held_out_loss_random_tokens = losses["random_tokens"]
         print(
-            f"epoch={epoch + 1} train_loss={train_loss} held_out_loss={held_out_loss} "
-            f"held_out_rows={len(held_rows)} held_out_loss_rows={held_out_loss_rows} "
-            f"held_out_loss_tokens={held_out_loss_tokens}"
+            f"epoch={epoch + 1} train_loss={train_loss} "
+            f"held_out_loss={held_out_loss} held_out_loss_rows={held_out_loss_rows} "
+            f"held_out_loss_random={held_out_loss_random} "
+            f"held_out_loss_random_rows={held_out_loss_random_rows} "
+            f"held_out_rows={len(held_rows)}"
         )
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -254,8 +279,15 @@ def main() -> None:
         "held_out_rows": len(held_rows),
         "held_out_loss_rows": held_out_loss_rows,
         "held_out_loss_tokens": held_out_loss_tokens,
+        "held_out_loss_random": held_out_loss_random,
+        "held_out_loss_random_rows": held_out_loss_random_rows,
+        "held_out_loss_random_tokens": held_out_loss_random_tokens,
         "held_out_limit": args.held_out_limit,
-        "held_out_loss_reduction": "mean over supervised tokens, one row per note skeleton",
+        "held_out_batch": args.held_out_batch,
+        "held_out_loss_reduction": (
+            "mean over supervised tokens; skeleton-deduped and a separate random cap, "
+            "both honour --held-out-limit"
+        ),
         "target_diversity": diversity,
         "train_loss": train_loss,
         "held_out_loss": held_out_loss,
@@ -265,6 +297,7 @@ def main() -> None:
     print(
         f"rows={len(train_rows)} held_out_rows={len(held_rows)} "
         f"held_out_loss_rows={held_out_loss_rows} held_out_loss_tokens={held_out_loss_tokens} "
+        f"held_out_loss_random={held_out_loss_random} held_out_loss_random_rows={held_out_loss_random_rows} "
         f"train_loss={train_loss} held_out_loss={held_out_loss} "
         f"qlora={qlora} device={device} sha256={digest} pages=false"
     )
@@ -275,51 +308,74 @@ def _held_out_loss(
     tokenizer,
     rows: list[dict[str, str]],
     *,
-    batch_size: int = 8,
+    batch_size: int = 2,
     limit: int = 500,
-) -> tuple[float | None, int, int]:
-    """Per-token loss on a capped, de-duplicated held-out sample.
+    seed: int = 42,
+) -> dict[str, float | int | None]:
+    """Per-token loss on two capped held-out samples. Neither updates weights.
 
-    The sample is the earliest row of each note skeleton, cut at ``limit``
-    (``0`` keeps every skeleton). The loss is the sum of supervised-token
-    cross-entropy divided by the number of those tokens, not a mean of row
-    means and not a mean over repeated copies of one template. Those rows
-    do not update weights.
+    The skeleton sample is the earliest row of each note skeleton. The random
+    sample is ``limit`` held-out rows (``0`` keeps every row). Both losses are
+    the sum of supervised-token cross-entropy divided by the token count.
     """
+    skeleton = held_out_loss_sample(rows, limit)
+    random_rows = random_held_out_sample(rows, limit, seed)
+    skeleton_loss, skeleton_rows, skeleton_tokens = _token_loss(
+        model, tokenizer, skeleton, batch_size=batch_size, label="skeleton"
+    )
+    random_loss, random_scored, random_tokens = _token_loss(
+        model, tokenizer, random_rows, batch_size=batch_size, label="random"
+    )
+    return {
+        "skeleton_loss": skeleton_loss,
+        "skeleton_rows": skeleton_rows,
+        "skeleton_tokens": skeleton_tokens,
+        "random_loss": random_loss,
+        "random_rows": random_scored,
+        "random_tokens": random_tokens,
+    }
+
+
+def _token_loss(
+    model,
+    tokenizer,
+    rows: list[dict[str, str]],
+    *,
+    batch_size: int,
+    label: str,
+) -> tuple[float | None, int, int]:
+    """Mean loss per supervised token. Logits are dropped after each batch."""
     import torch
     import torch.nn.functional as functional
 
-    chosen = held_out_loss_sample(rows, limit)
-    if not chosen:
+    if not rows:
         return None, 0, 0
     was_training = model.training
     model.eval()
     total = 0.0
     tokens = 0
     seen = 0
-    n_rows = len(chosen)
+    n_rows = len(rows)
     pad_id = int(tokenizer.pad_token_id or 0)
     print(
-        f"held-out loss scoring {n_rows} unique skeletons of {len(rows)} rows "
-        f"batch={max(1, batch_size)}",
+        f"held-out {label} loss scoring {n_rows} rows batch={max(1, batch_size)}",
         flush=True,
     )
     try:
         with torch.no_grad():
-            for batch in held_out_batches(chosen, batch_size):
+            for batch in held_out_batches(rows, batch_size):
                 encoded: list[tuple[list[int], list[int]]] = []
                 for row in batch:
                     input_ids, labels = example_tensors(tokenizer, row["prompt"], row["reference"])
                     encoded.append((input_ids.view(-1).tolist(), labels.view(-1).tolist()))
                 padded = pad_token_batch(encoded, pad_id)
-                labels = torch.tensor(padded["labels"], dtype=torch.long, device=model.device)
+                labels_t = torch.tensor(padded["labels"], dtype=torch.long, device=model.device)
                 logits = model(
                     input_ids=torch.tensor(padded["input_ids"], dtype=torch.long, device=model.device),
                     attention_mask=torch.tensor(padded["attention_mask"], dtype=torch.long, device=model.device),
-                    labels=labels,
                 ).logits
                 shift_logits = logits[:, :-1, :]
-                shift_labels = labels[:, 1:]
+                shift_labels = labels_t[:, 1:]
                 step_tokens = int((shift_labels != -100).sum().item())
                 if step_tokens:
                     total += float(
@@ -331,10 +387,13 @@ def _held_out_loss(
                         ).detach()
                     )
                     tokens += step_tokens
+                del logits, shift_logits, shift_labels, labels_t
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 seen += len(batch)
                 running = total / tokens if tokens else 0.0
                 print(
-                    f"held-out loss {seen}/{n_rows} tokens={tokens} running={running:.4f}",
+                    f"held-out {label} loss {seen}/{n_rows} tokens={tokens} running={running:.4f}",
                     flush=True,
                 )
     finally:
