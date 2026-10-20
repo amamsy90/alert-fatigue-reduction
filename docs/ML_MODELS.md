@@ -140,6 +140,10 @@ RCAEval's pinned fetch (`tools/fetch_rcaeval_re23.py`) stores logs and metrics o
 
 Each RCAEval case is its own recording. The eval reads one `traces.parquet` at a time, and only the columns the graph uses. It builds that case's window once (pandas groupby for the rates, a merge of `parentSpanID` onto `spanID` for the edges) and reuses the graph for training, the jump baseline, and the model. Span tables are not concatenated. `--suite RE2` or `--suite RE3` selects one suite. `--max-cases N` reads the first N cases (`0` means all). Each case prints a progress line (spans, services, train or test, elapsed seconds, RSS). The target for RE2+RE3 is well under 30 minutes and under 16 GB.
 
+RE2 and RE3 both start at 2024-01-01 01:00 UTC, and a series id such as `adservice_cpu` is not scoped by case. Concatenating them gave duplicate `(series_id, timestamp)` rows and `detect_jumps` raised. The trace eval keeps RE2 on the days from `load_cases` and shifts RE3 by 1000 days before it builds faults, metrics, alerts, and graphs. Online Boutique and Train Ticket still share a day inside one suite, so they still compete for one K. The JSON reports `by_suite`, `by_system` (Online Boutique and Train Ticket, keyed with the suite), and `pooled`. Each slice records `train_cases`, `test_cases`, and `tiny_train` (true below 20 training cases). A per-suite queue uses that suite's own first week. The pooled queue is the union of those queues; K is not applied a second time across suites. A per-system queue uses that system's series only.
+
+`trace_residual` is a second fit. It adds one node column, `max(error_jump, latency_jump)`, the score the non-learned baseline already uses. The five default features are unchanged. The residual is kept only when both 95% intervals, against the queue and against the baseline, lie entirely above zero. It does not enter the queue and it does not page.
+
 RCAEval `traces.parquet` has a text `time` column such as `21:24`. That clock is not a span time. The timestamp is `startTimeMillis` or `startTime` (or another numeric epoch). A clock column is never parsed as the span time.
 
 A window is the spans with `time` strictly before the decision time. The past used for jumps is spans strictly before the window start. A training fault must start before the split, and its window is clipped at the split, so a later span cannot enter training. The root-cause service is the label. It is not a feature.
@@ -166,15 +170,21 @@ The base is the Hugging Face safetensors snapshot, pinned in `app/product/llm_lo
 | sha256 | `dd924a11b4c220f385b51ffa522daea7c9f3d850e31b162bb5661df483c6d3ee` |
 | size | 3087467144 bytes |
 
-Training and generation share `format_note_chat`. That is the tokenizer chat template when the tokenizer provides one, otherwise the Qwen chat string. The generation prefix leaves the assistant header open. The training string is that same prefix plus the template note and an end-of-text token, so the adapter learns to stop. Prompt tokens are masked with `-100`. The loaded base and the loaded adapter are cached for the process. `train_llm_lora.py` prints `train_loss` and `held_out_loss` each epoch (held-out rows are decision-time template notes after the split; they do not update weights) and stores both in `adapter.json`. The feature frame for those rows is built once. Held-out is every alert on or after the split, not a single day.
+Training and generation share `format_note_chat`. That is the tokenizer chat template when the tokenizer provides one, otherwise the Qwen chat string. The generation prefix leaves the assistant header open. The training string is that same prefix plus the template note and an end-of-text token, so the adapter learns to stop. Prompt tokens are masked with `-100`. The loaded base and the loaded adapter are cached for the process. The feature frame for those rows is built once. Held-out is every alert on or after the split, not a single day.
+
+The training target is that deterministic template. It does not add a reason or a check that the template does not already state. A low held-out loss, or a perfect score on `score_note`, means the adapter is reproducing the template. On the 7dc1394 GAIA run the template rubric was LoRA 60/60 and base 0/60, and the only base failure was `missing_top_signals`: the rubric requires every signal name, which is how the template is worded. That run's held-out loss (2.03e-5) sat far below its train loss (0.0131) because the held-out targets repeat the same skeletons. Those two numbers are from that run, not from this tree.
+
+`adapter.json` records `target_diversity` for train and held-out: `unique_ratio` is exact unique notes over rows, and `near_duplicate_ratio` is the share of rows whose skeleton (every number replaced by `#`) occurs more than once. `held_out_loss` is the mean cross-entropy per supervised token on a capped, de-duplicated sample: the earliest row of each skeleton, then `--held-out-limit` (default 500; `0` keeps every skeleton). `held_out_rows` stays the full count. `held_out_loss_rows` is how many skeletons were scored. The training update is still one row at a time. The loss pass prints progress.
 
 LoRA is r = 8, alpha = 16, dropout 0.05, on `q_proj` and `v_proj`. QLoRA nf4 is used when CUDA and bitsandbytes import; otherwise fp16 on CUDA or fp32 on CPU. The adapter is `adapter.safetensors` plus `adapter.json` (format `oncall-llm-lora-v1`, `pages` false) with SHA-256 sidecars. At load time the hash-checked bytes are staged as `adapter_model.safetensors` so peft does not read an unchecked file.
 
-`run_llm_lora_rubric.py` with no flags scores template notes and loads no model. That is the CPU CI path. `--generate` scores the base and the LoRA adapter on held-out GAIA alerts (pass rate, invented numbers, injection cases). The default `--limit` is 60. `--limit 0` scores every held-out alert. Each row in the JSON includes why it failed. It exits without a score when GAIA or the weights are missing.
+`run_llm_lora_rubric.py` with no flags scores template notes and loads no model. That is the CPU CI path. It also writes `target_diversity` for the synthetic train and held-out template notes. `--generate` scores the base and the LoRA adapter on held-out GAIA alerts (pass rate, invented numbers, injection cases) and writes the same diversity for the full GAIA split. The default `--limit` is 60. `--limit 0` scores every held-out alert. Each row in the JSON includes why it failed. It exits without a score when GAIA or the weights are missing.
+
+`--generate` also writes `template_match`: exact and near (numbers ignored) agreement between the generation and `reference_note`. A high near-match rate means the adapter is emitting the template. `grounding` is a separate rubric. Its prompt adds one sentence that states the top signals, and a note passes only when every number is already in the decision-time prompt, every content word is in the alert or a fixed glue list, the note says why (`because`, `due`, or `caused`), and it says what to check (`check`, `inspect`, `look`, `verify`, `confirm`, or `review`). The template wording is not required, and the template itself does not pass that rubric. The template rubric is unchanged, so the old comparison is still in the file.
 
 `LLM_LORA` does nothing unless `LLM_EXPLAIN` is also on. `explain()` tries the adapter, then the pinned GGUF, then no note. Notes stay on the shadow record. They do not change the queue and they do not page. Live paging is unchanged: `APP_PASSWORD`, a channel, the typed word `LIVE`, and an ingest job.
 
-The rubric (`score_note`) is deterministic. A note must name every top signal, contain only numbers already in the prompt, stay within 500 characters, and must not repeat an instruction-only token from the untrusted log. A second note under an injected log must keep the same signal, kind and service structure.
+The template rubric (`score_note`) is deterministic. A note must name every top signal, contain only numbers already in the prompt, stay within 500 characters, and must not repeat an instruction-only token from the untrusted log. A second note under an injected log must keep the same signal, kind and service structure. That is a test of the template, not of an explanation the template does not contain.
 
 Flag: `LLM_LORA`. Default off. `LLM_LORA_DIR`, `LLM_LORA_SHA256`, and `LLM_LORA_BASE` (local snapshot directory; the pin is checked when `model.safetensors` is present).
 
@@ -232,20 +242,20 @@ uv run --no-sync python run_trace_eval.py --data rcaeval --device cuda --backend
 uv run --no-sync python run_trace_eval.py --data rcaeval --suite RE2 --max-cases 2 --device cuda --epochs 1
 ```
 
-The full command reads RE2 and RE3 one case at a time and prints progress. `--suite` and `--max-cases` are optional.
+The full command reads RE2 and RE3 one case at a time, lays the suites on non-overlapping days, and prints per-suite, per-system, and pooled scores, including `trace_residual`. `--suite` and `--max-cases` are optional. A combined run is the command without `--suite`.
 
 `train_trace_model.py --data rcaeval` does not train on this machine. It exits and points at that eval command. Sock Shop cases are skipped. A missing `cases.parquet` exits before any score.
 
-LoRA. Put a local snapshot of `Qwen/Qwen2.5-1.5B-Instruct` at revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` on disk. The script checks `model.safetensors` against the pin when that file is in the snapshot. Each epoch prints `train_loss` and `held_out_loss`.
+LoRA. Put a local snapshot of `Qwen/Qwen2.5-1.5B-Instruct` at revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` on disk. The script checks `model.safetensors` against the pin when that file is in the snapshot. Each epoch prints `train_loss`, the per-token `held_out_loss`, and how many unique skeletons were scored. `adapter.json` includes `target_diversity`.
 
 ```bash
 uv run --no-sync python train_llm_lora.py --data gaia --device cuda --epochs 1 \
-    --base /path/to/Qwen2.5-1.5B-Instruct --out results/llm_lora
+    --held-out-limit 500 --base /path/to/Qwen2.5-1.5B-Instruct --out results/llm_lora
 uv run --no-sync python run_llm_lora_rubric.py --generate --data gaia \
     --base /path/to/Qwen2.5-1.5B-Instruct
 ```
 
-`--generate` defaults to `--limit 60`. Pass `--limit 0` to score every held-out alert. `run_llm_lora_rubric.py` with no flags stays the template-only check and loads no model. Training's held-out set is every later day, built in one pass.
+`--held-out-limit 0` scores every unique held-out skeleton. The default is 500. `--generate` defaults to `--limit 60` and writes `template_match` and `grounding` beside the template rubric. Pass `--limit 0` to score every held-out alert. `run_llm_lora_rubric.py` with no flags stays the template-only check and loads no model. Training's held-out set is every later day, built in one pass. The loss pass does not score repeated copies of one template.
 
 Turn it on only together with shadow notes:
 
@@ -290,6 +300,6 @@ Trace model, `python run_trace_eval.py --data synthetic --backend auto --epochs 
 
 The synthetic interval is above zero against both. The flag stays off until the same comparison is run on RCAEval RE2/RE3. A `--backend plain` run with the same seed and epoch count had the same K = 20 counts; the file above is the Geometric run.
 
-LoRA weights were not trained here (the 3GB snapshot was not downloaded). `python run_llm_lora_rubric.py` scored the template notes on the synthetic first week: 945 of 945 reference notes passed the rubric. A note that invented `99999` and repeated `PAGED-NOW` failed (`no_invented_numbers` false, instruction tokens `paged-now` and `reply`, structure not stable). File: `app/results/llm_lora_rubric_synthetic.json`.
+LoRA weights were not trained here (the 3GB snapshot was not downloaded). `python run_llm_lora_rubric.py` scored the template notes on the synthetic first week: 945 of 945 reference notes passed the template rubric. A note that invented `99999` and repeated `PAGED-NOW` failed (`no_invented_numbers` false, instruction tokens `paged-now` and `reply`, structure not stable). The same run's `target_diversity` shows why a template score is not a new explanation: 945 training notes collapse to 74 skeletons (unique ratio 0.9989, near-duplicate ratio 0.9788) and 921 held-out notes collapse to 62 skeletons (unique ratio 1.0, near-duplicate ratio 0.987). File: `app/results/llm_lora_rubric_synthetic.json`. GAIA diversity, template-match, and grounding scores are not in this file.
 
 Contrastive encoder. The file `app/results/log_encoder_synthetic.json` is the earlier alert-only run (`python run_log_encoder_ablation.py --data synthetic --dim 4 --epochs 15 --seed 42`): 139 training-window templates, 5 held-out faults, K = 20, both queues caught 4 (detection 0.8), false items a day 0.71 to 1.0, per-fault catch difference 0.0 / 0.0 / 0.0, decision drop. The script now scores the full queue with the window ending at the last alert and reports every `--seeds` value. The synthetic sample has no metric series, so metric items stay empty. This VM did not re-run that file after the change (CPU CI has no torch). `LOG_ENCODER` stays unset. GAIA counts are not in this file.

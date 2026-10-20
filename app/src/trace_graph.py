@@ -493,6 +493,37 @@ def build_graph(spans: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
     return _graph_vectorized(window, past, visible)
 
 
+def with_baseline_feature(graph: CallGraph) -> CallGraph:
+    """Copy of ``graph`` with one extra node column, ``max(error_jump, latency_jump)``.
+
+    The column is the score the non-learned baseline already uses, and it is
+    known when the window closes. ``NODE_FEATURES`` stays the five default
+    columns. The copy is only for the separate residual variant.
+    """
+    width = int(graph.node_x.shape[1]) if graph.node_x.ndim == 2 and graph.node_x.shape[1] else len(NODE_FEATURES)
+    if not graph.services:
+        return CallGraph(
+            [],
+            np.zeros((0, width + 1), dtype=np.float64),
+            graph.edge_index,
+            graph.edge_attr,
+            {},
+            {},
+        )
+    extra = np.asarray(
+        [max(float(graph.error_jump[service]), float(graph.latency_jump[service])) for service in graph.services],
+        dtype=np.float64,
+    ).reshape(-1, 1)
+    return CallGraph(
+        list(graph.services),
+        np.concatenate([np.asarray(graph.node_x, dtype=np.float64), extra], axis=1),
+        graph.edge_index,
+        graph.edge_attr,
+        dict(graph.error_jump),
+        dict(graph.latency_jump),
+    )
+
+
 def baseline_service(graph: CallGraph) -> str | None:
     """Service with the largest error-rate or latency jump. Ties break on name.
 

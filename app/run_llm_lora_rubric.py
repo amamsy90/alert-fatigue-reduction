@@ -26,7 +26,16 @@ from product.llm import decision_context, render_prompt
 from src.config import Config
 from src.experiment import load_gaia
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults
-from src.llm_lora import generate_causal_note, note_examples, score_note
+from src.llm_lora import (
+    generate_causal_note,
+    grounding_prompt,
+    note_diversity,
+    reference_note,
+    score_grounding,
+    score_note,
+    split_note_examples,
+    template_match,
+)
 from src.sample_data import generate
 from src.tracking import record_run
 
@@ -61,8 +70,9 @@ def _template() -> None:
     alerts, _faults = align_alerts_to_faults(load_alerts(folder / "alerts.csv"), load_faults(folder / "faults.csv"))
     origin = min(alert.timestamp for alert in alerts)
     boundary = origin + pd.Timedelta(days=Config().split_day)
+    train_rows, held_rows = split_note_examples(alerts, [], boundary=boundary)
+    rows = train_rows
     train = [alert for alert in alerts if alert.timestamp < boundary]
-    rows = note_examples(train, [], until=boundary)
     ordered = sorted(train, key=lambda alert: (alert.timestamp, alert.alert_id))
     contexts = []
     for index, alert in enumerate(ordered):
@@ -91,6 +101,10 @@ def _template() -> None:
         "flags_changed": False,
         "reference_notes": len(rows),
         "reference_passed": passed,
+        "target_diversity": {
+            "train": note_diversity([row["reference"] for row in train_rows]),
+            "held_out": note_diversity([row["reference"] for row in held_rows]),
+        },
         "bad_note_passed": bool(bad["passed"]),
         "bad_note": bad,
         "split": "first week only; later alerts were not training rows",
@@ -120,6 +134,11 @@ def _generate(base: str | None, limit: int) -> None:
     config = Config()
     train_end = data.origin + pd.Timedelta(days=config.split_day)
     test_end = data.last + pd.Timedelta(seconds=1)
+    train_rows, held_rows = split_note_examples(data.alerts, [], boundary=train_end)
+    diversity = {
+        "train": note_diversity([row["reference"] for row in train_rows]),
+        "held_out": note_diversity([row["reference"] for row in held_rows]),
+    }
     ordered = sorted(data.alerts, key=lambda alert: (alert.timestamp, alert.alert_id))
     held = [alert for alert in ordered if train_end <= alert.timestamp < test_end]
     if limit > 0:
@@ -129,23 +148,46 @@ def _generate(base: str | None, limit: int) -> None:
     lora_notes = []
     base_injected = []
     lora_injected = []
+    base_matches = []
+    lora_matches = []
+    base_ground = []
+    lora_ground = []
+    base_ground_injected = []
+    lora_ground_injected = []
     per_row = []
     for alert in held:
         prefix = ordered[: positions[alert.alert_id] + 1]
         item = {"kind": "alert", "dedup_key": alert.alert_id[:255], "service": alert.source, "severity": alert.severity}
         context = decision_context(item, prefix, [], None)
         prompt = render_prompt(context)
-        base_score = score_note(generate_causal_note(prompt, adapter=False), context)
-        lora_score = score_note(generate_causal_note(prompt, adapter=True), context)
+        reference = reference_note(context)
+        base_text = generate_causal_note(prompt, adapter=False)
+        lora_text = generate_causal_note(prompt, adapter=True)
+        base_score = score_note(base_text, context)
+        lora_score = score_note(lora_text, context)
+        base_match = template_match(base_text, reference)
+        lora_match = template_match(lora_text, reference)
         injected = dict(context)
         injected["log_text"] = f"{context.get('log_text') or ''}\n{_INJECTION}"
         injected_prompt = render_prompt(injected)
         base_inject = score_note(generate_causal_note(injected_prompt, adapter=False), injected)
         lora_inject = score_note(generate_causal_note(injected_prompt, adapter=True), injected)
+        ground = grounding_prompt(context)
+        ground_injected = grounding_prompt(injected)
+        base_ground_score = score_grounding(generate_causal_note(ground, adapter=False), context)
+        lora_ground_score = score_grounding(generate_causal_note(ground, adapter=True), context)
+        base_ground_inject = score_grounding(generate_causal_note(ground_injected, adapter=False), injected)
+        lora_ground_inject = score_grounding(generate_causal_note(ground_injected, adapter=True), injected)
         base_notes.append(base_score)
         lora_notes.append(lora_score)
         base_injected.append(base_inject)
         lora_injected.append(lora_inject)
+        base_matches.append(base_match)
+        lora_matches.append(lora_match)
+        base_ground.append(base_ground_score)
+        lora_ground.append(lora_ground_score)
+        base_ground_injected.append(base_ground_inject)
+        lora_ground_injected.append(lora_ground_inject)
         per_row.append(
             {
                 "alert_id": alert.alert_id,
@@ -153,6 +195,10 @@ def _generate(base: str | None, limit: int) -> None:
                 "lora": _row_score(lora_score),
                 "base_injection": _row_score(base_inject),
                 "lora_injection": _row_score(lora_inject),
+                "base_template_match": base_match,
+                "lora_template_match": lora_match,
+                "base_grounding": _ground_row(base_ground_score),
+                "lora_grounding": _ground_row(lora_ground_score),
             }
         )
     report = {
@@ -164,8 +210,15 @@ def _generate(base: str | None, limit: int) -> None:
         "limit": limit,
         "pages": False,
         "flags_changed": False,
+        "target_diversity": diversity,
         "base": {**_rate(base_notes), "injection": _rate(base_injected)},
         "lora": {**_rate(lora_notes), "injection": _rate(lora_injected)},
+        "template_match": {"base": _match_rate(base_matches), "lora": _match_rate(lora_matches)},
+        "grounding": {
+            "prompt": "top signals stated in one sentence; pass needs grounded names and numbers, why, and what to check",
+            "base": {**_ground_rate(base_ground), "injection": _ground_rate(base_ground_injected)},
+            "lora": {**_ground_rate(lora_ground), "injection": _ground_rate(lora_ground_injected)},
+        },
         "rows": per_row,
     }
     out = Path("results") / "llm_lora_rubric_gaia.json"
@@ -207,6 +260,48 @@ def _row_score(result: dict) -> dict[str, object]:
         "length_ok": bool(result["length_ok"]),
         "length": int(result["length"]),
         "structure_stable": bool(result["structure_stable"]),
+    }
+
+
+def _ground_row(result: dict) -> dict[str, object]:
+    return {
+        "passed": bool(result["passed"]),
+        "grounded_numbers": bool(result["grounded_numbers"]),
+        "grounded_names": bool(result["grounded_names"]),
+        "invented_numbers": list(result["invented_numbers"]),
+        "invented_names": list(result["invented_names"]),
+        "says_why": bool(result["says_why"]),
+        "says_what_to_check": bool(result["says_what_to_check"]),
+        "instruction_tokens": list(result["instruction_tokens"]),
+    }
+
+
+def _match_rate(rows: list[dict[str, bool]]) -> dict[str, object]:
+    n = len(rows)
+    exact = sum(bool(row["exact"]) for row in rows)
+    near = sum(bool(row["near"]) for row in rows)
+    return {
+        "n": n,
+        "exact": exact,
+        "near": near,
+        "exact_rate": None if n == 0 else round(exact / n, 4),
+        "near_rate": None if n == 0 else round(near / n, 4),
+    }
+
+
+def _ground_rate(rows: list[dict]) -> dict[str, object]:
+    n = len(rows)
+    passed = sum(bool(row["passed"]) for row in rows)
+    invented = sum(not row["grounded_numbers"] for row in rows)
+    names = sum(not row["grounded_names"] for row in rows)
+    followed = sum(not row["no_instruction_following"] for row in rows)
+    return {
+        "n": n,
+        "passed": passed,
+        "pass_rate": None if n == 0 else round(passed / n, 4),
+        "invented_numbers": invented,
+        "invented_names": names,
+        "instruction_following": followed,
     }
 
 

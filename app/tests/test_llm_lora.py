@@ -302,3 +302,81 @@ def test_lora_rows_do_not_include_a_fault_that_starts_later():
     rows = note_examples(alerts, [], until=T0 + pd.Timedelta(days=7))
     assert faults[0].fault_id not in rows[0]["prompt"]
     assert "f-later" not in rows[0]["reference"]
+
+
+def test_held_out_loss_scores_the_earliest_rows_in_batches():
+    from train_llm_lora import (
+        build_parser,
+        held_out_batches,
+        held_out_loss_sample,
+        pad_token_batch,
+        select_held_out_rows,
+    )
+
+    assert build_parser().parse_args([]).held_out_limit == 500
+    assert build_parser().parse_args(["--held-out-limit", "0"]).held_out_limit == 0
+    rows = [{"prompt": str(index), "reference": "same 1"} for index in range(10)]
+    assert [row["prompt"] for row in select_held_out_rows(rows, 3)] == ["0", "1", "2"]
+    assert select_held_out_rows(rows, 0) == rows
+    assert [len(batch) for batch in held_out_batches(rows, 4)] == [4, 4, 2]
+    padded = pad_token_batch([([1, 2], [-100, 7]), ([3], [-100])], pad_id=0)
+    assert padded["input_ids"] == [[1, 2], [3, 0]]
+    assert padded["labels"] == [[-100, 7], [-100, -100]]
+    assert padded["attention_mask"] == [[1, 1], [1, 0]]
+    mixed = [
+        {"prompt": "first", "reference": "alert 1"},
+        {"prompt": "copy", "reference": "alert 8"},
+        {"prompt": "other", "reference": "page 4"},
+    ]
+    assert [row["prompt"] for row in held_out_loss_sample(mixed, 500)] == ["first", "other"]
+    assert [row["prompt"] for row in held_out_loss_sample(mixed, 1)] == ["first"]
+    assert len(held_out_loss_sample(mixed, 0)) == 2
+
+
+def test_template_targets_are_repetitive_and_the_grounding_rubric_is_not_the_template():
+    """The training target is one template. Matching it is not a grounded explanation."""
+    from src.llm_lora import grounding_prompt, note_diversity, reference_note, score_grounding, template_match
+
+    notes = [
+        "alert on web (error). Top signals: severity_rank 3.",
+        "alert on web (error). Top signals: severity_rank 9.",
+        "alert on db (warning). Top signals: cpu 1.",
+    ]
+    diversity = note_diversity(notes)
+    assert diversity["rows"] == 3
+    assert diversity["unique_notes"] == 3
+    assert diversity["unique_ratio"] == 1.0
+    assert diversity["unique_skeletons"] == 2
+    assert diversity["near_duplicate_rows"] == 2
+    assert diversity["near_duplicate_ratio"] == round(2 / 3, 4)
+    repeated = note_diversity(["alert 1", "alert 1", "alert 1"])
+    assert repeated["unique_notes"] == 1
+    assert repeated["unique_ratio"] == round(1 / 3, 4)
+    assert repeated["near_duplicate_ratio"] == 1.0
+    assert note_diversity([])["unique_ratio"] is None
+
+    context = {
+        "kind": "alert",
+        "service": "web",
+        "severity": "error",
+        "shown_at": "2026-01-05T00:00:00+00:00",
+        "features": {"severity_rank": 3.0},
+        "top_signals": [{"name": "severity_rank", "value": 3.0}],
+        "template_counts": {"count_5m": 0, "count_15m": 0, "count_60m": 0},
+        "log_text": "disk full",
+    }
+    reference = reference_note(context)
+    prompt = grounding_prompt(context)
+    assert "The top signals are: severity_rank 3." in prompt
+    assert "what to check" in prompt
+    assert template_match(reference, reference) == {"exact": True, "near": True}
+    changed = reference.replace("3", "9", 1)
+    assert template_match(changed, reference) == {"exact": False, "near": True}
+    grounded = score_grounding("Check web because severity_rank is 3 and the disk is full.", context)
+    assert grounded["passed"] is True
+    assert score_grounding("Check web because severity_rank is 99999.", context)["grounded_numbers"] is False
+    assert score_grounding("Check web because kubernetes is 3.", context)["grounded_names"] is False
+    template_score = score_grounding(reference, context)
+    assert template_score["passed"] is False
+    assert template_score["says_what_to_check"] is False
+    assert template_score["says_why"] is False

@@ -342,3 +342,172 @@ def test_tiny_cpu_gnn_trains_and_round_trips(tmp_path):
     assert report["rcaeval"].startswith("pending")
     assert report["headline_k"] == 20
     assert report["headline"]["trace_model"]["decision"] in {"keep", "drop"}
+    assert report["headline"]["trace_residual"]["decision"] in {"keep", "drop"}
+    assert report["train_cases"] > 0
+    assert report["test_cases"] == report["test_faults"]
+
+
+def test_tiny_train_flags_fewer_than_twenty_cases():
+    from src.trace_eval import suite_day, tiny_train
+
+    assert tiny_train(7) is True
+    assert tiny_train(19) is True
+    assert tiny_train(20) is False
+    assert suite_day(0, "RE2") == 0
+    assert suite_day(6, "RE3") == 1006
+    with pytest.raises(ValueError):
+        suite_day(0, "RE1")
+
+
+def test_combined_suites_do_not_share_a_series_timestamp():
+    """RE2 and RE3 both start on 2024-01-01. The same series id must not repeat a timestamp."""
+    from run_rcaeval_logs import Case, base_config
+    from run_trace_eval import spread_case
+    from src.memory_spikes import detect_jumps
+
+    raw = Case("re2ob_cpu", 0, 1_700_000_000, 1_700_000_100, 1_700_001_000, "adservice", "cpu")
+    other = Case("re3ob_cpu", 0, 1_700_000_000, 1_700_000_100, 1_700_001_000, "adservice", "cpu")
+    assert raw.at(raw.start) == other.at(other.start)
+    left, left_day = spread_case(raw, "RE2")
+    right, right_day = spread_case(other, "RE3")
+    assert left_day == 0 and right_day == 0
+    assert right.at(right.start) - left.at(left.start) == pd.Timedelta(days=1000)
+    shared = pd.DataFrame(
+        {
+            "timestamp": [raw.at(raw.start), other.at(other.start)],
+            "value": [1.0, 2.0],
+            "service": ["adservice", "adservice"],
+            "series_id": ["adservice_cpu", "adservice_cpu"],
+        }
+    )
+    assert shared.duplicated(["series_id", "timestamp"]).any()
+    frame = pd.DataFrame(
+        {
+            "timestamp": [left.at(left.start), right.at(right.start)],
+            "value": [1.0, 2.0],
+            "service": ["adservice", "adservice"],
+            "series_id": ["adservice_cpu", "adservice_cpu"],
+        }
+    )
+    assert not frame.duplicated(["series_id", "timestamp"]).any()
+    assert isinstance(detect_jumps(frame, base_config()), list)
+
+
+def test_baseline_score_is_an_extra_column_and_a_separate_variant(monkeypatch):
+    """The five-feature model stays as it is. The residual copy adds the baseline score."""
+    import numpy as np
+
+    from src.trace_eval import TraceSpec, evaluate_traces, synthetic_traces
+    from src.trace_graph import NODE_FEATURES, CallGraph, with_baseline_feature
+
+    graph = CallGraph(
+        ["api", "db"],
+        np.ones((2, 5)),
+        np.zeros((2, 0), dtype=np.int64),
+        np.zeros((0, 3)),
+        {"api": 0.2, "db": 1.5},
+        {"api": 0.4, "db": 0.1},
+    )
+    extra = with_baseline_feature(graph)
+    assert len(NODE_FEATURES) == 5
+    assert graph.node_x.shape == (2, 5)
+    assert extra.node_x.shape == (2, 6)
+    assert extra.node_x[0, 5] == pytest.approx(0.4)
+    assert extra.node_x[1, 5] == pytest.approx(1.5)
+    assert extra.services == ["api", "db"]
+
+    widths: list[int] = []
+
+    def fake_fit(_spans, faults, _train_end, **kwargs):
+        graphs = kwargs.get("graphs")
+        width = 5 if not graphs else int(next(iter(graphs.values())).node_x.shape[1])
+        widths.append(width)
+
+        class _Archive:
+            backend = "plain"
+            device = "cpu"
+            fell_back = False
+            gnn_fell_back = False
+
+        archive = _Archive()
+        archive.width = width
+        return archive, "trained"
+
+    def fake_predict(archive, _spans, faults, **_kwargs):
+        if archive.width == 6:
+            return {fault.fault_id: fault.component for fault in faults}
+        return {fault.fault_id: "other" for fault in faults}
+
+    monkeypatch.setattr("src.trace_eval.fit_trace_model", fake_fit)
+    monkeypatch.setattr("src.trace_eval.predict_services", fake_predict)
+    spans, metrics, faults = synthetic_traces(seed=0)
+    report = evaluate_traces(
+        spans,
+        metrics,
+        faults,
+        config=Config(),
+        spec=TraceSpec(epochs=1, seed=0, backend="plain", budget_ks=(20,), headline_k=20),
+    )
+    assert widths == [5, 6]
+    assert report["headline"]["trace_model"]["faults_caught"] == 0
+    assert report["headline"]["trace_model"]["decision"] == "drop"
+    assert report["headline"]["trace_residual"]["faults_caught"] == report["test_cases"]
+    assert "against_baseline" in report["headline"]["trace_residual"]
+    assert report["pages"] is False
+
+
+def test_rcaeval_report_has_suite_system_and_pooled_counts(monkeypatch):
+    import numpy as np
+
+    from run_trace_eval import Recording, score_recordings
+    from src.trace_eval import TraceSpec, suite_day
+    from src.trace_graph import CallGraph
+
+    monkeypatch.setattr("src.trace_model.torch_stack_available", lambda: False)
+
+    def recording(suite: str, system: str, local_day: int) -> Recording:
+        start = pd.Timestamp("2024-01-01", tz="UTC") + pd.Timedelta(days=suite_day(local_day, suite), hours=1)
+        fault = Fault(f"{suite}-{system}-{local_day}", start, start + pd.Timedelta(minutes=20), "db", "cpu")
+        graph = CallGraph(
+            ["db"],
+            np.zeros((1, 5)),
+            np.zeros((2, 0), dtype=np.int64),
+            np.zeros((0, 3)),
+            {"db": 1.0},
+            {"db": 0.0},
+        )
+        return Recording(suite, system, local_day, fault, pd.DataFrame(), [], graph)
+
+    rows = [
+        recording(suite, system, day)
+        for suite in ("RE2", "RE3")
+        for system in ("ob", "tt")
+        for day in (0, 8)
+    ]
+    report = score_recordings(
+        rows,
+        spec=TraceSpec(epochs=1, seed=1, backend="plain", budget_ks=(20,), headline_k=20),
+        config=Config(),
+    )
+    assert set(report["by_suite"]) == {"RE2", "RE3"}
+    assert set(report["by_system"]) == {
+        "RE2/Online Boutique",
+        "RE2/Train Ticket",
+        "RE3/Online Boutique",
+        "RE3/Train Ticket",
+    }
+    assert report["by_suite"]["RE2"]["train_cases"] == 2
+    assert report["by_suite"]["RE2"]["test_cases"] == 2
+    assert report["by_suite"]["RE2"]["tiny_train"] is True
+    assert report["by_system"]["RE3/Train Ticket"]["train_cases"] == 1
+    assert report["by_system"]["RE3/Train Ticket"]["tiny_train"] is True
+    assert report["pooled"]["train_cases"] == 4
+    assert report["pooled"]["test_cases"] == 4
+    assert report["train_cases"] == 4
+    assert report["headline"]["trace_baseline"]["faults_caught"] == 4
+    assert report["headline"]["queue"]["faults_caught"] == 0
+    assert report["headline"]["trace_model"]["decision"] == "skipped"
+    assert report["headline"]["trace_residual"]["decision"] == "skipped"
+    assert "catch_ids" not in report["by_suite"]["RE2"]
+    assert report["pages"] is False
+    assert report["flags_changed"] is False
