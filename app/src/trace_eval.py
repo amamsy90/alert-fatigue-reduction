@@ -30,10 +30,34 @@ from .queue import (
     tune_confirm_thresholds,
 )
 from .ranker import caught_fault_ids
-from .trace_graph import CallGraph, baseline_service, build_graph, root_cause_hit
-from .trace_model import caught_ids, fit_trace_model, predict_services
+from .trace_graph import CallGraph, baseline_service, build_graph, root_cause_hit, with_baseline_feature
+from .trace_model import TraceArchive, _window_end, caught_ids, fit_trace_model, predict_services
 
 ORIGIN = pd.Timestamp("2026-01-05", tz="UTC")
+# RE2 keeps the day load_cases assigned. RE3 starts this many days later so the
+# two suites do not write the same series at the same timestamp.
+SUITE_DAY_BLOCK = 1000
+_SUITE_INDEX = {"RE2": 0, "RE3": 1}
+# A slice with fewer training cases than this is flagged. It is still scored.
+TINY_TRAIN_CASES = 20
+
+
+def suite_day(local_day: int, suite: str, *, block: int = SUITE_DAY_BLOCK) -> int:
+    """Day index that keeps one suite off another's clock.
+
+    Within a suite the local day is unchanged, so Online Boutique and Train
+    Ticket still share a day and compete for the same K.
+    """
+    try:
+        index = _SUITE_INDEX[suite]
+    except KeyError as exc:
+        raise ValueError(f"suite must be RE2 or RE3, not {suite!r}") from exc
+    return index * block + local_day
+
+
+def tiny_train(train_cases: int, *, floor: int = TINY_TRAIN_CASES) -> bool:
+    """True when a split has fewer than ``floor`` training cases."""
+    return train_cases < floor
 
 
 @dataclass
@@ -183,7 +207,28 @@ def evaluate_traces(
         model_ids = caught_ids(predicted, test_faults)
         status = "trained"
     baseline_ids = _baseline_ids(frame, test_faults, graphs)
+    residual_ids: set[str] | None = None
+    residual_status = status
+    residual_archive = None
+    if status != "torch-missing":
+        extra = _baseline_feature_graphs(frame, faults, graphs, boundary)
+        residual_archive, residual_status = fit_trace_model(
+            frame,
+            faults,
+            boundary,
+            hidden=spec.hidden,
+            epochs=spec.epochs,
+            seed=spec.seed,
+            device=spec.device,
+            backend=spec.backend,
+            graphs=extra,
+        )
+        if residual_archive is not None:
+            predicted = predict_services(residual_archive, frame, test_faults, not_before=boundary, graphs=extra)
+            residual_ids = caught_ids(predicted, test_faults)
+            residual_status = "trained"
     by_k: dict[str, dict] = {}
+    catch_ids: dict[str, dict[str, list[str]]] = {}
     for budget in spec.budget_ks:
         cfg = replace(config, budget_k=budget)
         if metrics.empty:
@@ -199,39 +244,159 @@ def evaluate_traces(
                 "decision": "baseline",
             },
             "trace_baseline": _decision(queue_ids, baseline_ids, test_faults, spec.seed),
-            "trace_model": (
-                _model_decision(queue_ids, baseline_ids, model_ids, test_faults, spec.seed)
-                if model_ids is not None
-                else {
-                    "status": status,
-                    "decision": "skipped",
-                    "reason": status,
-                    "per_fault_catch_delta": None,
-                }
+            "trace_model": _variant_row(queue_ids, baseline_ids, model_ids, test_faults, spec.seed, status),
+            "trace_residual": _variant_row(
+                queue_ids, baseline_ids, residual_ids, test_faults, spec.seed, residual_status
             ),
         }
         by_k[str(budget)] = entry
+        catch_ids[str(budget)] = {
+            "queue": sorted(queue_ids),
+            "trace_baseline": sorted(baseline_ids),
+            "trace_model": sorted(model_ids or ()),
+            "trace_residual": sorted(residual_ids or ()),
+        }
     headline = by_k[str(spec.headline_k)]
+    train_cases = sum(1 for fault in faults if _utc(fault.start) < boundary)
+    if dataset == "synthetic":
+        split = "first week train, later days test"
+    elif dataset == "rcaeval":
+        split = "first week of each suite train, later days of that suite test"
+    else:
+        split = "first half of cases train, later half test"
     return {
         "dataset": dataset,
         "gaia": "pending: this run did not score GAIA",
         "rcaeval": "pending: this run did not score RCAEval" if dataset != "rcaeval" else "scored",
-        "split": "first week train, later days test" if dataset == "synthetic" else "first half of cases train, later half test",
+        "split": split,
         "headline_k": spec.headline_k,
         "pages": False,
         "flags_changed": False,
-        "trace_model": {
-            "status": status,
-            "backend": None if archive is None else archive.backend,
-            "device": None if archive is None else archive.device,
-            "fell_back": None if archive is None else archive.fell_back,
-            "gnn_fell_back": None if archive is None else archive.gnn_fell_back,
-            "pages": False,
+        "trace_model": _model_block(archive, status),
+        "trace_residual": {
+            **_model_block(residual_archive, residual_status),
+            "features": "five node features plus max(error_jump, latency_jump)",
         },
         "headline": headline,
         "by_k": by_k,
+        "catch_ids": catch_ids,
+        "train_cases": train_cases,
+        "test_cases": len(test_faults),
+        "tiny_train": tiny_train(train_cases),
         "test_faults": len(test_faults),
         "false_items_note": "the trace model nominates one service and adds no queue item",
+    }
+
+
+def _baseline_feature_graphs(
+    spans: pd.DataFrame,
+    faults: list[Fault],
+    graphs: dict[str, CallGraph] | None,
+    boundary: pd.Timestamp,
+) -> dict[str, CallGraph]:
+    """Same windows as the five-feature model, plus the baseline score column."""
+    limit = _utc(boundary)
+    extra: dict[str, CallGraph] = {}
+    for fault in faults:
+        if graphs is not None and fault.fault_id in graphs:
+            graph = graphs[fault.fault_id]
+        else:
+            end = _window_end(fault, limit) if _utc(fault.start) < limit else _utc(fault.end)
+            if end <= _utc(fault.start):
+                continue
+            graph = build_graph(spans, fault.start, end)
+        extra[fault.fault_id] = with_baseline_feature(graph)
+    return extra
+
+
+def _variant_row(
+    queue_ids: set[str],
+    baseline_ids: set[str],
+    model_ids: set[str] | None,
+    faults: list[Fault],
+    seed: int,
+    status: str,
+) -> dict:
+    if model_ids is None:
+        return {
+            "status": status,
+            "decision": "skipped",
+            "reason": status,
+            "per_fault_catch_delta": None,
+        }
+    return _model_decision(queue_ids, baseline_ids, model_ids, faults, seed)
+
+
+def _model_block(archive: TraceArchive | None, status: str) -> dict:
+    return {
+        "status": status,
+        "backend": None if archive is None else archive.backend,
+        "device": None if archive is None else archive.device,
+        "fell_back": None if archive is None else archive.fell_back,
+        "gnn_fell_back": None if archive is None else archive.gnn_fell_back,
+        "pages": False,
+    }
+
+
+def combine_suite_scores(
+    suite_reports: dict[str, dict],
+    test_faults: list[Fault],
+    *,
+    train_cases: int,
+    model_ids: set[str] | None,
+    model_status: str,
+    model_archive: TraceArchive | None,
+    residual_ids: set[str] | None,
+    residual_status: str,
+    residual_archive: TraceArchive | None,
+    spec: TraceSpec,
+) -> dict:
+    """Pooled scores. The queue is the union of the per-suite queues.
+
+    K is not applied again across suites. ``model_ids`` come from one fit on
+    every training case. The keep rule is the same one used for a single suite.
+    """
+    by_k: dict[str, dict] = {}
+    for budget in spec.budget_ks:
+        key = str(budget)
+        queue_ids: set[str] = set()
+        baseline_ids: set[str] = set()
+        for report in suite_reports.values():
+            caught = report["catch_ids"][key]
+            queue_ids.update(caught["queue"])
+            baseline_ids.update(caught["trace_baseline"])
+        test_ids = {fault.fault_id for fault in test_faults}
+        queue_ids &= test_ids
+        baseline_ids &= test_ids
+        by_k[key] = {
+            "queue": {
+                "faults_caught": len(queue_ids),
+                "faults": len(test_faults),
+                "false_items_per_day": None,
+                "decision": "baseline",
+            },
+            "trace_baseline": _decision(queue_ids, baseline_ids, test_faults, spec.seed),
+            "trace_model": _variant_row(queue_ids, baseline_ids, model_ids, test_faults, spec.seed, model_status),
+            "trace_residual": _variant_row(
+                queue_ids, baseline_ids, residual_ids, test_faults, spec.seed, residual_status
+            ),
+        }
+    return {
+        "headline_k": spec.headline_k,
+        "headline": by_k[str(spec.headline_k)],
+        "by_k": by_k,
+        "train_cases": train_cases,
+        "test_cases": len(test_faults),
+        "tiny_train": tiny_train(train_cases),
+        "trace_model": _model_block(model_archive, model_status),
+        "trace_residual": {
+            **_model_block(residual_archive, residual_status),
+            "features": "five node features plus max(error_jump, latency_jump)",
+        },
+        "false_items_note": (
+            "pooled queue catches are the union of the per-suite queues; "
+            "K is not applied again across suites"
+        ),
     }
 
 
