@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -563,3 +564,183 @@ def test_pooled_false_per_day_sums_false_items_and_suite_days():
         "RE3": {"by_k": {"20": {"queue": {"false_items": None, "n_days": None}}}},
     }
     assert pooled_false_per_day(missing, "20") is None
+
+
+def test_cuda_determinism_seeds_the_fit_and_the_epoch_order(monkeypatch):
+    """The trace fit uses the TCN switches, a cuBLAS workspace, and a CPU epoch order."""
+    from src.torch_determinism import (
+        CUBLAS_WORKSPACE,
+        apply_cuda_determinism,
+        enable_cublas_workspace,
+        epoch_order,
+        prefer_deterministic_scatter,
+    )
+
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    assert enable_cublas_workspace() == CUBLAS_WORKSPACE
+    assert os.environ["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
+    assert epoch_order(8, 42, 0) == epoch_order(8, 42, 0)
+    assert epoch_order(8, 42, 0) != epoch_order(8, 42, 1)
+    assert prefer_deterministic_scatter(object(), 42) == "pyg-unavailable"
+
+    class _Cuda:
+        def manual_seed_all(self, seed: int) -> None:
+            self.seed = seed
+
+    class _Flag:
+        deterministic = False
+        benchmark = True
+        allow_tf32 = True
+
+    class _Matmul:
+        allow_tf32 = True
+
+    class _Backends:
+        def __init__(self) -> None:
+            self.cudnn = _Flag()
+            self.cuda = type("CudaBackend", (), {"matmul": _Matmul()})()
+
+    class _Torch:
+        def __init__(self) -> None:
+            self.seed = None
+            self.warn_only = None
+            self.cuda = _Cuda()
+            self.backends = _Backends()
+
+        def manual_seed(self, seed: int) -> None:
+            self.seed = seed
+
+        def use_deterministic_algorithms(self, enabled: bool, warn_only: bool = False) -> None:
+            self.enabled = enabled
+            self.warn_only = warn_only
+
+        def are_deterministic_algorithms_enabled(self) -> bool:
+            return True
+
+    fake = _Torch()
+    applied = apply_cuda_determinism(fake, "cuda", 42)
+    assert fake.seed == 42
+    assert fake.cuda.seed == 42
+    assert fake.backends.cudnn.deterministic is True
+    assert fake.backends.cudnn.benchmark is False
+    assert fake.backends.cudnn.allow_tf32 is False
+    assert fake.backends.cuda.matmul.allow_tf32 is False
+    assert fake.warn_only is True
+    assert "deterministic_algorithms_warn_only" in applied
+    assert ":4096:8" in applied
+    cpu = _Torch()
+    assert "manual_seed" in apply_cuda_determinism(cpu, "cpu", 7)
+    assert cpu.seed == 7
+    assert not hasattr(cpu.cuda, "seed")
+
+
+def test_seed_rule_keeps_only_a_majority_with_a_positive_mean_delta():
+    """One seed above zero is not a keep. More than half, and the pooled interval, are."""
+    from run_trace_eval import parse_seeds, score_seeds
+    from src.trace_eval import seed_level_decision
+
+    assert parse_seeds(42, "") == [42]
+    assert parse_seeds(1, "42,0,1,2,3") == [42, 0, 1, 2, 3]
+    with pytest.raises(SystemExit):
+        parse_seeds(42, "42,nope")
+
+    faults = [f"f{i}" for i in range(8)]
+
+    def catch(decision: str, caught: list[str]) -> dict:
+        return {
+            "fault_ids": faults,
+            "queue": [],
+            "trace_baseline": [],
+            "trace_model": None if decision == "skipped" else caught,
+            "trace_residual": None,
+            "decisions": {"trace_model": decision, "trace_residual": "skipped"},
+        }
+
+    all_caught = faults
+    majority = seed_level_decision(
+        [catch("keep", all_caught), catch("keep", all_caught), catch("keep", all_caught),
+         catch("drop", []), catch("drop", [])],
+        variant="trace_model",
+    )
+    assert majority["decision"] == "keep"
+    assert majority["seeds_kept"] == 3
+    assert majority["seeds_scored"] == 5
+    assert majority["against_baseline"]["low"] > 0
+    short = seed_level_decision(
+        [catch("keep", all_caught), catch("keep", all_caught), catch("drop", []),
+         catch("drop", []), catch("drop", [])],
+        variant="trace_model",
+    )
+    assert short["decision"] == "drop"
+    assert short["majority"] is False
+    tied = seed_level_decision([catch("keep", all_caught), catch("drop", [])], variant="trace_model")
+    assert tied["decision"] == "drop"
+    flat = seed_level_decision(
+        [catch("keep", all_caught), catch("keep", all_caught), catch("keep", all_caught)],
+        variant="trace_model",
+    )
+    # The constructed "keep" rows still have to beat the baseline in the ids.
+    assert flat["decision"] == "keep"
+    same = seed_level_decision(
+        [
+            {
+                "fault_ids": faults,
+                "queue": faults,
+                "trace_baseline": faults,
+                "trace_model": faults,
+                "trace_residual": None,
+                "decisions": {"trace_model": "keep", "trace_residual": "skipped"},
+            }
+            for _ in range(3)
+        ],
+        variant="trace_model",
+    )
+    assert same["majority"] is True
+    assert same["decision"] == "drop"
+    assert same["against_baseline"]["low"] == 0
+    only = seed_level_decision(
+        [catch("skipped", []), catch("keep", all_caught)],
+        variant="trace_model",
+    )
+    assert only["seeds_scored"] == 1
+    assert only["seeds_skipped"] == 1
+    assert only["decision"] == "keep"
+    assert seed_level_decision([], variant="trace_model")["decision"] == "skipped"
+
+    def report(seed: int, decision: str, caught: list[str]) -> dict:
+        return {
+            "seed": seed,
+            "headline_k": 20,
+            "gaia": "pending",
+            "rcaeval": "scored",
+            "headline": {
+                "queue": {"decision": "baseline", "faults_caught": 0},
+                "trace_baseline": {"decision": "drop"},
+                "trace_model": {"decision": decision, "faults_caught": len(caught), "reason": "one seed"},
+                "trace_residual": {"decision": "skipped", "reason": "skipped"},
+            },
+            "trace_model": {"status": "trained"},
+            "_catch": catch(decision, caught),
+            "by_suite": {"RE2": {"catch_ids": ["secret"]}},
+        }
+
+    combined = score_seeds(
+        [
+            report(42, "keep", all_caught),
+            report(0, "keep", all_caught),
+            report(1, "keep", all_caught),
+            report(2, "drop", []),
+            report(3, "drop", []),
+        ]
+    )
+    assert combined["seeds"] == [42, 0, 1, 2, 3]
+    assert combined["headline"]["trace_model"]["decision"] == "keep"
+    assert combined["seed_rule"]["trace_model"]["seeds_kept"] == 3
+    assert combined["by_seed"][0]["headline"]["trace_model"]["decision"] == "keep"
+    assert "_catch" not in combined
+    assert "catch_ids" not in combined["by_seed"][0]["by_suite"]["RE2"]
+    refused = score_seeds(
+        [report(42, "keep", all_caught), report(0, "drop", []), report(1, "drop", [])]
+    )
+    assert refused["headline"]["trace_model"]["decision"] == "drop"
+    assert "majority" in refused["headline"]["trace_model"]["reason"]

@@ -129,16 +129,19 @@ def train_state(
 
     if not graphs:
         raise ValueError("no graphs")
-    torch.manual_seed(seed)
+    from .torch_determinism import apply_cuda_determinism, epoch_order
+
+    switches = apply_cuda_determinism(torch, device, seed)
+    print(f"trace determinism {' '.join(switches)}", flush=True)
     n_node = int(graphs[0].node_x.shape[1])
     n_edge = 3
     model = _build(backend, n_node, n_edge, hidden).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=1e-2)
     loss_fn = nn.CrossEntropyLoss()
     model.train()
-    for _epoch in range(max(1, epochs)):
-        order = torch.randperm(len(graphs))
-        for index in order.tolist():
+    for epoch in range(max(1, epochs)):
+        order = epoch_order(len(graphs), seed, epoch)
+        for index in order:
             graph = graphs[index]
             if graph.node_x.shape[0] == 0:
                 continue

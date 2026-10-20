@@ -238,7 +238,7 @@ def evaluate_traces(
             residual_ids = caught_ids(predicted, test_faults)
             residual_status = "trained"
     by_k: dict[str, dict] = {}
-    catch_ids: dict[str, dict[str, list[str]]] = {}
+    catch_ids: dict[str, dict[str, list[str] | None]] = {}
     for budget in spec.budget_ks:
         cfg = replace(config, budget_k=budget)
         if metrics.empty:
@@ -269,10 +269,11 @@ def evaluate_traces(
         }
         by_k[str(budget)] = entry
         catch_ids[str(budget)] = {
+            "fault_ids": [fault.fault_id for fault in test_faults],
             "queue": sorted(queue_ids),
             "trace_baseline": sorted(baseline_ids),
-            "trace_model": sorted(model_ids or ()),
-            "trace_residual": sorted(residual_ids or ()),
+            "trace_model": None if model_ids is None else sorted(model_ids),
+            "trace_residual": None if residual_ids is None else sorted(residual_ids),
         }
     headline = by_k[str(spec.headline_k)]
     train_cases = sum(1 for fault in faults if _utc(fault.start) < boundary)
@@ -288,6 +289,7 @@ def evaluate_traces(
         "rcaeval": "pending: this run did not score RCAEval" if dataset != "rcaeval" else "scored",
         "split": split,
         "headline_k": spec.headline_k,
+        "seed": spec.seed,
         "pages": False,
         "flags_changed": False,
         "trace_model": _model_block(archive, status),
@@ -440,6 +442,99 @@ def combine_suite_scores(
             "pooled queue catches are the union of the per-suite queues; "
             "false items per day is the sum of false items divided by the sum of suite days"
         ),
+    }
+
+
+def _interval(values: list[float], seed: int) -> dict[str, float | int]:
+    interval = bootstrap_mean_ci(values, seed=seed)
+    return {
+        "mean": round(interval.mean, 4),
+        "low": round(interval.low, 4),
+        "high": round(interval.high, 4),
+        "n": interval.n,
+    }
+
+
+def seed_level_decision(catches: list[dict], *, variant: str, seed: int = 42) -> dict:
+    """Keep only on a clear majority of seeds and a positive mean-delta interval.
+
+    A clear majority is strictly more than half of the seeds that were scored.
+    A skipped seed is not in that count. For each fault, the delta is the
+    mean across those seeds of (model caught it) minus (the comparison caught
+    it). The 95% interval of that mean, bootstrap seed 42, must lie above 0
+    against both the queue and the trace baseline. One scored seed is a
+    majority of one, so a single seed keeps only when its own interval does.
+    """
+    scored = [
+        row
+        for row in catches
+        if row.get("decisions", {}).get(variant) != "skipped" and row.get(variant) is not None
+    ]
+    skipped = len(catches) - len(scored)
+    if not scored:
+        return {
+            "decision": "skipped",
+            "reason": "no scored seed",
+            "seeds_kept": 0,
+            "seeds_scored": 0,
+            "seeds_skipped": skipped,
+            "majority": False,
+            "against_queue": None,
+            "against_baseline": None,
+            "faults_caught_by_seed": [],
+            "pages": False,
+        }
+    keeps = sum(1 for row in scored if row["decisions"][variant] == "keep")
+    majority = keeps * 2 > len(scored)
+    fault_ids = list(scored[0]["fault_ids"])
+    against_queue: list[float] = []
+    against_baseline: list[float] = []
+    for fault_id in fault_ids:
+        queue_delta: list[float] = []
+        baseline_delta: list[float] = []
+        for row in scored:
+            hit = float(fault_id in row[variant])
+            queue_delta.append(hit - float(fault_id in row["queue"]))
+            baseline_delta.append(hit - float(fault_id in row["trace_baseline"]))
+        against_queue.append(sum(queue_delta) / len(queue_delta))
+        against_baseline.append(sum(baseline_delta) / len(baseline_delta))
+    if not fault_ids:
+        return {
+            "decision": "skipped",
+            "reason": "no held-out faults",
+            "seeds_kept": keeps,
+            "seeds_scored": len(scored),
+            "seeds_skipped": skipped,
+            "majority": majority,
+            "against_queue": None,
+            "against_baseline": None,
+            "faults_caught_by_seed": [len(row[variant]) for row in scored],
+            "pages": False,
+        }
+    queue_ci = _interval(against_queue, seed)
+    baseline_ci = _interval(against_baseline, seed)
+    intervals_ok = float(queue_ci["low"]) > 0.0 and float(baseline_ci["low"]) > 0.0
+    keep = majority and intervals_ok
+    if keep:
+        reason = (
+            "kept on a clear majority of seeds, and the mean per-fault catch "
+            "difference stays above 0 against both the queue and the trace baseline"
+        )
+    elif not majority:
+        reason = "not a clear majority of scored seeds"
+    else:
+        reason = "the mean per-fault catch difference does not stay above 0"
+    return {
+        "decision": "keep" if keep else "drop",
+        "reason": reason,
+        "seeds_kept": keeps,
+        "seeds_scored": len(scored),
+        "seeds_skipped": skipped,
+        "majority": majority,
+        "against_queue": queue_ci,
+        "against_baseline": baseline_ci,
+        "faults_caught_by_seed": [len(row[variant]) for row in scored],
+        "pages": False,
     }
 
 

@@ -194,6 +194,12 @@ def main() -> None:
     device = args.device
     if device.startswith("cuda") and not torch.cuda.is_available():
         device = "cpu"
+    from src.torch_determinism import apply_cuda_determinism
+
+    # Seed before the adapter is initialised. LoRA init draws weights, and a
+    # seed applied afterwards leaves that draw unseeded. CUDA can still write
+    # a different hash; see docs/ML_MODELS.md.
+    print(f"lora determinism {' '.join(apply_cuda_determinism(torch, device, args.seed))}", flush=True)
     train_rows, held_rows = _examples(args.data, args.seed)
     diversity = {
         "train": note_diversity([row["reference"] for row in train_rows]),
@@ -215,7 +221,7 @@ def main() -> None:
             target_modules=["q_proj", "v_proj"],
         ),
     )
-    torch.manual_seed(args.seed)
+    apply_cuda_determinism(torch, device, args.seed)
     optim = torch.optim.AdamW((param for param in model.parameters() if param.requires_grad), lr=1e-4)
     train_loss = None
     held_out_loss = None
