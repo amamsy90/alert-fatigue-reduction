@@ -14,6 +14,7 @@ dataset here. RCAEval is scored only when ``traces.parquet`` is on disk.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import resource
 import time
@@ -26,10 +27,12 @@ from run_rcaeval_logs import ROOT as CASE_ROOT
 from run_rcaeval_logs import SYSTEMS, Case, base_config, case_alerts, case_metrics, load_cases
 from src.config import Config
 from src.entities import Alert, Fault
+from src.torch_determinism import enable_cublas_workspace
 from src.trace_eval import (
     TraceSpec,
     combine_suite_scores,
     evaluate_traces,
+    seed_level_decision,
     suite_day,
     synthetic_traces,
     tiny_train,
@@ -37,6 +40,8 @@ from src.trace_eval import (
 from src.trace_graph import CallGraph, build_graph, normalize_spans, with_baseline_feature
 from src.trace_model import TraceArchive, _utc, caught_ids, fit_trace_model, predict_services
 from src.tracking import record_run
+
+enable_cublas_workspace()
 
 ROOT = Path("data/rcaeval_re23")
 # Sock Shop recordings have no traces in RCAEval. Online Boutique and Train Ticket do.
@@ -398,8 +403,126 @@ def score_recordings(rows: list[Recording], *, spec: TraceSpec, config: Config) 
         "by_system": {name: _public(body) for name, body in by_system.items()},
         "false_items_note": pooled["false_items_note"],
         "test_faults": len(test_rows),
+        "seed": spec.seed,
+        "_catch": _pooled_catch(
+            by_suite,
+            [row.fault.fault_id for row in test_rows],
+            spec.headline_k,
+            None if archive is None else model_ids,
+            None if residual_archive is None else residual_ids,
+            pooled["headline"],
+        ),
     }
     return report
+
+
+def _pooled_catch(
+    by_suite: dict[str, dict],
+    fault_ids: list[str],
+    headline_k: int,
+    model_ids: set[str] | None,
+    residual_ids: set[str] | None,
+    headline: dict,
+) -> dict:
+    """Catch sets for the seed rule. Stripped before the JSON is written."""
+    key = str(headline_k)
+    queue: set[str] = set()
+    baseline: set[str] = set()
+    test_ids = set(fault_ids)
+    for body in by_suite.values():
+        caught = body["catch_ids"][key]
+        queue.update(caught["queue"])
+        baseline.update(caught["trace_baseline"])
+    return {
+        "fault_ids": list(fault_ids),
+        "queue": sorted(queue & test_ids),
+        "trace_baseline": sorted(baseline & test_ids),
+        "trace_model": None if model_ids is None else sorted(model_ids),
+        "trace_residual": None if residual_ids is None else sorted(residual_ids),
+        "decisions": {
+            "trace_model": headline["trace_model"]["decision"],
+            "trace_residual": headline["trace_residual"]["decision"],
+        },
+    }
+
+
+def parse_seeds(seed: int, text: str) -> list[int]:
+    """``--seeds`` when it is set, otherwise the single ``--seed``."""
+    if not str(text).strip():
+        return [seed]
+    try:
+        return [int(part) for part in str(text).split(",") if part.strip()]
+    except ValueError as exc:
+        raise SystemExit(f"--seeds must be comma-separated integers, got {text!r}") from exc
+
+
+def _strip_private(report: dict) -> dict:
+    report.pop("_catch", None)
+    report.pop("catch_ids", None)
+    for body in list(report.get("by_suite", {}).values()) + list(report.get("by_system", {}).values()):
+        if isinstance(body, dict):
+            body.pop("catch_ids", None)
+            body.pop("_catch", None)
+    return report
+
+
+def _catch_row(report: dict) -> dict:
+    catch = report.get("_catch")
+    if catch is None:
+        headline_k = str(report["headline_k"])
+        caught = report.get("catch_ids", {}).get(headline_k, {})
+        headline = report["headline"]
+        catch = {
+            "fault_ids": list(caught.get("fault_ids") or []),
+            "queue": list(caught.get("queue") or []),
+            "trace_baseline": list(caught.get("trace_baseline") or []),
+            "trace_model": caught.get("trace_model"),
+            "trace_residual": caught.get("trace_residual"),
+            "decisions": {
+                "trace_model": headline["trace_model"]["decision"],
+                "trace_residual": headline["trace_residual"]["decision"],
+            },
+        }
+    return catch
+
+
+def score_seeds(reports: list[dict]) -> dict:
+    """One report per seed, plus the majority rule on the pooled faults.
+
+    Queue and baseline do not depend on the seed. The top headline uses the
+    seed rule when more than one seed was scored, so one lucky seed is not
+    the result. ``by_seed`` keeps each seed's own headline.
+    """
+    if not reports:
+        raise ValueError("no seeds")
+    catches = [_catch_row(report) for report in reports]
+    rule = {
+        "rule": (
+            "keep only when more than half of the scored seeds keep and the "
+            "mean per-fault catch difference, averaged across those seeds, "
+            "has a 95% interval above 0 against both the queue and the trace baseline"
+        ),
+        "bootstrap_seed": 42,
+        "pages": False,
+        "trace_model": seed_level_decision(catches, variant="trace_model"),
+        "trace_residual": seed_level_decision(catches, variant="trace_residual"),
+    }
+    combined = copy.deepcopy(reports[0])
+    combined["seeds"] = [int(report["seed"]) for report in reports]
+    combined["seed_rule"] = rule
+    combined["by_seed"] = [_strip_private(copy.deepcopy(report)) for report in reports]
+    _strip_private(combined)
+    if len(reports) > 1:
+        for variant in ("trace_model", "trace_residual"):
+            decision = rule[variant]
+            row = combined["headline"][variant]
+            row["decision"] = decision["decision"]
+            row["reason"] = decision["reason"]
+            row["per_fault_catch_delta"] = decision["against_baseline"]
+            row["faults_caught_by_seed"] = decision["faults_caught_by_seed"]
+            row["seeds_kept"] = decision["seeds_kept"]
+            row["seeds_scored"] = decision["seeds_scored"]
+    return combined
 
 
 def _print_block(label: str, report: dict) -> None:
@@ -438,8 +561,14 @@ def main() -> None:
     parser.add_argument("--backend", default="plain", choices=("auto", "plain", "pyg"))
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--seeds",
+        default="",
+        help="Comma-separated fit seeds. Each seed is reported. Keep needs a strict majority and a positive mean-delta interval.",
+    )
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
+    seeds = parse_seeds(args.seed, args.seeds)
     skipped: list[str] = []
     if args.data == "rcaeval":
         missing = cases_missing_message()
@@ -465,33 +594,46 @@ def main() -> None:
         seed=args.seed,
         hidden=16 if dataset == "rcaeval" else 8,
     )
-    print("scoring the trace model, the jump baseline, and the queue", flush=True)
-    if recordings is not None:
-        report = score_recordings(recordings, spec=spec, config=config)
-        report["cases"] = len(recordings)
-        report["max_cases"] = args.max_cases
-    else:
-        report = evaluate_traces(
-            spans,
-            metrics,
-            faults,
-            alerts,
-            config=config,
-            spec=spec,
-            dataset=dataset,
-        )
-        report.pop("catch_ids", None)
-        report["rcaeval"] = "pending: this run did not score RCAEval"
-    report["traces_skipped"] = skipped
+    print(f"scoring the trace model, the jump baseline, and the queue seeds={seeds}", flush=True)
+    per_seed: list[dict] = []
+    for seed in seeds:
+        one_spec = replace(spec, seed=seed)
+        print(f"seed {seed}", flush=True)
+        if recordings is not None:
+            one = score_recordings(recordings, spec=one_spec, config=config)
+            one["cases"] = len(recordings)
+            one["max_cases"] = args.max_cases
+        else:
+            one = evaluate_traces(
+                spans,
+                metrics,
+                faults,
+                alerts,
+                config=config,
+                spec=one_spec,
+                dataset=dataset,
+            )
+            one["rcaeval"] = "pending: this run did not score RCAEval"
+        one["traces_skipped"] = skipped
+        per_seed.append(one)
+    report = score_seeds(per_seed)
     out = Path(args.out) if args.out else Path("results") / f"trace_eval_{dataset}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"dataset": dataset, "out": str(out), "gaia": report["gaia"], "rcaeval": report["rcaeval"]}))
-    _print_block("pooled" if dataset == "rcaeval" else "synthetic", report)
-    for name, body in report.get("by_suite", {}).items():
-        _print_block(name, body)
-    for name, body in report.get("by_system", {}).items():
-        _print_block(name, body)
+    for one in report["by_seed"]:
+        _print_block(f"seed {one['seed']}", one)
+        for name, body in one.get("by_suite", {}).items():
+            _print_block(f"seed {one['seed']} {name}", body)
+        for name, body in one.get("by_system", {}).items():
+            _print_block(f"seed {one['seed']} {name}", body)
+    for name in ("trace_model", "trace_residual"):
+        row = report["seed_rule"][name]
+        print(
+            f"seed-rule {name} decision={row['decision']} "
+            f"kept={row['seeds_kept']}/{row['seeds_scored']} {row['reason']}",
+            flush=True,
+        )
     record_run(
         f"trace_eval_{dataset}",
         config=config,
