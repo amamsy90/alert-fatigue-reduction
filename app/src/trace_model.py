@@ -157,11 +157,11 @@ def fit_trace_model(
     """Train on fault windows that start before ``train_end``."""
     if not torch_stack_available():
         return None, "torch-missing"
-    from .trace_gnn import resolve_gnn_backend, resolve_torch_device, train_state
-
     windows, labels = training_graphs(spans, faults, train_end, graphs)
     if len(windows) < MIN_WINDOWS:
-        return None, "too-few-windows"
+        return None, f"too-few-windows:{len(windows)}<{MIN_WINDOWS}"
+    from .trace_gnn import resolve_gnn_backend, resolve_torch_device, train_state
+
     used, fell_back = resolve_torch_device(device)
     gnn_backend, gnn_fell_back = resolve_gnn_backend(backend)
     state = train_state(

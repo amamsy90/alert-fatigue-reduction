@@ -31,7 +31,7 @@ from .queue import (
 )
 from .ranker import caught_fault_ids
 from .trace_graph import CallGraph, baseline_service, build_graph, root_cause_hit, with_baseline_feature
-from .trace_model import TraceArchive, _window_end, caught_ids, fit_trace_model, predict_services
+from .trace_model import MIN_WINDOWS, TraceArchive, _window_end, caught_ids, fit_trace_model, predict_services
 
 ORIGIN = pd.Timestamp("2026-01-05", tz="UTC")
 # RE2 keeps the day load_cases assigned. RE3 starts this many days later so the
@@ -76,6 +76,16 @@ def _utc(stamp: pd.Timestamp) -> pd.Timestamp:
     if value.tzinfo is None:
         return value.tz_localize("UTC")
     return value.tz_convert("UTC")
+
+
+def model_skip_reason(status: str) -> str:
+    """A sentence for a slice that was not fit. Other statuses pass through."""
+    if str(status).startswith("too-few-windows"):
+        return (
+            f"skipped ({status}): a model is fit only when at least {MIN_WINDOWS} "
+            "training windows contain the root-cause service. This slice was not scored."
+        )
+    return status
 
 
 def _decision(base: set[str], cand: set[str], faults: list[Fault], seed: int) -> dict:
@@ -233,13 +243,21 @@ def evaluate_traces(
         cfg = replace(config, budget_k=budget)
         if metrics.empty:
             queue_ids: set[str] = set()
-            queue_row = {"faults_caught": 0, "faults": len(test_faults), "false_items_per_day": None}
+            queue_row = {
+                "faults_caught": 0,
+                "faults": len(test_faults),
+                "false_items": None,
+                "n_days": None,
+                "false_items_per_day": None,
+            }
         else:
             queue_ids, queue_row = _queue_scored(metrics, alerts, faults, cfg, boundary, stop)
         entry: dict = {
             "queue": {
                 "faults_caught": queue_row["faults_caught"],
                 "faults": queue_row["faults"],
+                "false_items": queue_row.get("false_items"),
+                "n_days": queue_row.get("n_days"),
                 "false_items_per_day": queue_row["false_items_per_day"],
                 "decision": "baseline",
             },
@@ -321,14 +339,14 @@ def _variant_row(
         return {
             "status": status,
             "decision": "skipped",
-            "reason": status,
+            "reason": model_skip_reason(status),
             "per_fault_catch_delta": None,
         }
     return _model_decision(queue_ids, baseline_ids, model_ids, faults, seed)
 
 
 def _model_block(archive: TraceArchive | None, status: str) -> dict:
-    return {
+    block = {
         "status": status,
         "backend": None if archive is None else archive.backend,
         "device": None if archive is None else archive.device,
@@ -336,6 +354,31 @@ def _model_block(archive: TraceArchive | None, status: str) -> dict:
         "gnn_fell_back": None if archive is None else archive.gnn_fell_back,
         "pages": False,
     }
+    if archive is None:
+        block["reason"] = model_skip_reason(status)
+        block["skipped"] = True
+    return block
+
+
+def pooled_false_per_day(suite_reports: dict[str, dict], budget: str) -> float | None:
+    """False items per day across suites. Each suite keeps its own day count.
+
+    The rate is the sum of false items divided by the sum of scored days.
+    K is still applied inside each suite.
+    """
+    items = 0
+    days = 0
+    for report in suite_reports.values():
+        row = report["by_k"][budget]["queue"]
+        false_items = row.get("false_items")
+        n_days = row.get("n_days")
+        if false_items is None or n_days is None or n_days <= 0:
+            return None
+        items += int(false_items)
+        days += int(n_days)
+    if days <= 0:
+        return None
+    return round(items / days, 2)
 
 
 def combine_suite_scores(
@@ -372,7 +415,7 @@ def combine_suite_scores(
             "queue": {
                 "faults_caught": len(queue_ids),
                 "faults": len(test_faults),
-                "false_items_per_day": None,
+                "false_items_per_day": pooled_false_per_day(suite_reports, key),
                 "decision": "baseline",
             },
             "trace_baseline": _decision(queue_ids, baseline_ids, test_faults, spec.seed),
@@ -395,7 +438,7 @@ def combine_suite_scores(
         },
         "false_items_note": (
             "pooled queue catches are the union of the per-suite queues; "
-            "K is not applied again across suites"
+            "false items per day is the sum of false items divided by the sum of suite days"
         ),
     }
 

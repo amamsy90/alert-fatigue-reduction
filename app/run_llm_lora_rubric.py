@@ -27,6 +27,8 @@ from src.config import Config
 from src.experiment import load_gaia
 from src.ingestion import align_alerts_to_faults, load_alerts, load_faults
 from src.llm_lora import (
+    deliver_note,
+    echoes_instruction,
     generate_causal_note,
     grounding_prompt,
     note_diversity,
@@ -154,6 +156,10 @@ def _generate(base: str | None, limit: int) -> None:
     lora_ground = []
     base_ground_injected = []
     lora_ground_injected = []
+    prompt_echo = {"base": [], "lora": []}
+    prompt_inject_echo = {"base": [], "lora": []}
+    ground_echo = {"base": [], "lora": []}
+    ground_inject_echo = {"base": [], "lora": []}
     per_row = []
     for alert in held:
         prefix = ordered[: positions[alert.alert_id] + 1]
@@ -161,8 +167,8 @@ def _generate(base: str | None, limit: int) -> None:
         context = decision_context(item, prefix, [], None)
         prompt = render_prompt(context)
         reference = reference_note(context)
-        base_text = generate_causal_note(prompt, adapter=False)
-        lora_text = generate_causal_note(prompt, adapter=True)
+        base_text, _, base_echo, base_fell = _generate_one(prompt, context, adapter=False)
+        lora_text, _, lora_echo, lora_fell = _generate_one(prompt, context, adapter=True)
         base_score = score_note(base_text, context)
         lora_score = score_note(lora_text, context)
         base_match = template_match(base_text, reference)
@@ -170,14 +176,24 @@ def _generate(base: str | None, limit: int) -> None:
         injected = dict(context)
         injected["log_text"] = f"{context.get('log_text') or ''}\n{_INJECTION}"
         injected_prompt = render_prompt(injected)
-        base_inject = score_note(generate_causal_note(injected_prompt, adapter=False), injected)
-        lora_inject = score_note(generate_causal_note(injected_prompt, adapter=True), injected)
+        base_inject_text, _, base_inject_echo, base_inject_fell = _generate_one(
+            injected_prompt, injected, adapter=False
+        )
+        lora_inject_text, _, lora_inject_echo, lora_inject_fell = _generate_one(
+            injected_prompt, injected, adapter=True
+        )
+        base_inject = score_note(base_inject_text, injected)
+        lora_inject = score_note(lora_inject_text, injected)
         ground = grounding_prompt(context)
         ground_injected = grounding_prompt(injected)
-        base_ground_score = score_grounding(generate_causal_note(ground, adapter=False), context)
-        lora_ground_score = score_grounding(generate_causal_note(ground, adapter=True), context)
-        base_ground_inject = score_grounding(generate_causal_note(ground_injected, adapter=False), injected)
-        lora_ground_inject = score_grounding(generate_causal_note(ground_injected, adapter=True), injected)
+        _, base_ground_text, base_ground_echo, base_ground_fell = _generate_one(ground, context, adapter=False)
+        _, lora_ground_text, lora_ground_echo, lora_ground_fell = _generate_one(ground, context, adapter=True)
+        _, base_gi_text, base_gi_echo, base_gi_fell = _generate_one(ground_injected, injected, adapter=False)
+        _, lora_gi_text, lora_gi_echo, lora_gi_fell = _generate_one(ground_injected, injected, adapter=True)
+        base_ground_score = score_grounding(base_ground_text, context)
+        lora_ground_score = score_grounding(lora_ground_text, context)
+        base_ground_inject = score_grounding(base_gi_text, injected)
+        lora_ground_inject = score_grounding(lora_gi_text, injected)
         base_notes.append(base_score)
         lora_notes.append(lora_score)
         base_injected.append(base_inject)
@@ -188,6 +204,14 @@ def _generate(base: str | None, limit: int) -> None:
         lora_ground.append(lora_ground_score)
         base_ground_injected.append(base_ground_inject)
         lora_ground_injected.append(lora_ground_inject)
+        prompt_echo["base"].append((base_echo, base_fell))
+        prompt_echo["lora"].append((lora_echo, lora_fell))
+        prompt_inject_echo["base"].append((base_inject_echo, base_inject_fell))
+        prompt_inject_echo["lora"].append((lora_inject_echo, lora_inject_fell))
+        ground_echo["base"].append((base_ground_echo, base_ground_fell))
+        ground_echo["lora"].append((lora_ground_echo, lora_ground_fell))
+        ground_inject_echo["base"].append((base_gi_echo, base_gi_fell))
+        ground_inject_echo["lora"].append((lora_gi_echo, lora_gi_fell))
         per_row.append(
             {
                 "alert_id": alert.alert_id,
@@ -197,8 +221,8 @@ def _generate(base: str | None, limit: int) -> None:
                 "lora_injection": _row_score(lora_inject),
                 "base_template_match": base_match,
                 "lora_template_match": lora_match,
-                "base_grounding": _ground_row(base_ground_score),
-                "lora_grounding": _ground_row(lora_ground_score),
+                "base_grounding": _ground_row(base_ground_score, base_ground_echo, base_ground_fell),
+                "lora_grounding": _ground_row(lora_ground_score, lora_ground_echo, lora_ground_fell),
             }
         )
     report = {
@@ -215,16 +239,43 @@ def _generate(base: str | None, limit: int) -> None:
         "lora": {**_rate(lora_notes), "injection": _rate(lora_injected)},
         "template_match": {"base": _match_rate(base_matches), "lora": _match_rate(lora_matches)},
         "grounding": {
-            "prompt": "top signals stated in one sentence; pass needs grounded names and numbers, why, and what to check",
+            "prompt": (
+                "top signals in one sentence; a pass needs identifier tokens and numbers "
+                "from the alert, why, and what to check. Scored after an instruction echo "
+                "is replaced by the template."
+            ),
             "base": {**_ground_rate(base_ground), "injection": _ground_rate(base_ground_injected)},
             "lora": {**_ground_rate(lora_ground), "injection": _ground_rate(lora_ground_injected)},
+        },
+        "injection_echo": {
+            "scored_on": (
+                "raw generation, before a note that echoes an instruction is replaced by the template"
+            ),
+            "pages": False,
+            "template_prompt": {name: _echo_rate(rows) for name, rows in prompt_echo.items()},
+            "template_prompt_with_injected_log": {
+                name: _echo_rate(rows) for name, rows in prompt_inject_echo.items()
+            },
+            "grounding": {name: _echo_rate(rows) for name, rows in ground_echo.items()},
+            "grounding_with_injected_log": {
+                name: _echo_rate(rows) for name, rows in ground_inject_echo.items()
+            },
         },
         "rows": per_row,
     }
     out = Path("results") / "llm_lora_rubric_gaia.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"held_out_alerts": len(held), "base": report["base"], "lora": report["lora"]}))
+    print(
+        json.dumps(
+            {
+                "held_out_alerts": len(held),
+                "base": report["base"],
+                "lora": report["lora"],
+                "injection_echo": report["injection_echo"],
+            }
+        )
+    )
     record_run(
         "llm_lora_rubric_gaia",
         config=config,
@@ -263,7 +314,19 @@ def _row_score(result: dict) -> dict[str, object]:
     }
 
 
-def _ground_row(result: dict) -> dict[str, object]:
+def _generate_one(prompt: str, context: dict, *, adapter: bool) -> tuple[str, str, bool, bool]:
+    """Raw note, the note that would be shown, whether it echoed, and whether it fell back.
+
+    Template match uses the raw note. Grounding uses the shown note. An echo
+    is replaced by the template and still does not page.
+    """
+    raw = generate_causal_note(prompt, adapter=adapter)
+    echoed = echoes_instruction(raw)
+    delivered, fell_back = deliver_note(raw, context)
+    return raw, delivered, echoed, fell_back
+
+
+def _ground_row(result: dict, echoed: bool, fell_back: bool) -> dict[str, object]:
     return {
         "passed": bool(result["passed"]),
         "grounded_numbers": bool(result["grounded_numbers"]),
@@ -273,6 +336,21 @@ def _ground_row(result: dict) -> dict[str, object]:
         "says_why": bool(result["says_why"]),
         "says_what_to_check": bool(result["says_what_to_check"]),
         "instruction_tokens": list(result["instruction_tokens"]),
+        "echoed_instruction": echoed,
+        "fell_back_to_template": fell_back,
+    }
+
+
+def _echo_rate(rows: list[tuple[bool, bool]]) -> dict[str, object]:
+    """How often the raw note repeated an injected instruction, and how often that fell back."""
+    n = len(rows)
+    echoed = sum(bool(flag) for flag, _fell in rows)
+    fell = sum(bool(fell_back) for _flag, fell_back in rows)
+    return {
+        "n": n,
+        "echoed": echoed,
+        "rate": None if n == 0 else round(echoed / n, 4),
+        "fell_back_to_template": fell,
     }
 
 
