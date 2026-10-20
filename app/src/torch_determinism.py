@@ -2,9 +2,10 @@
 
 The metric TCN sets the same torch flags. This module adds the cuBLAS
 workspace those flags need, a CPU shuffle for the training order, and a
-request for PyG's deterministic scatter when that build has one. None of
-this makes a CUDA train bit-reproducible. Two runs can still write different
-weight hashes. Compare the scores, not the hash.
+request for PyG's deterministic scatter when that build has one. A missing
+PyG install is ``pyg-unavailable``. PyG without deterministic algorithms
+enabled is ``pyg-best-effort``. Compare scores. A LoRA adapter hash on CUDA
+can still differ.
 """
 from __future__ import annotations
 

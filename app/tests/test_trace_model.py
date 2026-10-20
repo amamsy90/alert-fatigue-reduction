@@ -567,7 +567,11 @@ def test_pooled_false_per_day_sums_false_items_and_suite_days():
 
 
 def test_cuda_determinism_seeds_the_fit_and_the_epoch_order(monkeypatch):
-    """The trace fit uses the TCN switches, a cuBLAS workspace, and a CPU epoch order."""
+    """The trace fit uses the TCN switches, a cuBLAS workspace, and a CPU epoch order.
+
+    Scatter status follows the install. No PyG is pyg-unavailable. PyG with a
+    torch object that does not report deterministic algorithms is pyg-best-effort.
+    """
     from src.torch_determinism import (
         CUBLAS_WORKSPACE,
         apply_cuda_determinism,
@@ -581,7 +585,14 @@ def test_cuda_determinism_seeds_the_fit_and_the_epoch_order(monkeypatch):
     assert os.environ["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
     assert epoch_order(8, 42, 0) == epoch_order(8, 42, 0)
     assert epoch_order(8, 42, 0) != epoch_order(8, 42, 1)
-    assert prefer_deterministic_scatter(object(), 42) == "pyg-unavailable"
+    try:
+        import torch_geometric
+    except ImportError:
+        expected_scatter = "pyg-unavailable"
+    else:
+        assert torch_geometric.__name__ == "torch_geometric"
+        expected_scatter = "pyg-best-effort"
+    assert prefer_deterministic_scatter(object(), 42) == expected_scatter
 
     class _Cuda:
         def manual_seed_all(self, seed: int) -> None:
