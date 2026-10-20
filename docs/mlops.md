@@ -63,4 +63,6 @@ Every experiment script appends one line to `app/results/experiments.jsonl` (kep
 | `outputs` | SHA-256 of every result file written |
 | `metrics` | Headline numbers (for example detection at K = 20, walk-forward means) |
 
-`git log -p app/results/experiments.jsonl` is therefore the history of every result: what changed, why, on which code and data, and what came out. `run_validate.py` then ties the results to the numbers printed in the report (ADR 0006).
+`git log -p app/results/experiments.jsonl` is therefore the history of every committed result: what changed, why, on which code and data, and what came out. `run_validate.py` then ties the results to the numbers printed in the report (ADR 0006).
+
+A run appends a line. It does not rewrite earlier lines. Do not check `app/results/experiments.jsonl` out, truncate it, or replace it with an older copy to make a diff empty. That drops the rows a laptop or GPU run just added. Keep the run log by committing the appended file, or leave the file uncommitted. `git log -p` shows only lines that were committed. Tests write a temporary log and do not require this file to match HEAD.

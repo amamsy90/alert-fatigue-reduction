@@ -5,7 +5,8 @@ not), with which library versions and configuration, on which data (a
 fingerprint of the input files), what it wrote (a SHA-256 per output file),
 the headline metrics, and why it was run (EXPERIMENT_NOTE, or a note passed in).
 The file is kept in git, so `git log -p results/experiments.jsonl` is the
-history of every result.
+history of every committed result. ``record_run`` appends one line. Do not
+check the file out or replace it with an older copy: that drops rows.
 """
 from __future__ import annotations
 
