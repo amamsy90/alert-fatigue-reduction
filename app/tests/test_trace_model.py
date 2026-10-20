@@ -511,3 +511,55 @@ def test_rcaeval_report_has_suite_system_and_pooled_counts(monkeypatch):
     assert "catch_ids" not in report["by_suite"]["RE2"]
     assert report["pages"] is False
     assert report["flags_changed"] is False
+    assert report["headline"]["queue"]["false_items_per_day"] is None
+
+
+def test_too_few_windows_is_reported_and_not_trained(monkeypatch):
+    """A slice with fewer than four root-cause windows is skipped in the JSON, not fit."""
+    from src.trace_eval import TraceSpec, evaluate_traces, model_skip_reason, synthetic_traces
+    from src.trace_model import fit_trace_model
+
+    monkeypatch.setattr("src.trace_model.torch_stack_available", lambda: True)
+    monkeypatch.setattr(
+        "src.trace_model.training_graphs",
+        lambda *_args, **_kwargs: ([object(), object()], [0, 0]),
+    )
+    archive, status = fit_trace_model(pd.DataFrame(), [], pd.Timestamp("2026-01-01", tz="UTC"))
+    assert archive is None
+    assert status == "too-few-windows:2<4"
+    assert "too-few-windows:2<4" in model_skip_reason(status)
+    assert "not scored" in model_skip_reason(status)
+    assert model_skip_reason("torch-missing") == "torch-missing"
+
+    def fake_fit(*_args, **_kwargs):
+        return None, "too-few-windows:2<4"
+
+    monkeypatch.setattr("src.trace_eval.fit_trace_model", fake_fit)
+    spans, metrics, faults = synthetic_traces(seed=1, days=2)
+    report = evaluate_traces(
+        spans,
+        metrics,
+        faults,
+        config=Config(),
+        spec=TraceSpec(epochs=1, seed=1, backend="plain", budget_ks=(20,), headline_k=20),
+    )
+    assert report["trace_model"]["skipped"] is True
+    assert "not scored" in report["trace_model"]["reason"]
+    assert report["headline"]["trace_model"]["decision"] == "skipped"
+    assert "too-few-windows:2<4" in report["headline"]["trace_model"]["reason"]
+    assert report["headline"]["trace_residual"]["decision"] == "skipped"
+
+
+def test_pooled_false_per_day_sums_false_items_and_suite_days():
+    from src.trace_eval import pooled_false_per_day
+
+    suites = {
+        "RE2": {"by_k": {"20": {"queue": {"false_items": 10, "n_days": 5}}}},
+        "RE3": {"by_k": {"20": {"queue": {"false_items": 3, "n_days": 2}}}},
+    }
+    assert pooled_false_per_day(suites, "20") == 1.86
+    missing = {
+        "RE2": {"by_k": {"20": {"queue": {"false_items": 10, "n_days": 5}}}},
+        "RE3": {"by_k": {"20": {"queue": {"false_items": None, "n_days": None}}}},
+    }
+    assert pooled_false_per_day(missing, "20") is None

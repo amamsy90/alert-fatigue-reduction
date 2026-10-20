@@ -415,9 +415,13 @@ def _print_block(label: str, report: dict) -> None:
             continue
         print(
             f"  K={report['headline_k']} {name:16s} decision={row.get('decision')} "
-            f"caught={row.get('faults_caught')} delta={row.get('per_fault_catch_delta')}",
+            f"caught={row.get('faults_caught')} false/day={row.get('false_items_per_day')} "
+            f"delta={row.get('per_fault_catch_delta')}",
             flush=True,
         )
+        reason = row.get("reason")
+        if row.get("decision") == "skipped" and reason:
+            print(f"    {reason}", flush=True)
 
 
 def main() -> None:
