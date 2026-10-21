@@ -17,6 +17,8 @@ This page explains how the AI part of the system is versioned, reproduced, updat
 
 A model card records: version, training time, label source (real labels, on-call marks), number of training alerts, thresholds, training-data fingerprint, code version (git commit), held-out precision / recall / false positives / misses, the active model's result on the same held-out alerts, and the promotion decision with its reason.
 
+The optional metric model and learned ranker are not versions in that registry. They are separate hash-checked files (`METRIC_MODEL_DIR`, `LEARNED_RANKER_PATH`), off unless those flags are set, and they do not pass the promotion gate because they do not replace the alert classifier. `docs/ML_MODELS.md` is the keep rule for turning them on.
+
 ## 2. Reproducibility
 
 If another team member receives the project tomorrow:
@@ -61,4 +63,6 @@ Every experiment script appends one line to `app/results/experiments.jsonl` (kep
 | `outputs` | SHA-256 of every result file written |
 | `metrics` | Headline numbers (for example detection at K = 20, walk-forward means) |
 
-`git log -p app/results/experiments.jsonl` is therefore the history of every result: what changed, why, on which code and data, and what came out. `run_validate.py` then ties the results to the numbers printed in the report (ADR 0006).
+`git log -p app/results/experiments.jsonl` is therefore the history of every committed result: what changed, why, on which code and data, and what came out. `run_validate.py` then ties the results to the numbers printed in the report (ADR 0006).
+
+A run appends a line. It does not rewrite earlier lines. Do not check `app/results/experiments.jsonl` out, truncate it, or replace it with an older copy to make a diff empty. That drops the rows a laptop or GPU run just added. Keep the run log by committing the appended file, or leave the file uncommitted. `git log -p` shows only lines that were committed. Tests write a temporary log and do not require this file to match HEAD.
