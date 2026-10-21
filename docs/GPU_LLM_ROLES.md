@@ -190,4 +190,4 @@ docker run --gpus all -p 127.0.0.1:8080:8080 oncall-queue:gpu
 
 `/monitoring` adds check `template_feature_drift`. It is `n/a` while `LLM_TEMPLATE_FEATURES` is off, including when older jobs happen to store a mean. When the flag is on, a job stores the mean of `tpl_prior` (each value counted only from rows at or before that alert) and the check uses the same 0.5–2 band as alert volume. The flag stays off after the Phase 2b drop.
 
-Version stays 1.0.5 until a release that includes this work.
+Released in 1.1.0. Explanations, template features, the CUDA image, and the optional models stay off. Live paging is unchanged: `APP_PASSWORD`, a channel, the typed word `LIVE`, and an ingest job. A note is not a page.
