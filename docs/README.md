@@ -14,5 +14,6 @@
 | [retrospective.md](retrospective.md) | How the project was built, what the reviews found, and how the work is run from now on |
 | [enhancement_plan.md](enhancement_plan.md) | Items from the course-project review, each closed with where it is done and the test that proves it |
 | [pilot_plan.md](pilot_plan.md) | A four-week shadow-mode pilot with one real team: steps, what is measured, and the bar for going Live |
+| [ML_MODELS.md](ML_MODELS.md) | Optional metric TCN and learned ranker: objective, leakage controls, flags, and how to train on a GPU |
 
 Related, outside this folder: `../design_specification.md` (component detail and configuration), `../FINAL_REPORT.md` (results), `../VALIDATION.md` (result files), `../CHANGELOG.md` (versions), `../.github/workflows/ci.yml` (CI).

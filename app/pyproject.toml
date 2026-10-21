@@ -26,6 +26,22 @@ dev = [
     "seaborn>=0.13,<1",
     "pyarrow>=15,<26",
 ]
+# Optional. `uv sync` and CI do not install this group. cuML is not pinned
+# here: its wheels are CUDA-specific and come from the NVIDIA index.
+# docs/GPU_LLM_ROLES.md has the install commands.
+gpu = [
+    "xgboost>=2.1,<4",
+]
+# llama-cpp-python is not a dependency of this group or of `dev`.
+# Shadow notes import it only when LLM_EXPLAIN is on. See docs/GPU_LLM_ROLES.md.
+# Optional metric model, ranker, trace model, LoRA notes and the contrastive
+# encoder. `uv sync` and CI do not install this group. Torch, transformers,
+# peft and torch_geometric are not pinned: the CPU wheel and the CUDA 13 wheel
+# come from different indexes (the same reason cuML is not pinned). safetensors
+# is the weight format. Install commands are in docs/ML_MODELS.md.
+ml = [
+    "safetensors>=0.4,<1",
+]
 
 [tool.uv]
 # An application, not a library: `uv sync` installs the dependencies only.
@@ -35,10 +51,21 @@ package = false
 # Tests import `src` and `product` from app/ without setting PYTHONPATH.
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "gpu: needs a CUDA device and the optional gpu libraries (skipped otherwise)",
+    "ml: needs torch (skipped otherwise)",
+]
 
 [tool.coverage.run]
 source = ["src", "product"]
-omit = ["product/datasets.py"]  # downloads NAB over the network
+omit = [
+    "product/datasets.py",  # downloads NAB over the network
+    "*/metric_tcn.py",  # optional torch body; imported only when torch is installed
+    "*/ranker_torch.py",
+    "*/ranker_xgb.py",
+    "*/trace_gnn.py",
+    "*/log_encoder_torch.py",
+]
 
 [tool.coverage.report]
 show_missing = true
@@ -67,3 +94,7 @@ files = ["src", "product"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["src.metric_tcn", "src.ranker_torch", "src.ranker_xgb", "src.trace_gnn", "src.log_encoder_torch"]
+ignore_errors = true
