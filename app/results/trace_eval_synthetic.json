@@ -1,0 +1,292 @@
+{
+  "dataset": "synthetic",
+  "gaia": "pending: this run did not score GAIA",
+  "rcaeval": "pending: this run did not score RCAEval",
+  "split": "first week train, later days test",
+  "headline_k": 20,
+  "pages": false,
+  "flags_changed": false,
+  "trace_model": {
+    "status": "trained",
+    "backend": "pyg",
+    "device": "cpu",
+    "fell_back": false,
+    "gnn_fell_back": false,
+    "pages": false
+  },
+  "headline": {
+    "queue": {
+      "faults_caught": 2,
+      "faults": 8,
+      "false_items_per_day": 0.0,
+      "decision": "baseline"
+    },
+    "trace_baseline": {
+      "status": "scored",
+      "decision": "drop",
+      "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+      "per_fault_catch_delta": {
+        "mean": 0.25,
+        "low": 0.0,
+        "high": 0.625,
+        "n": 8
+      },
+      "faults_caught": 4,
+      "faults": 8
+    },
+    "trace_model": {
+      "status": "scored",
+      "decision": "keep",
+      "reason": "the 95% interval lies above zero against both the trace baseline and the queue",
+      "faults_caught": 8,
+      "faults": 8,
+      "against_queue": {
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval for the per-fault catch difference lies above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.75,
+          "low": 0.375,
+          "high": 1.0,
+          "n": 8
+        },
+        "faults_caught": 8,
+        "faults": 8
+      },
+      "against_baseline": {
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval for the per-fault catch difference lies above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.5,
+          "low": 0.125,
+          "high": 0.875,
+          "n": 8
+        },
+        "faults_caught": 8,
+        "faults": 8
+      }
+    }
+  },
+  "by_k": {
+    "5": {
+      "queue": {
+        "faults_caught": 2,
+        "faults": 8,
+        "false_items_per_day": 0.0,
+        "decision": "baseline"
+      },
+      "trace_baseline": {
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.25,
+          "low": 0.0,
+          "high": 0.625,
+          "n": 8
+        },
+        "faults_caught": 4,
+        "faults": 8
+      },
+      "trace_model": {
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval lies above zero against both the trace baseline and the queue",
+        "faults_caught": 8,
+        "faults": 8,
+        "against_queue": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.75,
+            "low": 0.375,
+            "high": 1.0,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        },
+        "against_baseline": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.5,
+            "low": 0.125,
+            "high": 0.875,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        }
+      }
+    },
+    "10": {
+      "queue": {
+        "faults_caught": 2,
+        "faults": 8,
+        "false_items_per_day": 0.0,
+        "decision": "baseline"
+      },
+      "trace_baseline": {
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.25,
+          "low": 0.0,
+          "high": 0.625,
+          "n": 8
+        },
+        "faults_caught": 4,
+        "faults": 8
+      },
+      "trace_model": {
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval lies above zero against both the trace baseline and the queue",
+        "faults_caught": 8,
+        "faults": 8,
+        "against_queue": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.75,
+            "low": 0.375,
+            "high": 1.0,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        },
+        "against_baseline": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.5,
+            "low": 0.125,
+            "high": 0.875,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        }
+      }
+    },
+    "20": {
+      "queue": {
+        "faults_caught": 2,
+        "faults": 8,
+        "false_items_per_day": 0.0,
+        "decision": "baseline"
+      },
+      "trace_baseline": {
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.25,
+          "low": 0.0,
+          "high": 0.625,
+          "n": 8
+        },
+        "faults_caught": 4,
+        "faults": 8
+      },
+      "trace_model": {
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval lies above zero against both the trace baseline and the queue",
+        "faults_caught": 8,
+        "faults": 8,
+        "against_queue": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.75,
+            "low": 0.375,
+            "high": 1.0,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        },
+        "against_baseline": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.5,
+            "low": 0.125,
+            "high": 0.875,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        }
+      }
+    },
+    "50": {
+      "queue": {
+        "faults_caught": 2,
+        "faults": 8,
+        "false_items_per_day": 0.0,
+        "decision": "baseline"
+      },
+      "trace_baseline": {
+        "status": "scored",
+        "decision": "drop",
+        "reason": "the 95% interval for the per-fault catch difference does not lie above zero",
+        "per_fault_catch_delta": {
+          "mean": 0.25,
+          "low": 0.0,
+          "high": 0.625,
+          "n": 8
+        },
+        "faults_caught": 4,
+        "faults": 8
+      },
+      "trace_model": {
+        "status": "scored",
+        "decision": "keep",
+        "reason": "the 95% interval lies above zero against both the trace baseline and the queue",
+        "faults_caught": 8,
+        "faults": 8,
+        "against_queue": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.75,
+            "low": 0.375,
+            "high": 1.0,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        },
+        "against_baseline": {
+          "status": "scored",
+          "decision": "keep",
+          "reason": "the 95% interval for the per-fault catch difference lies above zero",
+          "per_fault_catch_delta": {
+            "mean": 0.5,
+            "low": 0.125,
+            "high": 0.875,
+            "n": 8
+          },
+          "faults_caught": 8,
+          "faults": 8
+        }
+      }
+    }
+  },
+  "test_faults": 8,
+  "false_items_note": "the trace model nominates one service and adds no queue item",
+  "traces_skipped": []
+}

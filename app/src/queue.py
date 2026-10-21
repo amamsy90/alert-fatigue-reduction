@@ -224,6 +224,8 @@ def score_queue(
         "detection_rate": round(len(first) / len(faults), 4) if faults else 0.0,
         "items_per_day": round(slots / n_days, 2),
         "attached_alerts": sum(1 for item in shown if item.attached),
+        "false_items": false_items,
+        "n_days": n_days,
         "false_items_per_day": round(false_items / n_days, 2),
         # Of the items that took a slot (gaps excluded), the share that caught a fault.
         "precision": round(useful / (useful + false_items), 4) if useful + false_items else 0.0,

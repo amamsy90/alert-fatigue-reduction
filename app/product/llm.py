@@ -231,15 +231,31 @@ def timeout_seconds() -> float:
 
 
 def sanitize_log(text: str) -> str:
-    """Drop instruction-like lines. What remains is data inside a delimited block."""
+    """Keep the log as data. Instruction phrases and wrapper tokens are removed.
+
+    A line that starts with an instruction is dropped. A line that has data
+    before an instruction keeps that data. The delimiter and chat markers
+    cannot close the data block from inside the log.
+    """
     kept: list[str] = []
     for line in str(text).splitlines():
-        if _INSTRUCTION.search(line):
-            continue
-        if _DELIMITER in line.upper():
-            continue
-        kept.append(line)
+        cleaned = _clean_log_line(line)
+        if cleaned:
+            kept.append(cleaned)
     return "\n".join(kept).strip()[:_MAX_LOG_CHARS]
+
+
+def _clean_log_line(line: str) -> str:
+    text = line.replace("<|im_start|>", " ").replace("<|im_end|>", " ")
+    text = re.sub(re.escape(_DELIMITER), " ", text, flags=re.IGNORECASE)
+    match = _INSTRUCTION.search(text)
+    if match is not None and match.start() == 0:
+        return ""
+    if match is not None:
+        text = text[: match.start()]
+    text = re.sub(r"paged-now", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[/?INST\]|<<\/?SYS>>", " ", text, flags=re.IGNORECASE)
+    return " ".join(text.split())
 
 
 def render_prompt(context: Mapping[str, object]) -> str:
@@ -329,10 +345,14 @@ def annotate_shadow(
         "status": weights.code,
         "notes": [],
     }
-    if weights.code != "ok":
+    from src.llm_lora import lora_enabled, remember_adapter_status
+
+    adapter_ready = lora_enabled() and remember_adapter_status() == "ok"
+    if weights.code != "ok" and not adapter_ready:
         log.error("llm weights are not usable (%s)", weights.code)
         _remember(weights.code)
         _record(_outcome(weights.code), started)
+        _attach_lora(record)
         return record
     notes: list[dict[str, str]] = []
     items = whp.get("items")
@@ -361,6 +381,7 @@ def annotate_shadow(
         _record(_outcome(exc.status), item_started)
         record["status"] = exc.status
         record["notes"] = []
+        _attach_lora(record)
         return record
     except Exception:
         log.exception("llm explain failed")
@@ -368,11 +389,21 @@ def annotate_shadow(
         _record("error", item_started)
         record["status"] = "error"
         record["notes"] = []
+        _attach_lora(record)
         return record
     _remember("ok")
     record["status"] = "ok"
     record["notes"] = notes
+    _attach_lora(record)
     return record
+
+
+def _attach_lora(record: dict[str, object]) -> None:
+    """Record the adapter outcome only when the flag is on. Off leaves the record unchanged."""
+    from src.llm_lora import lora_enabled, lora_outcome
+
+    if lora_enabled():
+        record["lora"] = lora_outcome()
 
 
 def generate(prompt: str) -> str:
@@ -415,11 +446,19 @@ def _explain_text(context: Mapping[str, object]) -> str:
         raise ExplainError("error")
     if not explain_enabled():
         raise ExplainError("off")
+    prompt = render_prompt(context)
+    from src.llm_lora import deliver_note, generate_with_adapter, lora_enabled
+
+    if lora_enabled():
+        adapted = generate_with_adapter(prompt)
+        if adapted:
+            text, _fell_back = deliver_note(adapted, context)
+            return _clean_note(text)
     weights = weight_status()
     if weights.code != "ok":
         raise ExplainError(weights.code)
-    prompt = render_prompt(context)
-    return _clean_note(_generate_bounded(prompt))
+    text, _fell_back = deliver_note(_generate_bounded(prompt), context)
+    return _clean_note(text)
 
 
 def _generate_bounded(prompt: str) -> str:

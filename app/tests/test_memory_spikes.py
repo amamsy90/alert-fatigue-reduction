@@ -10,8 +10,10 @@ from src.memory_spikes import (
     detect_jumps,
     detect_spikes,
     faults_in_gaps,
+    load_metric_folder,
     read_metric_csv,
     score_spikes,
+    service_in_name,
 )
 
 T0 = pd.Timestamp("2026-01-05", tz="UTC")
@@ -89,6 +91,23 @@ def test_csv_roundtrip(tmp_path):
     frame = read_metric_csv(path, "dbservice1")
     assert list(frame["value"]) == [10.0, 12.0]
     assert frame["timestamp"].dt.tz is not None
+
+
+def test_the_gaia_folder_loader_exposes_one_memory_channel_per_service(tmp_path):
+    """Published GAIA filenames are docker memory. A CPU file beside them is not a series.
+
+    service_in_name requires "memory" or "mem", and one metric per service keeps
+    series_id equal to the service so the jump rule's series key stays put.
+    """
+    memory = tmp_path / "dbservice1_0.0.0.4_docker_memory_usage_total_2021-07-01_2021-07-15.csv"
+    cpu = tmp_path / "dbservice1_0.0.0.4_docker_cpu_usage_total_2021-07-01_2021-07-15.csv"
+    pd.DataFrame({"timestamp": [1625097600000], "value": [1.0]}).to_csv(memory, index=False)
+    pd.DataFrame({"timestamp": [1625097600000], "value": [0.2]}).to_csv(cpu, index=False)
+    assert service_in_name(cpu.name) is None
+    assert service_in_name(memory.name) == "dbservice1"
+    frame = load_metric_folder(tmp_path)
+    assert list(frame["series_id"]) == ["dbservice1"]
+    assert len(frame) == 1
 
 
 def test_jump_knows_its_confirmation_point_and_rise_by_then():
