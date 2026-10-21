@@ -1,0 +1,10 @@
+time,traceID,spanID,parentSpanID,serviceName,duration,statusCode
+1735689600,t1,s1,,web,30,0
+1735689600,t1,s2,s1,api,20,0
+1735689600,t1,s3,s2,db,15,0
+1735689900,t2,s4,,web,30,0
+1735689900,t2,s5,s4,api,25,0
+1735689900,t2,s6,s5,db,400,500
+1735692000,t3,s7,,web,30,0
+1735692000,t3,s8,s7,api,20,0
+1735692000,t3,s9,s8,db,15,0

@@ -1,0 +1,44 @@
+{
+  "dataset": "synthetic",
+  "gaia": "pending: this run did not score GAIA",
+  "pages": false,
+  "flags_changed": false,
+  "reference_notes": 945,
+  "reference_passed": 945,
+  "target_diversity": {
+    "train": {
+      "rows": 945,
+      "unique_notes": 944,
+      "unique_ratio": 0.9989,
+      "unique_skeletons": 74,
+      "near_duplicate_rows": 925,
+      "near_duplicate_ratio": 0.9788
+    },
+    "held_out": {
+      "rows": 921,
+      "unique_notes": 921,
+      "unique_ratio": 1.0,
+      "unique_skeletons": 62,
+      "near_duplicate_rows": 909,
+      "near_duplicate_ratio": 0.987
+    }
+  },
+  "bad_note_passed": false,
+  "bad_note": {
+    "passed": false,
+    "mentions_top_signals": false,
+    "no_invented_numbers": false,
+    "invented_numbers": [
+      "99999"
+    ],
+    "length_ok": true,
+    "length": 64,
+    "no_instruction_following": false,
+    "instruction_tokens": [
+      "paged-now",
+      "reply"
+    ],
+    "structure_stable": false
+  },
+  "split": "first week only; later alerts were not training rows"
+}
