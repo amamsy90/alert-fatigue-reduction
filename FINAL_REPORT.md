@@ -65,7 +65,7 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 421 passed, 0 failed, 86% coverage, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 431 passed, 0 failed, 86% coverage, 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
 **Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 296 automated tests and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
@@ -157,6 +157,8 @@ Nothing uses a later point, the end of a jump, or its peak (ADR 0001). For metri
 
 **Production design.** Two layers: a library that knows nothing about HTTP (`app/src/`) and a product layer (`app/product/`) with the web app (`product/web/`: security middleware, three route modules), the job pipeline (inputs, labels, paging), storage, connectors, the model registry and monitoring. Diagrams (context, components, ingest-to-page sequence, deployment, data model): `docs/architecture.md`. Decisions: `docs/adr/`. Threats and mitigations: `docs/threat_model.md`.
 
+**Ranker audit, off by default.** `RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` can attach SHAP reasons, a needs-human-review list, and a disagreement flag to the shadow queue. They do not change who is shown, and they are not passed to the pager. The measured synthetic run, and the command that still has to be run on GAIA, are in `docs/ML_MODELS.md`. Those counts are not in the Checked numbers table. No GAIA figure for this audit is stated here.
+
 ## 7. Deployment strategy
 
 One Docker container per team, on the team's own server or VM, behind a TLS reverse proxy; SQLite and the model registry on a Docker volume; the model runs in-process; alerts arrive from Alertmanager and metrics are pulled from Prometheus; pages go to PagerDuty, Slack or Opsgenie. The image is built from a hash-pinned lock file.
@@ -210,8 +212,8 @@ An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That fl
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% of tests that run | 421 passed, 0 failed, 10 skipped on Python 3.12 (21 October 2026). Nine skips need torch, xgboost or CUDA, which CPU CI does not install. One skip is the Compose integration job |
-| Line coverage | ≥ 85% | 86% (86.43% on that run) |
+| Tests passing | 100% of tests that run | 431 passed, 0 failed, 10 skipped on Python 3.12 (21 October 2026). Nine skips need torch, xgboost or CUDA, which CPU CI does not install. One skip is the Compose integration job |
+| Line coverage | ≥ 85% | 86% (86.01% on that run) |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
@@ -305,7 +307,7 @@ Evaluation criteria with measured values, justification for each target and exam
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 421 passed, 0 failed (10 skipped) | Yes |
+| At least 90% of predefined test cases pass | 431 passed, 0 failed (10 skipped) | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds +13.3 points over no log alerts, with an interval above zero (+2.2 over severity alerts), and the gate promotes it, at its margin, judged on the same 45 cases that are scored (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, on one of six RCAEval application suites, not on GAIA |
@@ -586,6 +588,24 @@ python run_validate.py
 Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large). `python tools/fetch_gaia.py` (from the repository root) downloads them from the GAIA MicroSS dataset (https://github.com/CloudWise-OpenSource/GAIA-DataSet, `MicroSS/run/run.zip` and the split archive `MicroSS/metric/metric_split.*`, about 1.8 GB), extracts the two run tables and the 37 `docker_memory_usage_total` series into that layout, and checks each file's SHA-256 against the copy used for these results (`--check` verifies files already in place). Without GAIA: `python examples/make_example.py`, then `python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv`.
 
 A faster check without GAIA: `cd app && uv sync --group dev && uv run pytest -q && uv run python run_validate.py` (the result files are in git). Every experiment run is logged in `app/results/experiments.jsonl` (`docs/mlops.md`).
+
+The ranker production audit on the shipped synthetic sample (already in `app/results/ranker_audit_synthetic.json`; GAIA was not scored):
+
+```bash
+cd app
+uv run python run_ranker_audit.py --data synthetic --backend pointwise --seeds 42,0,1 --walk-forward \
+    --out results/ranker_audit_synthetic.json
+```
+
+The same script on a machine that has `data/gaia_raw` and `data/gaia_metrics` (not run for this report):
+
+```bash
+cd app
+uv run --no-sync python run_ranker_audit.py --data gaia --backend xgboost --device cuda \
+    --seeds 42,0,1,2,3 --walk-forward --out results/ranker_audit_gaia.json
+```
+
+Add `--encoder results/log_encoder` when a hash-checked contrastive encoder is already trained. Without it the second opinion is the first-come queue. The script does not page and does not turn the flags on. Counts from the synthetic file are in `docs/ML_MODELS.md`, not in the Checked numbers table.
 
 ## C1a. Use of AI tools
 

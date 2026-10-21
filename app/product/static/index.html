@@ -166,6 +166,7 @@
     .would-have h3 { margin: 0 0 0.35rem; font-size: 0.95rem; font-family: Arial, sans-serif; }
     .would-have ul { margin: 0.35rem 0 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.85rem; }
     .would-have .breakdown { color: var(--muted); font-size: 0.85rem; }
+    .ranker-note { color: var(--muted); font-size: 0.75rem; font-weight: 400; }
   </style>
 </head>
 <body>
@@ -215,6 +216,7 @@
       <a href="#connectors">4. Connectors: key + stay Shadow</a>
     </nav>
     <div id="would-have" class="would-have" hidden></div>
+    <div id="ranker-audit" class="would-have" hidden></div>
     <section id="connectors">
       <h2 class="section">Connectors</h2>
       <div id="conn-cards" class="cards"></div>
@@ -461,6 +463,53 @@
       el.hidden = false;
     }
 
+    function rankerNote(audit, kind, service, when) {
+      if (!audit || audit.explain !== "on") return "";
+      const stamp = String(when || "").replace(" ", "T").slice(0, 19);
+      const rows = []
+        .concat(audit.queue_reasons || [])
+        .concat(audit.needs_human_review || [])
+        .concat(audit.queue_disagreements || []);
+      const hit = rows.find(row =>
+        row.kind === kind && row.service === service &&
+        String(row.shown_at || "").replace(" ", "T").slice(0, 19) === stamp
+      );
+      if (!hit || !hit.reasons || !hit.reasons.length) return "";
+      return hit.reasons.slice(0, 3).map(reason =>
+        reason.feature + " " + (Number(reason.contribution) >= 0 ? "+" : "") + Number(reason.contribution).toFixed(3)
+      ).join(", ");
+    }
+
+    function renderRankerAudit(meta) {
+      const el = document.getElementById("ranker-audit");
+      const audit = meta && meta.ranker_audit;
+      if (!audit) { el.hidden = true; el.innerHTML = ""; return; }
+      const review = audit.needs_human_review || [];
+      const count = audit.review_count || 0;
+      const flagged = audit.disagreement_count || 0;
+      const flags = [
+        audit.explain === "on" ? "explanations on" : "",
+        audit.abstain === "on" ? "confidence review on" : "",
+        audit.disagree === "on" ? "disagreement flags on" : "",
+      ].filter(Boolean).join(", ");
+      const items = review.slice(0, 8).map(item => {
+        const why = (item.reasons || []).slice(0, 3).map(reason =>
+          reason.feature + " " + (Number(reason.contribution) >= 0 ? "+" : "") + Number(reason.contribution).toFixed(3)
+        ).join(", ");
+        const when = escapeHtml(String(item.shown_at || "").replace("T", " ").slice(0, 16));
+        return `<li>${escapeHtml(item.kind || "")} · ${escapeHtml(item.service || "")} · ${when}` +
+          ` · ${escapeHtml(item.review_reason || "review")}${why ? " — " + escapeHtml(why) : ""}</li>`;
+      }).join("");
+      const more = review.length < count ? `<li>…and ${count - review.length} more</li>` : "";
+      el.innerHTML =
+        `<h3>Needs human review <span class="breakdown">(not paged)</span></h3>` +
+        `<p class="breakdown">${escapeHtml(flags || "ranker audit")}. ` +
+        `${count} item(s) in the review bucket, ${flagged} disagreement flag(s). ` +
+        `These items are not paged. The K queue and the page set stay the ranker's selection.</p>` +
+        (items ? `<ul>${items}${more}</ul>` : `<p class="breakdown">No dropped item is in the review bucket.</p>`);
+      el.hidden = false;
+    }
+
     async function loadConnectors() {
       const res = await fetch("/connectors");
       if (!res.ok) {
@@ -583,6 +632,7 @@
       document.getElementById("shadow").hidden = !data.job.shadow_mode;
       const m = data.job.meta || {};
       renderWouldHave(m.would_have_paged, !!data.job.shadow_mode);
+      renderRankerAudit(m);
       document.getElementById("weak").hidden = !(m.model_used === "rules_only" || m.label_source === "weak_severity");
       document.getElementById("meta").innerHTML = [
         `Job <strong>${data.job.job_id}</strong>`,
@@ -606,13 +656,15 @@
       (data.items || []).forEach(item => {
         const tr = document.createElement("tr");
         const label = item.action === "review" ? "ask" : (item.action === "suppress" ? "hide" : item.action);
+        const note = rankerNote(m.ranker_audit, "alert", item.source, item.timestamp);
+        const reason = note ? `${escapeHtml(item.reason)} · ranker ${escapeHtml(note)}` : escapeHtml(item.reason);
         tr.innerHTML = `
           <td><span class="badge ${item.action}">${label}</span></td>
           <td>${escapeHtml(item.source)}</td>
           <td>${escapeHtml(item.timestamp)}</td>
           <td>${Number(item.score).toFixed(3)}</td>
           <td class="spike">${item.during_memory_spike ? "yes" : ""}</td>
-          <td>${escapeHtml(item.reason)}</td>
+          <td>${reason}</td>
           <td class="msg">${escapeHtml(item.message)}</td>
           <td class="verdict">${verdictButtons("alert", item.id, item.verdict)}</td>`;
         tbody.appendChild(tr);
@@ -779,9 +831,14 @@
         const tr = document.createElement("tr");
         const isGap = j.kind === "gap";
         const kind = j.kind || "jump";
+        const auditForJump = (typeof lastMeta !== "undefined" && lastMeta) ? lastMeta.ranker_audit : null;
+        const jumpNote = rankerNote(auditForJump, kind, j.service, j.confirm || j.start);
+        const serviceCell = jumpNote
+          ? `${escapeHtml(j.service)}<div class="ranker-note">${escapeHtml(jumpNote)}</div>`
+          : escapeHtml(j.service);
         tr.innerHTML = `
           <td><span class="badge ${escapeHtml(kind)}">${KIND_LABEL[kind] || escapeHtml(kind)}</span></td>
-          <td>${escapeHtml(j.service)}</td>
+          <td>${serviceCell}</td>
           <td>${escapeHtml((j.confirm || j.start).replace("T", " ").slice(0, 16))} UTC</td>
           <td>${minutes}</td>
           <td class="spike">${isGap ? "no data" : (kind === "leak" ? "slow +" : (unit === "GB" ? "+" : "")) + Number(j.rise_gb).toFixed(2) + (unit ? " " + escapeHtml(unit) : "")}</td>

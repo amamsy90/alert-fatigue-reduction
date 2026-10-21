@@ -356,10 +356,11 @@ class LearnedRanker:
     versions: dict[str, str | None] = field(default_factory=dict)
     fell_back: bool = False
 
-    def score_frame(self, frame: pd.DataFrame) -> np.ndarray:
-        raw = frame[list(FEATURES)].to_numpy(dtype=np.float64)
-        scaled = (raw - self.mean) / self.scale
-        scaled = np.nan_to_num(scaled, nan=0.0, posinf=0.0, neginf=0.0)
+    def score_matrix(self, scaled: np.ndarray) -> np.ndarray:
+        """Scores for an already scaled matrix. The training mean is the zero vector."""
+        scaled = np.nan_to_num(np.asarray(scaled, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
+        if scaled.ndim != 2:
+            raise ValueError("ranker scores expect a 2-d matrix")
         if self.backend == "pointwise":
             if self.coef is None:
                 raise RuntimeError("pointwise ranker has no coefficients")
@@ -374,6 +375,11 @@ class LearnedRanker:
                 raise RuntimeError("torch ranker has no weights")
             return mlp_scores(scaled, self.mlp)
         raise ValueError(f"unknown ranker backend {self.backend!r}")
+
+    def score_frame(self, frame: pd.DataFrame) -> np.ndarray:
+        raw = frame[list(FEATURES)].to_numpy(dtype=np.float64)
+        scaled = (raw - self.mean) / self.scale
+        return self.score_matrix(scaled)
 
     def select(
         self,
