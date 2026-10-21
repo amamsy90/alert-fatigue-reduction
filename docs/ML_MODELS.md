@@ -1,6 +1,14 @@
 # Optional models
 
-**Status:** all off. Version stays 1.0.5. GAIA and RCAEval catch numbers for the models below are pending: this tree was not scored on those datasets.
+**Status:** all off. **Version:** 1.1.0. Release 1.1.0 does not set any flag below. A keep in the measured section is not a default. Live paging is unchanged (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). LLM notes never page.
+
+The decisions, using only the counts already in this file:
+
+- Learned ranker: kept on the PR #26 GAIA run. `LEARNED_RANKER` stays off. The synthetic ranker dropped (see the synthetic table).
+- Contrastive log encoder: kept on GAIA (seed 42, 851 to 860 of 1223 faults, 5 of 6 seeds). `LOG_ENCODER` stays unset, and `LLM_TEMPLATE_FEATURES` stays off.
+- Trace model: kept only on the pooled RCAEval RE2+RE3 comparison (commit `fda695c`, 4 of 5 seeds). Each suite on its own drops. `TRACE_MODEL` stays off.
+- Metric TCN: dropped. The published GAIA extract is the memory channel only. `METRIC_MODEL` stays off.
+- LoRA: adds nothing over the template (exact match 60/60 and template rubric 60/60 on the `b1ba8b9` run; grounding 0/60). `LLM_LORA` stays off.
 
 The jump rule already overlaps almost every GAIA fault that has a metric series, and most faults never write a log line. Two gaps remain. A joint shape across several series can be a fault the single-series jump rule does not confirm. On days with more faults than K, the first K arrivals are not always the best K. These two models target those gaps. They do not replace the jump rule, the K budget, the promotion gate, or the Live gates.
 
@@ -93,7 +101,7 @@ uv run --no-sync python run_model_ablation.py --data gaia --device cuda --backen
     --walk-forward --out results/model_ablation_gaia_walk.json
 ```
 
-Turn a kept model on only after that ablation's interval is entirely above zero:
+Release 1.1.0 does not set either flag. The TCN is dropped because GAIA is memory only, so `METRIC_MODEL` stays off. The ranker keep does not set `LEARNED_RANKER`. An operator would turn a kept model on only after that ablation's interval is entirely above zero:
 
 ```bash
 export METRIC_MODEL=on
@@ -126,7 +134,7 @@ Run on this tree with CPU torch 2.14.1+cpu (no CUDA device), safetensors 0.8.0, 
 | ranker | drop | 2 | 0.57 | 0.0, 0.0, 0.0 |
 | both | keep | 5 | 0.57 | 0.6, 0.2, 1.0 |
 
-The window ends at the last alert (`window_end` `last alert`): train end `2026-01-12T03:00:00+00:00`, test end `2026-01-18T03:15:01+00:00`. The ranker matches the baseline at every K because each day already fits in K, so the score gate is not applied. The metric model trained on CPU (`fell_back` false, `normal_only` true) over channels cpu, error, latency and memory. It does not turn `METRIC_MODEL` on: the keep rule for the flag is a GAIA run at K = 20, and that run is pending.
+The window ends at the last alert (`window_end` `last alert`): train end `2026-01-12T03:00:00+00:00`, test end `2026-01-18T03:15:01+00:00`. The ranker matches the baseline at every K because each day already fits in K, so the score gate is not applied. The metric model trained on CPU (`fell_back` false, `normal_only` true) over channels cpu, error, latency and memory. That synthetic keep does not turn `METRIC_MODEL` on. The published GAIA extract is the memory channel only, so the TCN is dropped for 1.1.0: it never sees the joint shape it was built for.
 
 Walk-forward, two folds, K = 20. Fold 1 (5 faults, false items/day 0.5): metric model and both keep, 5 caught against 2, interval 0.6 / 0.2 / 1.0; ranker drop, 2 caught, interval 0.0 / 0.0 / 0.0. Fold 2 (1 fault): every variant caught that fault; metric model, ranker and both drop with interval 0.0 / 0.0 / 0.0. Pooled across both folds (6 faults): metric model and both keep, mean 0.5, interval 0.1667 / 0.8333; ranker drop, interval 0.0 / 0.0 / 0.0. `flags_changed` is false.
 
@@ -285,7 +293,7 @@ uv run --no-sync python run_log_encoder_ablation.py --data gaia --dim 16 --devic
 
 The ablation scores the published queue (1223 held-out faults on the extract used by the 2b run, window ending at the last alert) and writes every seed. A like-for-like wrapper on the RTX 5090 is what those seeds are meant to reproduce. The counts are not stored in the script.
 
-The flag stays off unless that ablation's interval lies entirely above zero. Turning the columns on is still `LLM_TEMPLATE_FEATURES=on`, plus:
+That ablation's interval is the keep rule. The GAIA run kept the encoder (851 to 860, 5 of 6 seeds). Release 1.1.0 still leaves `LOG_ENCODER` unset and `LLM_TEMPLATE_FEATURES` off. Turning the columns on later is still `LLM_TEMPLATE_FEATURES=on`, plus:
 
 ```bash
 export LOG_ENCODER=contrastive
