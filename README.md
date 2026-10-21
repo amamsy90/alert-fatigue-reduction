@@ -20,7 +20,7 @@ For development:
 ```bash
 cd app
 uv sync --group dev                  # exact versions from uv.lock
-uv run pytest -q                     # 300 tests (the 301st, integration, needs Docker)
+uv run pytest -q                     # 421 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
 uv run python run_validate.py        # the report's 195 checked numbers match app/results/
 uv run uvicorn product.app:app --reload
 ```
@@ -48,7 +48,7 @@ Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE
 | [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 301 automated tests (one runs against real Prometheus and Alertmanager) |
+| [`app/tests/`](app/tests) | 431 tests (421 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
 | [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |
 | [`app/deploy/`](app/deploy) | Settings for development, test and production |
