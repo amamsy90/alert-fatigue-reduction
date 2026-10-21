@@ -1,6 +1,6 @@
 # Submission copies
 
-Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** The Markdown report header is release 1.1.0 (21 October 2026). The Word and PDF copies in this folder were last regenerated on 18 October 2026 for release 1.0.5 (301 tests, 195 checked numbers) and are not rebuilt in the 1.1.0 commit; the design specification and project plan on 18 October 2026; the other generated copies on 10 October 2026. The report PDF of the 1.0.5 release was exported with LibreOffice (the 11 October copy used Word).
+Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** Regenerated on 21 October 2026 from the 1.1.0 Markdown: the report (Word and PDF; header version 1.1.0, dated 21 October 2026, 195 checked numbers), the design specification, the project plan, the Use Your Data guide, and the 30 September proposal draft (Word and PDF). The rehearsal deck was rebuilt with `python tools/build_rehearsal.py`. The report PDF of this release was exported with LibreOffice. `Project_Proposal_200010549_Aishah_Alyammahi.pdf` is the proposal as submitted on 5 October 2026 and was not regenerated.
 
 Project title on every copy: *AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices*, subtitle *Alert Fatigue Reduction in Cloud Microservice Operations*. The file names keep the older `Alert_Fatigue_` prefix so that earlier links still work.
 
