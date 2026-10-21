@@ -51,6 +51,13 @@ CLEARED_ENV = (
     "LOG_ENCODER_PATH",
     "LOG_ENCODER_SHA256",
     "LOG_ENCODER_DIM",
+    # Ranker audit. Unset means no explanations, no review bucket, no disagreement flags.
+    "RANKER_EXPLAIN",
+    "RANKER_EXPLAIN_MAX",
+    "RANKER_ABSTAIN",
+    "RANKER_ABSTAIN_DELTA",
+    "RANKER_DISAGREE",
+    "RANKER_DISAGREE_DELTA",
 )
 
 

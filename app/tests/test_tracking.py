@@ -29,6 +29,9 @@ def test_a_run_is_recorded_with_everything_needed_to_trace_it(tmp_path, monkeypa
     assert entry["ml"]["trace_model"] == "off"
     assert entry["ml"]["llm_lora"] == "off"
     assert entry["ml"]["log_encoder"] == "off"
+    assert entry["ml"]["ranker_explain"] == "off"
+    assert entry["ml"]["ranker_abstain"] == "off"
+    assert entry["ml"]["ranker_disagree"] == "off"
     assert "torch" in entry["ml"] and "safetensors" in entry["ml"]
     record_run("demo", log=log)
     assert len(read_log(log)) == 2  # appended, never rewritten
