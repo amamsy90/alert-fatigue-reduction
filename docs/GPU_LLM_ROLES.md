@@ -2,7 +2,7 @@
 
 **Status:** Phase 0 locked. Phase 1 (optional GPU training), Phase 2a (shadow notes), Phase 2b (optional template features, dropped for the default queue), Phase 3 (pinned local LLM) and Phase 4 (optional CUDA image, health fields, LLM and GPU metrics) are in the tree. The default image stays CPU. Explanations and template features stay off.
 
-The queue that pages is still the cost-sensitive logistic classifier plus the jump ranker, at most K items a day, saved as a skops archive, shadow mode unless Live is armed. GPU training and a later local LLM are optional layers. Neither is allowed to become a hard dependency, and neither decides Live paging.
+The queue that pages is still the cost-sensitive logistic classifier plus the jump ranker, at most K items a day, saved as a skops archive, shadow mode unless Live is armed. GPU training and a later local LLM are optional layers. Neither is allowed to become a hard dependency, and neither decides Live paging. Three further optional models (a trace root-cause net, a LoRA adapter for shadow notes, and a contrastive template encoder) are specified in `docs/ML_MODELS.md`. Their flags default off, and none of them can page.
 
 ## Roles
 
