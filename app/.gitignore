@@ -1,4 +1,6 @@
 *.db
+*.gguf
+*.safetensors
 .pytest_cache/
 .venv/
 __pycache__/

@@ -50,13 +50,26 @@ def build_feature_frame(
     alerts: list[Alert],
     config: Config | None = None,
     spikes: list | None = None,
+    *,
+    template_features: bool = False,
+    encoder: object | None = None,
 ) -> pd.DataFrame:
     """One row per alert, in the same order. Alerts must be time-sorted.
 
     `spikes` are memory episodes. An alert is marked when it falls inside a
     spike on the same service, after the spike was confirmed.
+
+    `template_features` appends the optional template columns. They are off
+    in the default queue. Each value uses the alert's own text and earlier
+    rows only (a later timestamp cannot change an earlier row).
     """
     config = config or Config()
+    template_rows: list[dict[str, float]] = []
+    if template_features:
+        # Local import: template_features does not import this module.
+        from .template_features import template_rows as _template_rows
+
+        template_rows = _template_rows(alerts, encoder)
     spikes_by_service: dict[str, list] = defaultdict(list)
     for spike in spikes or []:
         spikes_by_service[spike.service].append(spike)
@@ -67,7 +80,7 @@ def build_feature_frame(
     last_seen: dict[str, pd.Timestamp] = {}
     rows: list[dict] = []
 
-    for alert in alerts:
+    for index, alert in enumerate(alerts):
         counts = {}
         for minutes in windows:
             recent = history[minutes][alert.source]
@@ -112,4 +125,6 @@ def build_feature_frame(
                 ),
             }
         )
+        if template_features:
+            rows[-1].update(template_rows[index])
     return pd.DataFrame(rows)

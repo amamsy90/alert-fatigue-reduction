@@ -46,11 +46,13 @@ def test_requests_jobs_and_ingest_are_counted(client):
     assert "/metrics" not in text.split("oncall_http_requests_total")[-1]  # scrapes are not counted
 
 
-def test_monitoring_reports_every_check(client):
+def test_monitoring_reports_every_check(client, monkeypatch):
+    monkeypatch.delenv("LLM_TEMPLATE_FEATURES", raising=False)
     client.get("/connectors")
     body = client.get("/monitoring").json()
     assert set(body["checks"]) == {"latency", "errors", "precision_from_marks", "alert_volume_drift",
-                                   "metric_value_drift", "monitoring_gaps", "paging"}
+                                   "metric_value_drift", "template_feature_drift", "monitoring_gaps", "paging"}
+    assert body["checks"]["template_feature_drift"]["status"] == "n/a"
     assert body["checks"]["precision_from_marks"]["status"] == "n/a"  # no marks yet: not judged
     assert body["status"] in ("ok", "warn")
 

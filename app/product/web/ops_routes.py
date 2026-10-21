@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
 from product import ops as ops_mod
-from product.monitoring import METRICS, gauges
+from product.monitoring import METRICS, gauges, liveness_fields
 from product.monitoring import health as service_health
 from product.prometheus_adapter import probe_prometheus, run_prometheus_test
 from product.web import context as ctx
@@ -96,7 +96,7 @@ def health():
         ctx.STORE.latest_job_id()
     except Exception:  # noqa: BLE001 — degraded, not a crash
         db_ok = False
-    return {
+    body = {
         "status": "ok" if db_ok else "degraded",
         "db_ok": db_ok,
         "shadow_mode": ops_mod.get_shadow_mode(),
@@ -104,6 +104,8 @@ def health():
         "pagerduty_configured": ops_mod.routing_key_status()["configured"],
         "channels": ops_mod.configured_channels(),
     }
+    body.update(liveness_fields())
+    return body
 
 
 @router.get("/connectors")

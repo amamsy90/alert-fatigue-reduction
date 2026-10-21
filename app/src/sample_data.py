@@ -188,3 +188,155 @@ def generate_demo_day(out_dir: str | Path) -> None:
             }
         ]
     ).to_csv(out / "faults.csv", index=False)
+
+
+# (day, hour, service, kind, minutes, fault_id). kind "memory" is a byte jump the
+# absolute rule can see. kind "multi" moves cpu, latency and error together and
+# leaves memory flat, so the single-series jump rule does not fire.
+_MULTI_FAULTS = (
+    (1, 10, "api", "memory", 20, "f001"),
+    (2, 11, "db", "multi", 30, "f002"),
+    (3, 15, "api", "multi", 30, "f003"),
+    (4, 9, "db", "memory", 20, "f004"),
+    (8, 8, "api", "multi", 20, "f006"),
+    (8, 12, "api", "multi", 20, "f007"),
+    (8, 18, "db", "multi", 20, "f008"),
+    (9, 10, "db", "memory", 20, "f009"),
+    (10, 16, "api", "multi", 30, "f010"),
+    (15, 11, "api", "multi", 20, "f011"),
+)
+# False memory bumps: larger than the fault jumps, so the cost-tuned confirm
+# bar (which sits under the true jumps) still leaves them in the queue. They
+# are not faults, and they compete for slots.
+_MULTI_FALSE = (
+    (5, 2, "db", 10),
+    (8, 1, "api", 10),
+    (9, 1, "db", 10),
+    (9, 2, "db", 10),
+    (9, 3, "db", 10),
+)
+
+
+def generate_multivariate(out_dir: str | Path, seed: int = 42, days: int = 14, freq: str = "1min") -> None:
+    """Two services, four channels, faults in week 1 and later.
+
+    Channels are memory, cpu, latency and error. The jump rule, in absolute
+    mode, sees only the memory jumps. Write ``metrics.csv``, ``alerts.csv``
+    and ``faults.csv``.
+    """
+    rng = np.random.default_rng(seed)
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    t0 = pd.Timestamp("2026-01-05", tz="UTC")
+    stamps = pd.date_range(t0, periods=days * 24 * 60, freq=freq) if freq == "1min" else pd.date_range(
+        t0, t0 + pd.Timedelta(days=days), freq=freq, inclusive="left"
+    )
+    n = len(stamps)
+    rows: list[pd.DataFrame] = []
+    for service, memory_base, cpu_base in (("api", 2.0e9, 0.22), ("db", 1.6e9, 0.31)):
+        phase = 0.4 if service == "api" else 1.1
+        clock = np.linspace(0, 8 * np.pi, n)
+        memory = memory_base + 5e6 * np.sin(clock + phase) + rng.normal(0, 1e6, n)
+        cpu = cpu_base + 0.02 * np.sin(clock) + rng.normal(0, 0.005, n)
+        latency = 18 + 2 * np.sin(clock + phase) + rng.normal(0, 0.4, n)
+        error = np.clip(0.01 + 0.002 * np.sin(clock) + rng.normal(0, 0.001, n), 0, None)
+        for day, hour, _svc, _minutes in (
+            (day, hour, svc, minutes) for day, hour, svc, minutes in _MULTI_FALSE if svc == service and day < days
+        ):
+            start = t0 + pd.Timedelta(days=day, hours=hour)
+            end = start + pd.Timedelta(minutes=_minutes)
+            hot = (stamps >= start) & (stamps < end)
+            memory[hot] += 2.0e9
+        for day, hour, svc, kind, minutes, _fid in _MULTI_FAULTS:
+            if svc != service or day >= days:
+                continue
+            start = t0 + pd.Timedelta(days=day, hours=hour)
+            end = start + pd.Timedelta(minutes=minutes)
+            hot = (stamps >= start) & (stamps < end)
+            if kind == "memory":
+                memory[hot] += 1.5e9
+            else:
+                cpu[hot] = 0.95
+                latency[hot] = 220
+                error[hot] = 0.45
+        for metric, values in (("memory", memory), ("cpu", cpu), ("latency", latency), ("error", error)):
+            rows.append(
+                pd.DataFrame(
+                    {
+                        "timestamp": stamps,
+                        "value": values,
+                        "service": service,
+                        "metric": metric,
+                        "series_id": f"{service}:{metric}",
+                    }
+                )
+            )
+    pd.concat(rows, ignore_index=True).to_csv(out / "metrics.csv", index=False)
+
+    alert_rows = []
+    fault_rows = []
+    number = 0
+    for day, hour, service, kind, minutes, fid in _MULTI_FAULTS:
+        if day >= days:
+            continue
+        start = t0 + pd.Timedelta(days=day, hours=hour)
+        end = start + pd.Timedelta(minutes=minutes)
+        fault_rows.append(
+            {
+                "fault_id": fid,
+                "start": start,
+                "end": end,
+                "component": service,
+                "description": kind,
+            }
+        )
+        alert_rows.append(
+            {
+                "alert_id": f"a{number:04d}",
+                "timestamp": start + pd.Timedelta(minutes=1),
+                "source": service,
+                "alert_type": "log",
+                "severity": "error",
+                "message": f"{kind} on {service}",
+                "fault_id": fid,
+            }
+        )
+        number += 1
+    for day in range(days):
+        for service in ("api", "db"):
+            alert_rows.append(
+                {
+                    "alert_id": f"a{number:04d}",
+                    "timestamp": t0 + pd.Timedelta(days=day, hours=3, minutes=15 if service == "db" else 0),
+                    "source": service,
+                    "alert_type": "log",
+                    "severity": "info",
+                    "message": "heartbeat",
+                    "fault_id": "",
+                }
+            )
+            number += 1
+    pd.DataFrame(alert_rows).to_csv(out / "alerts.csv", index=False)
+    pd.DataFrame(fault_rows).to_csv(out / "faults.csv", index=False)
+
+
+def load_multivariate(folder: str | Path) -> tuple[pd.DataFrame, list, list]:
+    """Read a folder written by ``generate_multivariate``. Fault ids on alerts are kept."""
+    from .ingestion import load_alerts, load_faults
+
+    root = Path(folder)
+    metrics = pd.read_csv(root / "metrics.csv")
+    metrics["timestamp"] = pd.to_datetime(metrics["timestamp"], utc=True)
+    alerts = load_alerts(root / "alerts.csv")
+    raw_alerts = pd.read_csv(root / "alerts.csv")
+    if "fault_id" in raw_alerts.columns:
+        labelled = {
+            str(alert_id): fault_id
+            for alert_id, fault_id in zip(raw_alerts["alert_id"], raw_alerts["fault_id"])
+            if pd.notna(fault_id) and str(fault_id) not in ("", "nan")
+        }
+        for alert in alerts:
+            if alert.alert_id in labelled:
+                alert.fault_id = labelled[alert.alert_id]
+    faults = load_faults(root / "faults.csv")
+    return metrics, alerts, faults
