@@ -1,0 +1,54 @@
+# Optional CUDA image. CI does not build this file, and `docker compose up` does not either.
+# The base is large. Build it only when a GPU machine should run the same app:
+#
+#   docker build -f Dockerfile.gpu -t oncall-queue:gpu .
+#   docker run --gpus all -p 127.0.0.1:8080:8080 oncall-queue:gpu
+#
+# Or, from this directory, start this service by name (the CPU service stays down):
+#
+#   docker compose --profile gpu up --build oncall-queue-gpu
+#
+# The lock installed here is the CPU stack (requirements.lock). cuML, the `gpu`
+# dependency group, and llama-cpp-python are not baked in. See docs/GPU_LLM_ROLES.md.
+FROM docker.io/nvidia/cuda:12.6.3-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && python3 -m venv /opt/venv
+
+ENV PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /app
+
+# Exact versions with hashes, exported from uv.lock (`uv export --no-dev`); CI checks it is current.
+COPY requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+
+COPY src ./src
+COPY product ./product
+COPY examples ./examples
+
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+ && mkdir -p /app/product/data /app/data/sample_product \
+ && chown -R appuser:appuser /app
+
+ENV PYTHONPATH=/app
+ENV SHADOW_MODE=1
+ENV QUEUE_DB=/app/product/data/queue.db
+# Private Prometheus (in-cluster / Compose) is refused by default (SSRF). Set 1 only when
+# the app sits on a trusted network; cloud metadata is always refused.
+ENV PROM_ALLOW_PRIVATE=0
+ENV NVIDIA_VISIBLE_DEVICES=all
+
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"
+
+# One worker on purpose: sessions, the login lock and rate limits live in this process
+# (ADR 0003, docs/deployment.md §3a). Do not raise --workers.
+CMD ["uvicorn", "product.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

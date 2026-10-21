@@ -149,6 +149,30 @@ def record_ingest(new: int, duplicates: int) -> None:
         METRICS.inc("oncall_ingest_alerts_total", {"result": "duplicate"}, duplicates, "Alerts received on /ingest")
 
 
+def record_llm(outcome: str, seconds: float) -> None:
+    """One shadow-note attempt. ``off`` is not recorded: the flag is the default."""
+    METRICS.inc(
+        "oncall_llm_explain_total",
+        {"outcome": outcome},
+        doc="Shadow-note attempts by outcome (ok, timeout, fallback, error)",
+    )
+    METRICS.observe(
+        "oncall_llm_explain_duration_seconds",
+        max(0.0, seconds),
+        doc="Shadow-note latency in seconds",
+    )
+
+
+def llm_rates() -> tuple[float | None, float | None, float]:
+    """Timeout rate, fallback rate, and attempt count. Rates are None with no attempts."""
+    attempts = METRICS.total("oncall_llm_explain_total")
+    if not attempts:
+        return None, None, 0.0
+    timeouts = METRICS.total("oncall_llm_explain_total", lambda lab: lab.get("outcome") == "timeout")
+    fallbacks = METRICS.total("oncall_llm_explain_total", lambda lab: lab.get("outcome") == "fallback")
+    return timeouts / attempts, fallbacks / attempts, attempts
+
+
 # ---------------------------------------------------------------------------
 # Health computed at scrape time
 
@@ -220,6 +244,7 @@ def health(store) -> dict:
                 metric_ratio = float(metric_medians[0]) / metric_base
     pages_failed = METRICS.total("oncall_pages_total", lambda lab: lab.get("outcome") == "failed")
     low, high = ALERT_VOLUME_BAND
+    timeout_rate, fallback_rate, attempts = llm_rates()
     checks = {
         "latency": _check(p95, lambda v: v <= TARGETS["p95_latency_seconds"]),
         "errors": _check(error_rate, lambda v: v <= TARGETS["error_rate"]),
@@ -228,6 +253,7 @@ def health(store) -> dict:
             lambda v: v >= TARGETS["precision_from_marks_min"]),
         "alert_volume_drift": _check(volume_ratio, lambda v: low <= v <= high),
         "metric_value_drift": _check(metric_ratio, lambda v: m_low <= v <= m_high),
+        "template_feature_drift": _template_feature_drift(jobs),
         "monitoring_gaps": _check(last.get("gap_items") if last else None, lambda v: v <= TARGETS["gap_items_max"]),
         "paging": _check(pages_failed, lambda v: v == 0),
     }
@@ -245,7 +271,71 @@ def health(store) -> dict:
                  "last_job_gap_items": last.get("gap_items"), "last_job_has_metrics": last.get("has_metrics")},
         "targets": {**TARGETS, "alert_volume_band": list(ALERT_VOLUME_BAND),
                     "metric_value_band": list(METRIC_VALUE_BAND)},
+        "accel": {"backend": _active_backend()},
+        "llm": {**_llm_health(), "attempts": attempts, "timeout_rate": timeout_rate,
+                "fallback_rate": fallback_rate},
+        "template_encoder": _template_encoder_status(),
+        "gpu": {"memory_mib": _gpu_memory_mib()},
     }
+
+
+def liveness_fields() -> dict:
+    """Fields ``/health`` adds. No Prometheus probe and no GPU-memory query.
+
+    Weight bytes are hashed only when explanations are on (see ``llm_health``).
+    """
+    return {
+        "accel": {"backend": _active_backend()},
+        "llm": _llm_health(),
+        "template_encoder": _template_encoder_status(),
+    }
+
+
+def _active_backend() -> str:
+    from src.accel import active_backend
+
+    return active_backend()
+
+
+def _llm_health() -> dict:
+    from product.llm import llm_health
+
+    return llm_health()
+
+
+def _template_encoder_status() -> dict:
+    from src.template_features import encoder_load_status
+
+    return encoder_load_status()
+
+
+def _gpu_memory_mib() -> float | None:
+    from src.accel import gpu_memory_mib
+
+    return gpu_memory_mib()
+
+
+def _template_feature_drift(jobs: list[dict]) -> dict:
+    """Skip when ``LLM_TEMPLATE_FEATURES`` is off. Otherwise the same band as alert volume.
+
+    The value is the last job's mean ``tpl_prior`` over the median of earlier jobs.
+    Fewer than four jobs, or a zero baseline, is not judged.
+    """
+    from src.template_features import template_features_enabled
+
+    if not template_features_enabled():
+        return {"status": "n/a", "value": None}
+    values = [
+        float(job["meta"]["template_prior_mean"])
+        for job in jobs
+        if job.get("meta", {}).get("template_prior_mean") is not None
+    ]
+    if len(values) < 4:
+        return {"status": "n/a", "value": None}
+    base = _median(values[1:])
+    if not base:
+        return {"status": "n/a", "value": None}
+    return _check(values[0] / base, lambda v: ALERT_VOLUME_BAND[0] <= v <= ALERT_VOLUME_BAND[1])
 
 
 def _check(value, ok) -> dict:
@@ -266,6 +356,9 @@ def gauges(store) -> str:
         "oncall_metric_median_ratio": (h["data"]["metric_median_ratio"], "Last job metric median / median of earlier jobs"),
         "oncall_last_job_gap_items": (h["data"]["last_job_gap_items"], "Monitoring gaps shown in the last job"),
         "oncall_health_ok": (1 if h["status"] == "ok" else 0, "1 when every /monitoring check passes"),
+        "oncall_llm_timeout_rate": (h["llm"]["timeout_rate"], "Share of shadow-note attempts that timed out"),
+        "oncall_llm_fallback_rate": (h["llm"]["fallback_rate"], "Share of shadow-note attempts that fell back"),
+        "oncall_gpu_memory_mebibytes": (h["gpu"]["memory_mib"], "GPU memory in use, when nvidia-smi answers"),
     }
     lines = []
     for name, (value, doc) in values.items():

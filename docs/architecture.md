@@ -185,6 +185,7 @@ flowchart LR
 
 - The compose file publishes the port on `127.0.0.1` only. Sharing it needs `APP_PASSWORD`; a request that arrives through a proxy is refused without one.
 - The image installs exact, hash-checked versions from `requirements.lock` (exported from `uv.lock`) and has a health check on `/health`.
+- `Dockerfile` is the CPU image CI builds. `Dockerfile.gpu` plus the Compose profile `gpu` (`oncall-queue-gpu`) is optional and is not started by `docker compose up`. `/health` reports the active accelerator backend and whether shadow-note weights are enabled, present, or hash-checked. It still does not call Prometheus.
 - One process, one worker. The job lock, the evaluation lock and the `ops.json` lock are in-process, so running several workers or replicas is not supported (ADR 0003).
 
 ---
@@ -259,3 +260,15 @@ erDiagram
 `FEEDBACK` keeps the service and time window of the marked item, so marks survive when old jobs are pruned (NFR-9). `INGEST_BUFFER` and `INGEST_SEEN` stand alone: the buffer is acknowledged after a successful job, and fingerprints expire after `INGEST_DEDUP_HOURS`.
 
 Operator state that is not relational lives in `ops.json` (Live override, keys, Prometheus URL, page marks); it is written under a lock through a unique temporary file.
+
+---
+
+## 6. Optional GPU training
+
+The classifier can train its head with cuML, or with XGBoost on a CUDA device, and then stores a scikit-learn pipeline. `load_model` does not import those libraries. `src/accel.get_backend` resolves `auto` to sklearn even when cuML is installed; a GPU backend runs only when it is named, and falls back to sklearn when the device or the library is missing. Roles, the install, and what is deliberately not automatic are in `docs/GPU_LLM_ROLES.md`.
+
+A local LLM can attach a short note to the shadow record (`would_have_paged.explanations`) when `LLM_EXPLAIN` is set. The note is written after the page decision, from fields known at that moment, and it is not sent to a channel. Missing weights or a failed completion leave the same items with an empty note list. The GGUF is pinned in `product/llm_pin.json` and checked by SHA-256 at load.
+
+`LLM_TEMPLATE_FEATURES` can add a hash of the log template and a count of earlier copies to the classifier. It is off. The time-split comparison did not show a gain on the synthetic alert sample, and the GAIA full queue was not re-scored (those files are not required to boot). The default numeric columns stay the ones in `NUMERIC_COLUMNS`. `/monitoring` has a drift check for the mean of those prior counts; the check is `n/a` while the flag is off. Shadow-note latency, timeout rate, fallback rate, and GPU memory (when `nvidia-smi` answers) are on `/metrics`.
+
+Two further models can sit in front of the same queue. `METRIC_MODEL` (off) may add rule items from a causal forecast-error TCN. `LEARNED_RANKER` (off) may skip low-scoring candidates when choosing the K slots. Both load hash-checked files and refuse pickle. Neither pages. Flags, leakage controls and the GAIA training commands are in `docs/ML_MODELS.md`.

@@ -11,11 +11,14 @@ buffer is acknowledged after each job), so they are not filtered.
 """
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 
 from src.entities import Action, Alert, Decision
 from src.memory_spikes import Spike
 
+from .llm import annotate_shadow, empty_explanations
 from .monitoring import record_page
 from .notifiers import notify_opsgenie, notify_slack
 from .ops import (
@@ -32,6 +35,8 @@ from .ops import (
     set_seen_spike_keys,
 )
 from .pagerduty import notify_escalations, page_items, spike_key, would_have_paged
+
+log = logging.getLogger(__name__)
 
 
 def _skip_reason(mode: str, shadow_mode: bool) -> str | None:
@@ -120,8 +125,14 @@ def page_job(
     decisions: list[Decision],
     shown_spikes: list[Spike],
     run_at: pd.Timestamp | None = None,
+    *,
+    model: object | None = None,
 ) -> tuple[dict, dict]:
-    """Returns (paging outcome, would-have-paged summary) for the job's meta."""
+    """Returns (paging outcome, would-have-paged summary) for the job's meta.
+
+    Notes are attached after the page decision. They are not part of the item
+    list, and a failure while writing them does not change what was paged.
+    """
     run_at = run_at if run_at is not None else pd.Timestamp.now(tz="UTC")
     shown = list(shown_spikes or [])
     fresh = shown
@@ -132,6 +143,11 @@ def page_job(
     reason = _skip_reason(mode, shadow_mode)
     page = {"sent": 0, "failed": 0, "skipped": reason} if reason else _send(alerts, decisions, fresh, run_at)
     whp = would_have_paged(alerts, decisions, spikes=fresh)
+    try:
+        whp["explanations"] = annotate_shadow(whp, alerts, spikes=fresh, model=model)
+    except Exception:
+        log.exception("shadow notes were skipped")
+        whp["explanations"] = empty_explanations("error")
     if mode in PAGEABLE_MODES:
         if seen is None:
             whp["since"] = page_cutoff(run_at).isoformat()
