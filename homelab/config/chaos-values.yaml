@@ -1,0 +1,8 @@
+# Chaos Mesh 2.7.1. k3s on k3d uses containerd. The socket path is the usual
+# k3s path; some k3d builds expose /run/containerd/containerd.sock instead.
+# Override with HOMELAB_CONTAINERD_SOCKET when up.sh applies the chart.
+chaosDaemon:
+  runtime: containerd
+  socketPath: /run/k3s/containerd/containerd.sock
+dashboard:
+  create: false
