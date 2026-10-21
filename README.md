@@ -20,7 +20,7 @@ For development:
 ```bash
 cd app
 uv sync --group dev                  # exact versions from uv.lock
-uv run pytest -q                     # 421 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
+uv run pytest -q                     # 431 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
 uv run python run_validate.py        # the report's 195 checked numbers match app/results/
 uv run uvicorn product.app:app --reload
 ```
@@ -48,7 +48,7 @@ Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE
 | [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 431 tests (421 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
+| [`app/tests/`](app/tests) | 441 tests (431 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
 | [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |
 | [`app/deploy/`](app/deploy) | Settings for development, test and production |
@@ -63,3 +63,12 @@ Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE
 ## Safety defaults
 
 Shadow mode is on: every job records what it *would* have paged. Live paging needs a login password, at least one channel, and `LIVE` typed on the Connectors page, and only webhook-ingest jobs page. See [`docs/deployment.md`](docs/deployment.md) and [`docs/threat_model.md`](docs/threat_model.md).
+
+## Ranker audit (off)
+
+`RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` default off. They can attach SHAP reasons, a needs-human-review list, and a disagreement flag to the shadow queue. They do not remove a shown item, and a review item is not paged. The measured run on the shipped synthetic sample is in [`docs/ML_MODELS.md`](docs/ML_MODELS.md) (`app/results/ranker_audit_synthetic.json`). GAIA was not scored. From `app/`, the command that still has to be run where `data/gaia_raw` and `data/gaia_metrics` exist:
+
+```bash
+uv run --no-sync python run_ranker_audit.py --data gaia --backend xgboost --device cuda \
+    --seeds 42,0,1,2,3 --walk-forward --out results/ranker_audit_gaia.json
+```
