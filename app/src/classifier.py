@@ -31,7 +31,7 @@ from .accel import (
 from .config import Config, day_of
 from .entities import Action, Alert, Decision
 from .features import NUMERIC_COLUMNS, build_feature_frame
-from .template_features import TEMPLATE_COLUMNS, template_features_enabled
+from .template_features import encoder_width, template_columns, template_features_enabled
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +92,9 @@ class AlertClassifier:
     def _numeric_columns(self) -> list[str] | None:
         if not self.template_features:
             return None
-        return list(NUMERIC_COLUMNS) + list(TEMPLATE_COLUMNS)
+        encoder = self._active_encoder()
+        width = encoder_width(encoder) if encoder is not None else 4
+        return list(NUMERIC_COLUMNS) + template_columns(width)
 
     def _frame(self, alerts: list[Alert], spikes: list | None) -> pd.DataFrame:
         return build_feature_frame(
