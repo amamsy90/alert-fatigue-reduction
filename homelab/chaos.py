@@ -84,7 +84,7 @@ def fault_id(company: str, service: str, fault_type: str, start: datetime) -> st
 
 def manifest(company: Company, choice: Choice, app: App) -> str:
     duration = _minutes(choice.duration)
-    labels = f"company: {company.id}\n        service: {choice.service}"
+    labels = f"company: {company.id}\n      service: {choice.service}"
     selector = f"""\
   selector:
     namespaces:

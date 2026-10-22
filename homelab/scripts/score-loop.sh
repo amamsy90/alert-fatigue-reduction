@@ -22,12 +22,24 @@ while true; do
   fi
   # shellcheck disable=SC1091
   source "${DATA}/endpoints.env"
-  if ! curl -fsS -X POST "${APP_URL}/jobs/run" \
+  # The app answers 400 "Ingest buffer is empty" when no new alert arrived since
+  # the last job (Alertmanager re-sends are de-duplicated). That is a normal
+  # quiet window, not a failure.
+  response="${DATA}/score-response.json"
+  code="$(curl -sS -o "${response}" -w '%{http_code}' -X POST "${APP_URL}/jobs/run" \
     -H 'Content-Type: application/json' \
-    -d "${body}"; then
-    echo "score loop: the app did not accept the shadow job (it may still be buffering)" >&2
+    -d "${body}")" || true
+  code="${code:-000}"
+  stamp="$(date -u +%FT%TZ)"
+  if [[ "${code}" == "200" ]]; then
+    printf '%s accepted ' "${stamp}"
+    cat "${response}"
+    printf '\n'
+  elif [[ "${code}" == "400" ]] && grep -q 'Ingest buffer is empty' "${response}" 2>/dev/null; then
+    echo "${stamp} score loop: no new alerts since the last job"
+  else
+    echo "${stamp} score loop: the app did not accept the shadow job (HTTP ${code}): $(head -c 300 "${response}" 2>/dev/null)" >&2
   fi
-  printf '\n'
   if [[ "${once}" == "1" ]]; then
     exit 0
   fi

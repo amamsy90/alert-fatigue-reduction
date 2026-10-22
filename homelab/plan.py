@@ -70,6 +70,11 @@ opensearch:
   enabled: false
 components:
 {disabled}
+  ad:
+    # The Java ad service is OOMKilled at the chart default of 300Mi.
+    resources:
+      limits:
+        memory: 600Mi
   checkout:
     initContainers: []
     envOverrides:

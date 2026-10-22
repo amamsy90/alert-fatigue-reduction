@@ -56,3 +56,38 @@ def load_state_only(company):
         "faults": [],
         "companies": {company.id: {"seed": 1, "next_start": "2026-01-01T00:00:00Z", "open": None, "burst_until": None}},
     }
+
+
+def test_not_injected_fault_is_not_closed():
+    from datetime import datetime, timedelta, timezone
+
+    from homelab.scheduler import close_open
+
+    class C:
+        id = "acme"
+
+    start = datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc)
+    row = {"fault_type": "network-delay", "service": "frontend",
+           "end": (start + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")}
+    state = {"companies": {"acme": {"open": row}}}
+    closed = close_open(state, C(), start + timedelta(minutes=5), "not-injected")
+    assert closed["status"] == "not-injected"
+    assert "not injected" in closed["description"]
+    assert state["companies"]["acme"]["open"] is None
+
+
+def test_close_after_restart_updates_the_fault_list(tmp_path):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from homelab.scheduler import close_open
+
+    class C:
+        id = "acme"
+
+    start = datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc)
+    row = {"fault_id": "f1", "fault_type": "pod-kill", "service": "frontend", "status": "running",
+           "end": (start + timedelta(minutes=2)).isoformat().replace("+00:00", "Z")}
+    state = json.loads(json.dumps({"faults": [row], "companies": {"acme": {"open": row}}}))
+    close_open(state, C(), start + timedelta(minutes=3), "closed")
+    assert state["faults"][0]["status"] == "closed"

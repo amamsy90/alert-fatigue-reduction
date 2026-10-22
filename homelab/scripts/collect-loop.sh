@@ -39,7 +39,14 @@ while true; do
   if [[ -f "${state}" ]]; then
     start="$(py -c 'import json,sys; print(max(0, int(json.load(open(sys.argv[1]))["last_end"]) - 300))' "${state}")"
   else
-    start="$((now - 15 * 24 * 3600))"
+    start="$((now - 7 * 24 * 3600))"
+  fi
+  # Prometheus refuses query_range above 11,000 points (HTTP 400); at step=60s
+  # that is about 7.6 days. Clamp so a cold start or a long outage still loads.
+  oldest="$((now - 7 * 24 * 3600))"
+  if (( start < oldest )); then
+    echo "collector: clamping start from ${start} to ${oldest} (Prometheus 11,000-point limit)" >&2
+    start="${oldest}"
   fi
 
   alert_query="$(py -m homelab.collect query --kind alerts)"
