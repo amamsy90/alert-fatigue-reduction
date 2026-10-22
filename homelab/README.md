@@ -56,6 +56,25 @@ On ai-ROG (Ubuntu-like, Docker already installed):
 - `uv` (the app toolchain; the scripts call `uv run --with pyyaml`)
 - systemd, so `systemd-inhibit` can ask logind not to idle-sleep
 
+The ai-ROG run also needed Chaos Mesh's netfilter modules and a larger inotify
+budget. Load the modules from `/etc/modules-load.d/homelab-chaos.conf`:
+
+```
+ip_tables
+iptable_filter
+sch_netem
+ebtables
+ebtable_filter
+ebtable_nat
+```
+
+And set these sysctls (persist them under `/etc/sysctl.d/` so a reboot keeps them):
+
+```
+fs.inotify.max_user_instances=1024
+fs.inotify.max_user_watches=524288
+```
+
 `./scripts/up.sh --dry-run` and `./scripts/render.sh` do not need Docker, k3d,
 Helm or kubectl. They only render files under `homelab/data/render/`.
 

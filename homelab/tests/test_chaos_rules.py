@@ -106,3 +106,22 @@ def test_shadow_status_refuses_a_live_or_paged_app():
 def test_select_unknown_company():
     with pytest.raises(ValueError, match="unknown"):
         select_companies(load_companies(), "not-a-company")
+
+
+def test_every_manifest_is_valid_yaml_with_both_label_selectors():
+    from datetime import timedelta
+
+    import yaml
+    from homelab.chaos import Choice, manifest
+    from homelab.companies import load_companies
+
+    for company in load_companies():
+        app = company.application()
+        if app is None:
+            continue
+        http = [name for name in app.names() if app.http_port(name)]
+        for fault_type in company.chaos.types:
+            service = http[0] if fault_type == "http-abort" and http else app.names()[0]
+            choice = Choice(fault_type, service, timedelta(minutes=5), timedelta(minutes=5))
+            doc = yaml.safe_load(manifest(company, choice, app))
+            assert doc["spec"]["selector"]["labelSelectors"] == {"company": company.id, "service": service}

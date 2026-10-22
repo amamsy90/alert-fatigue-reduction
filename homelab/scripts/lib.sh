@@ -8,7 +8,8 @@ fi
 HOMELAB_SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOMELAB="$(cd "${HOMELAB_SCRIPTS}/.." && pwd)"
 ROOT="$(cd "${HOMELAB}/.." && pwd)"
-DATA="${HOMELAB}/data"
+# HOMELAB_DATA lets tests use a scratch directory instead of the live data.
+DATA="${HOMELAB_DATA:-${HOMELAB}/data}"
 RENDER="${DATA}/render"
 # shellcheck source=homelab/config/versions.env
 source "${HOMELAB}/config/versions.env"
@@ -24,8 +25,22 @@ require_cmd() {
   fi
 }
 
+# Put ROOT and ROOT/app on PYTHONPATH once. py() runs thousands of times in the
+# long-lived loops; prepending on every call grew the variable past the kernel's
+# 128 KiB per-string limit and exec failed with "Argument list too long".
+homelab_pythonpath() {
+  local entry
+  for entry in "${ROOT}/app" "${ROOT}"; do
+    case ":${PYTHONPATH:-}:" in
+      *":${entry}:"*) ;;
+      *) PYTHONPATH="${entry}${PYTHONPATH:+:${PYTHONPATH}}" ;;
+    esac
+  done
+  export PYTHONPATH
+}
+
 py() {
-  export PYTHONPATH="${ROOT}:${ROOT}/app${PYTHONPATH:+:${PYTHONPATH}}"
+  homelab_pythonpath
   if [[ -n "${HOMELAB_PYTHON:-}" ]]; then
     # The caller sets HOMELAB_PYTHON to one interpreter, not a shell snippet.
     "${HOMELAB_PYTHON}" "$@"
@@ -49,14 +64,15 @@ render_all() {
 }
 
 kill_tree() {
+  # Stop the parent first so a supervisor cannot restart a child we just killed.
   local pid="$1"
   local child
-  while read -r child; do
-    if [[ -n "${child}" ]]; then
-      kill_tree "${child}"
-    fi
-  done < <(ps -o pid= --ppid "${pid}" 2>/dev/null || true)
+  local children
+  children="$(ps -o pid= --ppid "${pid}" 2>/dev/null || true)"
   kill "${pid}" 2>/dev/null || true
+  for child in ${children}; do
+    kill_tree "${child}"
+  done
 }
 
 stop_pid() {
@@ -97,6 +113,51 @@ start_forward() {
   local service="$3"
   local local_port="$4"
   local remote_port="$5"
-  start_bg "${name}" kubectl -n "${namespace}" port-forward --address 127.0.0.1 \
+  # kubectl port-forward exits when the pod behind the service restarts, so it
+  # runs under supervise.sh and comes back on its own.
+  start_bg "${name}" "${HOMELAB_SCRIPTS}/supervise.sh" "${name}" \
+    kubectl -n "${namespace}" port-forward --address 127.0.0.1 \
     "svc/${service}" "${local_port}:${remote_port}"
+}
+
+# helm_release RELEASE CHART VERSION NAMESPACE VALUES_FILE TIMEOUT [--set k=v ...]
+# Skips the upgrade when the release is deployed with the same chart version and
+# values (see homelab/helmstate.py). Otherwise upgrades with a bounded timeout and
+# rolls back on failure, so an interrupted upgrade does not leave a half-applied
+# revision behind.
+helm_release() {
+  local release="$1" chart="$2" version="$3" namespace="$4" values="$5" timeout="$6"
+  shift 6
+  local extra=("$@")
+  local set_args=()
+  local i
+  for ((i = 0; i < ${#extra[@]}; i++)); do
+    if [[ "${extra[i]}" == "--set" ]]; then
+      set_args+=(--set "${extra[i + 1]}")
+      i=$((i + 1))
+    fi
+  done
+  local verdict
+  verdict="$(py -m homelab.helmstate --release "${release}" --namespace "${namespace}" \
+    --chart-version "${version}" --values "${values}" "${set_args[@]}" || echo upgrade)"
+  if [[ "${verdict}" == "skip" && "${HOMELAB_FORCE_HELM:-0}" != "1" ]]; then
+    log "helm ${release}: unchanged, skipping upgrade (HOMELAB_FORCE_HELM=1 forces it)"
+    return 0
+  fi
+  local flags=()
+  if helm version --short 2>/dev/null | grep -q '^v4\.'; then
+    # Helm 4 applies server-side; homelab.workloads scales deployments after each
+    # deploy, so an upgrade must take ownership of .spec.replicas back.
+    flags+=(--force-conflicts --rollback-on-failure)
+  else
+    flags+=(--atomic)
+  fi
+  helm upgrade --install "${release}" "${chart}" \
+    --version "${version}" \
+    --namespace "${namespace}" \
+    --create-namespace \
+    --values "${values}" \
+    "${extra[@]}" \
+    "${flags[@]}" \
+    --wait --timeout "${timeout}"
 }

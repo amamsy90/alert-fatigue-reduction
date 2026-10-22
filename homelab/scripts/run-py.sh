@@ -5,7 +5,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=homelab/scripts/lib.sh
 source "${HERE}/lib.sh"
-export PYTHONPATH="${ROOT}:${ROOT}/app${PYTHONPATH:+:${PYTHONPATH}}"
+homelab_pythonpath
 if [[ -n "${HOMELAB_PYTHON:-}" ]]; then
   exec "${HOMELAB_PYTHON}" "$@"
 fi

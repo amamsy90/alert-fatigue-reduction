@@ -55,11 +55,8 @@ helm repo add chaos-mesh https://charts.chaos-mesh.org >/dev/null 2>&1 || true
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
 helm repo update
 
-helm upgrade --install kps prometheus-community/kube-prometheus-stack \
-  --version "${KPS_CHART_VERSION}" \
-  --namespace observability \
-  --values "${HOMELAB}/config/kps-values.yaml" \
-  --wait --timeout 20m
+helm_release kps prometheus-community/kube-prometheus-stack "${KPS_CHART_VERSION}" \
+  observability "${HOMELAB}/config/kps-values.yaml" 15m
 
 kubectl apply -f "${RENDER}/loki.yaml"
 kubectl apply -f "${RENDER}/tempo.yaml"
@@ -74,14 +71,10 @@ socket_args=()
 if [[ -n "${HOMELAB_CONTAINERD_SOCKET:-}" ]]; then
   socket_args+=(--set "chaosDaemon.socketPath=${HOMELAB_CONTAINERD_SOCKET}")
 fi
-helm upgrade --install chaos-mesh chaos-mesh/chaos-mesh \
-  --version "${CHAOS_CHART_VERSION}" \
-  --namespace chaos-mesh \
-  --values "${HOMELAB}/config/chaos-values.yaml" \
-  "${socket_args[@]}" \
-  --wait --timeout 15m
+helm_release chaos-mesh chaos-mesh/chaos-mesh "${CHAOS_CHART_VERSION}" \
+  chaos-mesh "${HOMELAB}/config/chaos-values.yaml" 10m "${socket_args[@]}"
 
-while IFS=$'\t' read -r action cid ns url rewrite release chart version; do
+while IFS=$'\x1f' read -r action cid ns url rewrite release chart version; do
   [[ -n "${action}" ]] || continue
   log "deploy ${cid} (${action})"
   kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f -
@@ -97,12 +90,8 @@ while IFS=$'\t' read -r action cid ns url rewrite release chart version; do
       fi
       ;;
     helm)
-      helm upgrade --install "${release}" "${chart}" \
-        --version "${version}" \
-        --namespace "${ns}" \
-        --create-namespace \
-        --values "${RENDER}/otel-demo-${cid}.yaml" \
-        --wait --timeout 15m
+      helm_release "${release}" "${chart}" "${version}" "${ns}" \
+        "${RENDER}/otel-demo-${cid}.yaml" 10m
       ;;
     *)
       echo "unknown deploy action: ${action}" >&2
@@ -112,7 +101,7 @@ while IFS=$'\t' read -r action cid ns url rewrite release chart version; do
   names="$(kubectl -n "${ns}" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{","}{end}')"
   py -m homelab.workloads --company "${cid}" --names "${names}"
 done < <(py -c 'import json,sys; plan=json.load(open(sys.argv[1]));
-[print("\t".join([s.get("action",""), s.get("company",""), s.get("namespace",""), s.get("url",""), s.get("rewrite_from",""), s.get("release",""), s.get("chart",""), s.get("version","")])) for s in plan["steps"]]' "${RENDER}/plan.json")
+[print("\x1f".join([s.get("action",""), s.get("company",""), s.get("namespace",""), s.get("url",""), s.get("rewrite_from",""), s.get("release",""), s.get("chart",""), s.get("version","")])) for s in plan["steps"]]' "${RENDER}/plan.json")
 
 kubectl apply -f "${RENDER}/rules.yaml"
 
@@ -151,12 +140,12 @@ fi
 curl -fsS "http://127.0.0.1:8080/connectors" -o "${DATA}/connectors.json"
 py -m homelab.safety --connectors "${DATA}/connectors.json"
 
-start_bg chaos "${HERE}/with-inhibit.sh" "${HERE}/run-py.sh" -m homelab.scheduler \
+start_bg chaos "${HERE}/supervise.sh" chaos "${HERE}/with-inhibit.sh" "${HERE}/run-py.sh" -m homelab.scheduler \
   --state "${DATA}/chaos-state.json" \
   --faults "${DATA}/faults.csv" \
   --companies "${HOMELAB_COMPANIES}"
-start_bg collect "${HERE}/with-inhibit.sh" "${HERE}/collect-loop.sh"
-start_bg score "${HERE}/with-inhibit.sh" "${HERE}/score-loop.sh"
+start_bg collect "${HERE}/supervise.sh" collect "${HERE}/with-inhibit.sh" "${HERE}/collect-loop.sh"
+start_bg score "${HERE}/supervise.sh" score "${HERE}/with-inhibit.sh" "${HERE}/score-loop.sh"
 
 log "lab is up in shadow mode"
 log "UI: http://127.0.0.1:8080   Grafana: http://127.0.0.1:3000 (admin / homelab)"
