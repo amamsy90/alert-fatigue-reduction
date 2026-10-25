@@ -62,6 +62,12 @@ def test_obs_render_uses_pinned_images(tmp_path):
     assert versions["LOKI_IMAGE"] in loki
     assert versions["TEMPO_IMAGE"] in tempo
     assert "0.0.0.0:4317" in tempo
+    tempo_deploy = next(
+        doc for doc in yaml.safe_load_all(tempo) if doc and doc.get("kind") == "Deployment"
+    )
+    tempo_resources = tempo_deploy["spec"]["template"]["spec"]["containers"][0]["resources"]
+    assert tempo_resources["requests"]["memory"] == "512Mi"
+    assert tempo_resources["limits"]["memory"] == "3Gi"
     assert versions["COLLECTOR_IMAGE"] in collector
     assert "company-acme" in collector
 
