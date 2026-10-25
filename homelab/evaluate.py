@@ -478,8 +478,14 @@ def load_tables(collected: Path, faults_path: Path) -> tuple[pd.DataFrame, pd.Da
     if "service" in alerts.columns and "source" not in alerts.columns:
         alerts = alerts.rename(columns={"service": "source"})
     metrics = _prefix_service(metrics, company_objs)
-    if "component" in faults.columns:
-        faults = _prefix_service(faults.rename(columns={"component": "service"}), company_objs).rename(columns={"service": "component"})
+    if "component" in faults.columns and "company" in faults.columns:
+        # faults.csv also has a `service` column; renaming `component` to `service`
+        # made two columns with that name, so row["service"] was a Series and every
+        # component became its repr text. Prefix the component column in place.
+        faults["component"] = [
+            str(comp) if str(comp).startswith(f"{co}/") else tenant_source(str(co), str(comp))
+            for co, comp in zip(faults["company"], faults["component"])
+        ]
     return alerts, metrics, faults
 
 
