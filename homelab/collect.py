@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -281,7 +282,12 @@ def write_table(path: Path, rows: list[dict], columns: tuple[str, ...], keys: li
     had = len(old)
     combined = pd.concat([old, fresh], ignore_index=True)
     combined = combined.drop_duplicates(keys, keep="last")
-    combined.to_csv(path, index=False)
+    # Write a sibling temp file and rename it over the table. to_csv truncates
+    # the target first, so an in-place write let a concurrent reader (evaluate)
+    # load only the first chunk of rows. os.replace is atomic on one filesystem.
+    tmp = path.with_name(f".{path.name}.tmp")
+    combined.to_csv(tmp, index=False)
+    os.replace(tmp, path)
     return max(0, len(combined) - had)
 
 
