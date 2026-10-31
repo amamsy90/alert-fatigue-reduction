@@ -305,6 +305,16 @@ cp -a data /tmp/homelab-snapshot
 HOMELAB_DATA=/tmp/homelab-snapshot ./scripts/evaluate.sh
 ```
 
+An `alerts.csv` collected before the episode fix is not that snapshot.
+`ALERTS` has no 0 sample, so a still-firing alert never closed, and each
+pass treated its window start (`last_end` minus 5 minutes) as a new episode.
+The live file had about 87k rows for about 979 episodes. Delete
+`collected/alerts.csv` and `collected/.alerts.episodes.json`, and delete
+`collect-state.json` so the next pass re-reads Prometheus history (the
+collector clamps that lookback to 7 days). A continuing alert now keeps its
+first start and id. A re-fire after a gap longer than 120 seconds is a new
+row. The open episodes live in `collected/.alerts.episodes.json`.
+
 Results go to `homelab/results/<utc>/`:
 
 - `summary.json` — per company and pooled: scored or not, and why
