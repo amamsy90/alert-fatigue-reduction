@@ -64,7 +64,12 @@ def canonical_service(raw: str, company: Company | None) -> str:
     return service_from_pod(text, catalog) if catalog else text
 
 
-def firing_episodes(values: list[list]) -> list[tuple[float, float]]:
+# ALERTS only has samples while an alert fires, so a resolved alert shows up as
+# missing samples, not a 0. A hole longer than this (two 60 s steps) ends a stretch.
+EPISODE_GAP_SECONDS = 120.0
+
+
+def firing_episodes(values: list[list], max_gap: float = EPISODE_GAP_SECONDS) -> list[tuple[float, float]]:
     """Inclusive start of each stretch where the sample is at least 1."""
     episodes: list[tuple[float, float]] = []
     start: float | None = None
@@ -77,6 +82,9 @@ def firing_episodes(values: list[list]) -> list[tuple[float, float]]:
             on = float(pair[1]) >= 1
         except (TypeError, ValueError):
             on = False
+        if on and start is not None and previous is not None and stamp - previous > max_gap:
+            episodes.append((start, previous))
+            start = None
         if on and start is None:
             start = stamp
         if not on and start is not None:
@@ -88,7 +96,18 @@ def firing_episodes(values: list[list]) -> list[tuple[float, float]]:
     return episodes
 
 
-def alerts_from_prometheus(payload: dict, companies: list[Company]) -> list[dict[str, str]]:
+def alerts_from_prometheus(
+    payload: dict, companies: list[Company], open_state: dict[str, list[float]] | None = None
+) -> list[dict[str, str]]:
+    """One row per firing episode.
+
+    Each collector pass re-reads the last few minutes, so an alert that is still
+    firing shows up again at the start of the window. `open_state` maps
+    `source|alertname` to `[episode start, last firing sample]` from the passes
+    before; an episode that picks up within EPISODE_GAP_SECONDS of the last
+    sample keeps its first start (and so its alert_id) instead of becoming a new
+    alert each pass. The dict is updated in place.
+    """
     result = ((payload.get("data") or {}).get("result")) or []
     by_ns = _company_by_namespace(companies)
     rows: list[dict[str, str]] = []
@@ -103,9 +122,17 @@ def alerts_from_prometheus(payload: dict, companies: list[Company]) -> list[dict
         service = canonical_service(raw_service, company)
         name = str(metric.get("alertname") or "alert")
         severity = str(metric.get("severity") or "warning").lower()
-        for start, _end in firing_episodes(series.get("values") or []):
+        source = tenant_source(company_id, service)
+        key = f"{source}|{name}"
+        for start, end in firing_episodes(series.get("values") or []):
+            if open_state is not None:
+                prior = open_state.get(key)
+                if prior and end < prior[0]:
+                    continue  # an older episode re-read from the overlap; already stored
+                if prior and start <= prior[1] + EPISODE_GAP_SECONDS:
+                    start, end = prior[0], max(end, prior[1])  # still the same episode
+                open_state[key] = [start, end]
             started = _stamp(start)
-            source = tenant_source(company_id, service)
             digest = hashlib.sha1(f"{source}|{name}|{started}".encode()).hexdigest()[:16]
             rows.append(
                 {
@@ -291,6 +318,24 @@ def write_table(path: Path, rows: list[dict], columns: tuple[str, ...], keys: li
     return max(0, len(combined) - had)
 
 
+def load_episodes(path: Path) -> dict[str, list[float]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): [float(v[0]), float(v[1])] for k, v in data.items() if isinstance(v, list) and len(v) == 2}
+
+
+def save_episodes(path: Path, state: dict[str, list[float]], keep_seconds: float = 86400.0) -> None:
+    """Write the open-episode state atomically, dropping episodes idle for a day."""
+    if state:
+        newest = max(last for _start, last in state.values())
+        state = {k: v for k, v in state.items() if v[1] >= newest - keep_seconds}
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def dump_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -309,6 +354,11 @@ def main(argv: list[str] | None = None) -> None:
     ingest.add_argument("--out", type=Path, required=True)
     ingest.add_argument("--companies-file", type=Path)
     ingest.add_argument("--metric", default=MEMORY_METRIC)
+    ingest.add_argument(
+        "--episodes",
+        type=Path,
+        help="alerts only: JSON of open firing episodes (default: .<out>.episodes.json beside --out)",
+    )
     ids = sub.add_parser("ids", help="Print Tempo search trace ids, one per line.")
     ids.add_argument("--input", type=Path)
     args = parser.parse_args(argv)
@@ -329,8 +379,11 @@ def main(argv: list[str] | None = None) -> None:
     payload = json.loads(raw) if raw.strip() else {}
     companies = load_companies(args.companies_file)
     if args.kind == "alerts":
-        rows = alerts_from_prometheus(payload, companies)
+        episodes_path = args.episodes or args.out.with_name(f".{args.out.stem}.episodes.json")
+        open_state = load_episodes(episodes_path)
+        rows = alerts_from_prometheus(payload, companies, open_state)
         added = write_table(args.out, rows, ALERT_COLUMNS, ["alert_id"])
+        save_episodes(episodes_path, open_state)
     elif args.kind == "metrics":
         rows = metrics_from_prometheus(payload, companies, args.metric)
         added = write_table(args.out, rows, METRIC_COLUMNS, ["timestamp", "service", "metric"])
