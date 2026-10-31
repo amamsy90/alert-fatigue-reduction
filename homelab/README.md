@@ -293,6 +293,18 @@ starts after that first week:
 ./scripts/evaluate.sh --learned-ranker
 ```
 
+Run that on a snapshot. The collector rewrites `metrics.csv` while it is
+running, and a reader that catches the rewrite sees only the early rows.
+`write_table` now replaces the file atomically, and `load_tables` stops when
+the metrics end more than 30 minutes before the alerts. Copy the data
+directory and point `HOMELAB_DATA` at the copy (`collected/` and `faults.csv`
+live inside it):
+
+```bash
+cp -a data /tmp/homelab-snapshot
+HOMELAB_DATA=/tmp/homelab-snapshot ./scripts/evaluate.sh
+```
+
 Results go to `homelab/results/<utc>/`:
 
 - `summary.json` — per company and pooled: scored or not, and why

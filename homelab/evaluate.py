@@ -472,6 +472,7 @@ def load_tables(collected: Path, faults_path: Path) -> tuple[pd.DataFrame, pd.Da
     for column in ("start", "end"):
         if column in faults.columns and not faults.empty:
             faults[column] = _utc(faults[column])
+    _check_metrics_cover_alerts(alerts, metrics)
     companies = sorted(set(faults["company"].astype(str)) | set(metrics.get("company", pd.Series(dtype=str)).astype(str)))
     company_objs = [Company(cid, cid, True, f"company-{cid}", "online-boutique", "steady", "noisy", _dummy_chaos(), "", "") for cid in companies if cid and cid != "nan"]
     alerts = _prefix_service(alerts.rename(columns={"source": "service"}) if "source" in alerts.columns else alerts, company_objs)
@@ -487,6 +488,26 @@ def load_tables(collected: Path, faults_path: Path) -> tuple[pd.DataFrame, pd.Da
             for co, comp in zip(faults["company"], faults["component"])
         ]
     return alerts, metrics, faults
+
+
+# The collector writes alerts and memory once a minute. A metrics table that
+# stops well before the alerts is a partial read, not a quiet lab.
+METRICS_LAG_LIMIT = pd.Timedelta(minutes=30)
+
+
+def _check_metrics_cover_alerts(alerts: pd.DataFrame, metrics: pd.DataFrame) -> None:
+    if alerts.empty or metrics.empty or "timestamp" not in alerts.columns or "timestamp" not in metrics.columns:
+        return
+    alerts_end = alerts["timestamp"].max()
+    metrics_end = metrics["timestamp"].max()
+    if pd.isna(alerts_end) or pd.isna(metrics_end):
+        return
+    if alerts_end - metrics_end > METRICS_LAG_LIMIT:
+        raise SystemExit(
+            f"metrics end at {metrics_end} but alerts run to {alerts_end}; "
+            "metrics.csv looks partly read (the collector may have been rewriting it). "
+            "Rerun on a stable copy of the data."
+        )
 
 
 def _dummy_chaos():
