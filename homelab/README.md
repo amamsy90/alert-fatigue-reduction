@@ -308,12 +308,30 @@ HOMELAB_DATA=/tmp/homelab-snapshot ./scripts/evaluate.sh
 An `alerts.csv` collected before the episode fix is not that snapshot.
 `ALERTS` has no 0 sample, so a still-firing alert never closed, and each
 pass treated its window start (`last_end` minus 5 minutes) as a new episode.
-The live file had about 87k rows for about 979 episodes. Delete
-`collected/alerts.csv` and `collected/.alerts.episodes.json`, and delete
-`collect-state.json` so the next pass re-reads Prometheus history (the
-collector clamps that lookback to 7 days). A continuing alert now keeps its
-first start and id. A re-fire after a gap longer than 120 seconds is a new
-row. The open episodes live in `collected/.alerts.episodes.json`.
+The live file had about 87k rows for about 979 episodes. Leave those live
+files in place. The collector's own lookback is 7 days, which drops older
+history. Rebuild the episodes from Prometheus, whose retention in this lab
+is 15 days (`config/kps-values.yaml`), into a separate file, and score a
+snapshot that uses that file plus copies of the metrics and faults:
+
+```bash
+mkdir -p /tmp/homelab-snapshot/collected
+./scripts/run-py.sh -m homelab.rebuild_alerts \
+  --out /tmp/homelab-snapshot/collected/alerts.csv \
+  --prom-url http://127.0.0.1:9090 \
+  --start "$START"
+cp data/collected/metrics.csv /tmp/homelab-snapshot/collected/
+cp data/faults.csv /tmp/homelab-snapshot/
+HOMELAB_DATA=/tmp/homelab-snapshot ./scripts/evaluate.sh
+```
+
+Set `START` to an ISO time inside the 15-day retention. The script reads history in 5-day
+chunks at a 60-second step, applies the same 120-second gap rule as the
+collector, and writes `--out` by replacing a temp file. It does not delete
+`alerts.csv`, `.alerts.episodes.json`, or `collect-state.json`. A continuing
+alert keeps its first start and id. A re-fire after a gap longer than 120
+seconds is a new row. New collection stores open episodes in
+`collected/.alerts.episodes.json`.
 
 Results go to `homelab/results/<utc>/`:
 
