@@ -1,0 +1,4 @@
+queue,budget_k,no_metric_data,no_jump,below_threshold,budget_full
+proposed,20,0,156,0,0
+jumps_tuned,20,0,160,0,0
+delta_5m,20,0,160,0,20
