@@ -116,7 +116,7 @@ flowchart TD
 
 **Why a rule-based approach alone is insufficient for alerts.** Severity is noisy: "high" alerts are often benign and "info" lines appear during real faults. A fixed severity rule cannot use message text or the fact that an alert arrived during a memory jump, and it cannot adapt when engineers mark items as noise.
 
-**AI technology.** Supervised classification: logistic regression on TF-IDF text features, source, severity, recent alert counts and an inside-a-jump flag (scikit-learn). A second learned piece, the confirmation threshold, is a cost-minimising cut on the training window. Two different rankers need to be kept apart. The experimental jump ranker in §B4 replaces the rise threshold with a logistic regression on jump features. On GAIA at K = 20 it catches 69.7% against the full queue's 69.6%, which is no gain, and it stays an experiment. The later learned ranker (PR #26, commit `2b78bbb`, flag `LEARNED_RANKER`) chooses among the day's candidates. It was a KEEP at K = 20 on GAIA. The 1.1.0 changelog and `docs/ML_MODELS.md` record that keep and do not print catch counts, so this report does not invent them (§B7.2). The flag stays off. The homelab measurement of that ranker is §B7.
+**AI technology.** Supervised classification: logistic regression on TF-IDF text features, source, severity, recent alert counts and an inside-a-jump flag (scikit-learn). A second learned piece, the confirmation threshold, is a cost-minimising cut on the training window. Two different rankers need to be kept apart. The experimental jump ranker in §B4 replaces the rise threshold with a logistic regression on jump features. On GAIA at K = 20 it catches 69.7% against the full queue's 69.6%, which is no gain, and it stays an experiment. The later learned ranker (PR #26, commit `2b78bbb`, flag `LEARNED_RANKER`) chooses among the day's candidates. A re-run on 3 November 2026, `run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8` (seed 42, 4,000 bootstrap draws), on master `20d5664`, is in `docs/results/gaia_ranker_rerun/`. At K = 20 it caught 887 of 1,223 faults against that run's baseline of 851. The baseline is the current causal queue and matches the `proposed` row of `app/results/queue_eval_gaia.csv` (851 of 1,223, precision 0.895, 1.82 false items a day). The per-fault catch difference is +0.0294, interval [0.0147, 0.0442], KEEP. Precision is 0.9416 against 0.895, and false items a day are 1.0 against 1.82. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 with interval [0.0131, 0.0401] (`walk_forward_pooled.json`). GAIA has no companies, so this is a time split, not leave-one-company-out. The 887 on the `delta_5m_carryover` row of `queue_eval_gaia.csv` is a different queue. `LEARNED_RANKER` stays off. The homelab measurement is §B7.
 
 **Existing model or API.** An existing, well-understood model family (scikit-learn logistic regression) trained locally; no external AI API or LLM, so no data leaves the server and there is no per-call cost.
 
@@ -423,7 +423,7 @@ What this shows:
 | Option (K = 20) | Caught | Items / day | Walk-forward mean | Verdict |
 |---|---|---|---|---|
 | Full queue (reference) | 69.6% | 17.7 | 71.3% | — |
-| **Learned jump ranker** instead of the rise threshold | 69.7% | 17.7 | 71.8% | No gain on this experiment: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs. This row is `p3_ranker` in `queue_eval_gaia.csv`. It is not the later learned ranker (`LEARNED_RANKER`), which was kept at K = 20 without a printed catch count (§B7.2) |
+| **Learned jump ranker** instead of the rise threshold | 69.7% | 17.7 | 71.8% | No gain on this experiment: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs. This row is `p3_ranker` in `queue_eval_gaia.csv`. It is not the later learned ranker (`LEARNED_RANKER`). That ranker, re-run in `docs/results/gaia_ranker_rerun/`, caught 887 against a baseline of 851 of 1,223 at K = 20, KEEP (§B7.2). The flag stays off |
 | **Group** metric items within 2 min on other services into one slot | 70.7% | 17.6 | 72.6% | Small gain; one item may then name two services |
 | **Confirm level per series** (learned on week 1; off in the headline) | 69.3% | 17.6 | 70.5% | Mixed: the detector alone keeps 72.6% with fewer false items (0.8 vs 1.0 a day), but the levels reject real faults — 26 misses below threshold instead of 4, and 84.1% vs 85.8% at K = 50. The web app uses it; the published tables use the single gate |
 | **Carry over** up to 10 unused slots to the next day | **72.6%** | 18.6 | **74.8%** | Largest gain; the average stays under K. But the same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%), and the full queue then wins only 3 of 6 decided weeks (p = 0.66). Before the look-ahead fixes this row read 74.4% and 8/8 weeks; that margin did not survive |
@@ -601,9 +601,9 @@ Volume on the pooled test window, from `feedback_bootstrap.json` key `alertmanag
 
 Grouping merged nothing here: the 362 notifications equal the 362 routed episodes. Every episode already ends after a gap of more than 120 seconds, and `group_interval` is 2 minutes, so no two episodes of one group land in the same flush. Even on the most favourable reading, an alert-only tool can catch at most 90 of 559 test faults (16.1%), because only those faults have an aligned alert at all.
 
-Paired bootstrap of the ranker against the Alertmanager-style queues (`feedback_bootstrap.csv`). AM is the baseline.
+Paired bootstrap of the ranker against the Alertmanager-style queues (`feedback_bootstrap.csv`). AM is the baseline. Column heads are kept short so they stay on one line: Set is the population, CI is the 95% interval, Keep is the decision, and the two AM columns are severity-first and first-come.
 
-| Population | K | Ranker caught | AM severity-first | Interval | Decision | AM first-come | Interval | Decision |
+| Set | K | Ranker | AM severity | CI | Keep | AM time order | CI | Keep |
 |---|---|---|---|---|---|---|---|---|
 | Pooled | 5 | 18 | 0 | [0.0179, 0.0483] | KEEP | 4 | [0.0107, 0.0411] | KEEP |
 | Pooled | 10 | 38 | 2 | [0.0447, 0.0859] | KEEP | 13 | [0.0233, 0.0662] | KEEP |
@@ -626,9 +626,9 @@ When the budget is tight, the learned queue is clearly better than Alertmanager 
 
 The examiner asked whether the trained model beats simply ranking log alerts by severity. The project's severity baseline, `logs_severity`, escalates `critical`, `error` or `high` alerts, suppresses exact repeats, and fills the day first come. It is run inside the same queue and scored the same way.
 
-Paired bootstrap of `p3_ranker` against `logs_severity` (`feedback_bootstrap.csv`; 559 pooled test faults, 220 acme, 180 cassini):
+Paired bootstrap of `p3_ranker` against `logs_severity` (`feedback_bootstrap.csv`; 559 pooled test faults, 220 acme, 180 cassini). Set is the population, CI is the 95% interval, Keep is the decision, and P / false is precision and false items a day.
 
-| Population | K | Ranker caught | Severity caught | 95% interval | Decision | Ranker precision / false a day | Severity precision / false a day |
+| Set | K | Ranker | Severity | CI | Keep | Ranker P / false | Severity P / false |
 |---|---|---|---|---|---|---|---|
 | Pooled | 5 | 18 | 0 | [0.0179, 0.0483] | KEEP | 0.600 / 2.00 | 0.000 / 0.33 |
 | Pooled | 10 | 38 | 0 | [0.0465, 0.0894] | KEEP | 0.672 / 3.17 | 0.000 / 0.33 |
@@ -647,7 +647,7 @@ The ranker is a KEEP over severity in all 12 comparisons. Severity catches nothi
 
 Beating a rule that shows almost nothing is a weak test, so the Alertmanager severity-first queue in §B7.1 was also run. It ranks every routed alert by severity and then by time, and it fills the whole budget. Pooled, the ranker still wins at K = 20 (68 against 21, interval [0.0555, 0.1127]). Within a single company it loses at generous budgets, as §B7.1 says.
 
-On GAIA, the learned ranker added in PR #26 (commit `2b78bbb`) is a KEEP at K = 20. `CHANGELOG.md` for 1.1.0 and `docs/ML_MODELS.md` record that keep. Neither file, nor any committed results file, prints the catch counts. `app/results/queue_eval_gaia.csv` does contain 887 catches at K = 20, but that row is `delta_5m_carryover`, not the learned ranker. This report therefore does not state an 887-against-851 figure. `LEARNED_RANKER` stays off.
+On GAIA, the learned ranker added in PR #26 was re-run on 3 November 2026 (`docs/results/gaia_ranker_rerun/summary_by_k.csv`, time split, seed 42, 4,000 draws). At K = 20 it caught 887 of 1,223 faults against the baseline variant's 851, a difference of +0.0294 with interval [0.0147, 0.0442], KEEP. Precision is 0.9416 against 0.895, and false items a day are 1.0 against 1.82. That baseline equals the `proposed` row in `app/results/queue_eval_gaia.csv`. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 with interval [0.0131, 0.0401]. GAIA has no companies, so this is not leave-one-company-out. `queue_eval_gaia.csv` also has 887 catches at K = 20 on the row `delta_5m_carryover`. That is a different queue, the rate rule with unused slots carried over, and it is not this ranker. `LEARNED_RANKER` stays off.
 
 ### B7.3 Fault topology and deduplication
 
@@ -717,9 +717,9 @@ Three simulated companies run in one k3d cluster in shadow mode, with Chaos Mesh
 
 Two data bugs were found and fixed before the final run, in draft PR #30, with tests. The evaluator could read `metrics.csv` while the collector was still writing it, and then saw metrics that stopped before the alerts, so two runs on the same data disagreed. Tables are now written to a temporary file and renamed into place, and the evaluator refuses to run if the metrics end more than 30 minutes before the alerts. Evaluations run on a frozen snapshot. Separately, the collector wrote one row per pass for each alert that was still firing. It now tracks open episodes, and the day-12 alerts were rebuilt from Prometheus history with the same 120-second rule.
 
-Pooled result, all three companies in one queue (`pooled_bootstrap.csv`). The ranker is the candidate.
+Pooled result, all three companies in one queue (`pooled_bootstrap.csv`). The ranker is the candidate. Each block is caught faults, the 95% interval, and the keep decision, against proposed, tuned jumps, and static p99.
 
-| K | Ranker caught | vs proposed | Interval | Decision | vs tuned jumps | Interval | Decision | vs static p99 | Interval | Decision |
+| K | Ranker | Proposed | CI | Keep | Tuned jumps | CI | Keep | Static p99 | CI | Keep |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 5 | 18 | 12 | [0.0036, 0.0197] | KEEP | 14 | [−0.0018, 0.0179] | DROP | 2 | [0.0143, 0.0447] | KEEP |
 | 10 | 38 | 31 | [0.0018, 0.0250] | KEEP | 28 | [0.0054, 0.0322] | KEEP | 12 | [0.0233, 0.0698] | KEEP |
@@ -732,7 +732,7 @@ Within each company, trained and tested on its own data (`pooled_bootstrap.csv`)
 
 The strict test is leave-one-company-out: train the ranker on the other two companies and test it on the held-out company, at K = 20 (`ranker/leave_one_company_out.json`).
 
-| Held-out company | Baseline caught | Ranker caught | Interval | Decision |
+| Company | Baseline | Ranker | CI | Keep |
 |---|---|---|---|---|
 | acme | 32 of 220 | 32 | [0.0, 0.0] | DROP |
 | borealis | 25 of 159 | 25 | [0.0, 0.0] | DROP |
@@ -748,7 +748,7 @@ When the budget is generous (K = 50), the simpler `proposed` queue catches more,
 
 Detection is low overall: 68 of 559 test faults at K = 20, about 12%. Many faults leave no alert, and the strict profile hides most of borealis.
 
-On GAIA the same ranker was kept at K = 20, without a catch count in the committed files (§B7.2). The homelab therefore supports that keep inside one platform it has already seen. It does not yet show that the ranker generalises to a company that was held out of training.
+On GAIA the same ranker caught 887 against 851 of 1,223 at K = 20 and was a KEEP (§B7.2, `docs/results/gaia_ranker_rerun/`). The homelab therefore supports that keep inside one platform it has already seen. It does not yet show that the ranker generalises to a company that was held out of training. GAIA itself has no companies, so its split is by time, not leave-one-company-out.
 
 ### B7.5 One alert through the pipeline
 
