@@ -1,0 +1,113 @@
+{
+  "product_flags": {
+    "LEARNED_RANKER": "off",
+    "METRIC_MODEL": "off",
+    "LLM_EXPLAIN": "off",
+    "SHADOW_MODE": "unchanged"
+  },
+  "flags_changed": false,
+  "split_day": 7,
+  "budgets": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "jump_mode": "relative",
+  "jump_ratio": 0.3,
+  "delta_rise_bytes": 50000000.0,
+  "per_company": {
+    "acme": {
+      "name": "acme",
+      "scored": true,
+      "train_end": "2026-10-28 19:15:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00",
+      "test_faults": 220,
+      "jump_mode": "relative",
+      "jump_ratio": 0.3,
+      "delta_rise_bytes": 50000000.0,
+      "queues": [
+        "delta_5m",
+        "delta_5m_carryover",
+        "jumps_hindsight",
+        "jumps_online",
+        "jumps_tuned",
+        "logs_severity",
+        "p3_carryover",
+        "p3_grouped",
+        "p3_per_series",
+        "p3_per_series_jumps",
+        "p3_ranker",
+        "proposed",
+        "static_p99"
+      ]
+    },
+    "borealis": {
+      "name": "borealis",
+      "scored": false,
+      "reason": "Training data needs both fault and noise alerts",
+      "train_end": "2026-10-28 19:15:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00"
+    },
+    "cassini": {
+      "name": "cassini",
+      "scored": true,
+      "train_end": "2026-10-28 19:17:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00",
+      "test_faults": 180,
+      "jump_mode": "relative",
+      "jump_ratio": 0.3,
+      "delta_rise_bytes": 50000000.0,
+      "queues": [
+        "delta_5m",
+        "delta_5m_carryover",
+        "jumps_hindsight",
+        "jumps_online",
+        "jumps_tuned",
+        "logs_severity",
+        "p3_carryover",
+        "p3_grouped",
+        "p3_per_series",
+        "p3_per_series_jumps",
+        "p3_ranker",
+        "proposed",
+        "static_p99"
+      ]
+    }
+  },
+  "pooled": {
+    "name": "pooled",
+    "scored": true,
+    "train_end": "2026-10-28 19:15:11+00:00",
+    "test_end": "2026-11-02 19:15:03+00:00",
+    "test_faults": 559,
+    "jump_mode": "relative",
+    "jump_ratio": 0.3,
+    "delta_rise_bytes": 50000000.0,
+    "queues": [
+      "delta_5m",
+      "delta_5m_carryover",
+      "jumps_hindsight",
+      "jumps_online",
+      "jumps_tuned",
+      "logs_severity",
+      "p3_carryover",
+      "p3_grouped",
+      "p3_per_series",
+      "p3_per_series_jumps",
+      "p3_ranker",
+      "proposed",
+      "static_p99"
+    ]
+  },
+  "leave_one_company_out": {
+    "status": "off",
+    "reason": "Pass --learned-ranker to train the slot ranker on the other companies and score the held-out company at K=20. LEARNED_RANKER is not set.",
+    "product_flags": {
+      "LEARNED_RANKER": "off",
+      "METRIC_MODEL": "off",
+      "LLM_EXPLAIN": "off",
+      "SHADOW_MODE": "unchanged"
+    }
+  }
+}
