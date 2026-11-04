@@ -1,0 +1,6 @@
+gaia: detecting
+gaia K=5 faults=1226 proposed=240 ranker_status=trained
+gaia K=10 faults=1226 proposed=476 ranker_status=trained
+gaia K=20 faults=1226 proposed=854 ranker_status=trained
+gaia K=50 faults=1226 proposed=1052 ranker_status=trained
+wrote /home/ai/work/enh-gaia-wt/docs/results/enhancements/gaia-20261104T193400Z rows=65 keep=9

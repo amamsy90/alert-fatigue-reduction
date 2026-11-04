@@ -91,6 +91,21 @@ def flag_enabled(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in _ON
 
 
+def require_xgboost(backend: str) -> None:
+    """Refuse a requested XGBoost fit when the library is not installed.
+
+    ``fit_ranker`` would otherwise keep going with the pointwise model.
+    """
+    from .ranker import xgboost_importable
+
+    if backend == "xgboost" and not xgboost_importable():
+        raise SystemExit(
+            "backend xgboost was requested but xgboost cannot be imported. "
+            "Nothing was scored. Use the gpu dependency group "
+            "(uv run --directory app --group gpu) or the existing GPU virtualenv."
+        )
+
+
 def company_calibration_enabled() -> bool:
     return flag_enabled("RANKER_COMPANY_CALIBRATION")
 
