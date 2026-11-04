@@ -20,7 +20,15 @@ export RANKER_COMPANY_CALIBRATION=1
 export HYBRID_QUEUE=1
 export RANKER_TOPOLOGY_FEATURES=1
 unset LEARNED_RANKER METRIC_MODEL LLM_EXPLAIN
-uv run --directory "${ROOT}/app" python "${ROOT}/experiments/run_enhancements.py" \
+# gpu is a dependency group, not a package extra. Without it, uv's app env has
+# no xgboost and the ranker would silently fit the pointwise model.
+if ! uv run --directory "${ROOT}/app" --group gpu python -c "import xgboost"; then
+  echo "xgboost did not import. Refusing to score with --backend xgboost." >&2
+  echo "Install the gpu group (uv run --directory app --group gpu) or use the GPU virtualenv." >&2
+  echo "A missing import must not fall back to the pointwise model." >&2
+  exit 1
+fi
+uv run --directory "${ROOT}/app" --group gpu python "${ROOT}/experiments/run_enhancements.py" \
   --data gaia \
   --backend xgboost \
   --device cuda \

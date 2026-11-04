@@ -59,9 +59,11 @@ from src.enhancements import (  # noqa: E402
     hybrid_queue_enabled,
     note_catch_minutes,
     recalibrate_threshold,
+    require_xgboost,
     topology_features_enabled,
 )
 from src.experiment import load_gaia  # noqa: E402
+from src.model_eval import published_scoring_window  # noqa: E402
 from src.features import build_feature_frame  # noqa: E402
 from src.jump_ranker import JumpRanker  # noqa: E402
 from src.memory_spikes import detect_gaps, detect_jumps, detect_leaks  # noqa: E402
@@ -195,16 +197,31 @@ def run_split_population(
     apps: dict[str, str],
     do_hybrid: bool,
     do_topology: bool,
+    origin: pd.Timestamp | None = None,
+    test_end: pd.Timestamp | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Day-7 split for E2, E3 and E4. One detection pass, then every K."""
+    """Day-7 split for E2, E3 and E4. One detection pass, then every K.
+
+    Homelab leaves ``origin`` and ``test_end`` empty and uses the series span.
+    GAIA passes the published alert window so metric points outside the alerts
+    cannot add faults.
+    """
     catch: list[dict] = []
     delays: list[dict] = []
-    origin, last = _bounds(metrics, alerts, faults)
-    if origin is None or last is None or last - origin <= pd.Timedelta(days=config.split_day):
-        catch.append(_blank("E2", name, "hybrid", "series is not longer than the first week"))
-        return catch, delays
-    train_end = _utc(origin) + pd.Timedelta(days=config.split_day)
-    test_end = _utc(last) + pd.Timedelta(seconds=1)
+    if origin is None or test_end is None:
+        origin, last = _bounds(metrics, alerts, faults)
+        if origin is None or last is None or last - origin <= pd.Timedelta(days=config.split_day):
+            catch.append(_blank("E2", name, "hybrid", "series is not longer than the first week"))
+            return catch, delays
+        train_end = _utc(origin) + pd.Timedelta(days=config.split_day)
+        test_end = _utc(last) + pd.Timedelta(seconds=1)
+    else:
+        origin = _utc(origin)
+        test_end = _utc(test_end)
+        train_end = origin + pd.Timedelta(days=config.split_day)
+        if test_end - origin <= pd.Timedelta(days=config.split_day):
+            catch.append(_blank("E2", name, "hybrid", "series is not longer than the first week"))
+            return catch, delays
     train_alerts = [alert for alert in alerts if alert.timestamp < train_end]
     test_alerts = [alert for alert in alerts if train_end <= alert.timestamp < test_end]
     train_faults = [fault for fault in faults if fault.start < train_end]
@@ -255,6 +272,11 @@ def run_split_population(
         ranker, rank_status = fit_ranker(
             train_items, train_faults, cfg, None, train_end=train_end, backend=backend, device=device, seed=BOOTSTRAP_SEED
         )
+        if backend == "xgboost" and ranker is not None and ranker.backend != "xgboost":
+            raise SystemExit(
+                "backend xgboost was requested but the fitted ranker is "
+                f"{ranker.backend}. Refusing to score a pointwise fallback."
+            )
         learned = ranker.select(test_items, None, cfg) if ranker is not None else None
         topo, topo_status = (None, "off")
         if do_topology:
@@ -268,6 +290,11 @@ def run_split_population(
                 backend=backend,
                 device=device,
                 enabled=True,
+            )
+        if backend == "xgboost" and topo is not None and topo.backend != "xgboost":
+            raise SystemExit(
+                "backend xgboost was requested but the topology ranker is "
+                f"{topo.backend}. Refusing to score a pointwise fallback."
             )
         topology = topo.select(test_items, None, cfg) if topo is not None else None
         p3 = (
@@ -638,17 +665,27 @@ def run_gaia(out: Path, *, backend: str, device: str) -> None:
             "GAIA folders are not in this worktree (data/gaia_raw and data/gaia_metrics). Nothing was scored."
         )
     data = load_gaia()
+    config = Config()
+    origin, train_end, stop, frame, test_faults = published_scoring_window(
+        data.metrics, data.alerts, data.faults, config
+    )
+    print(
+        f"gaia window origin={origin} train_end={train_end} stop={stop} test_faults={len(test_faults)}",
+        flush=True,
+    )
     catch, delays = run_split_population(
         "gaia",
-        data.metrics,
+        frame,
         data.alerts,
         data.faults,
-        Config(),
+        config,
         backend=backend,
         device=device,
         apps={},
         do_hybrid=hybrid_queue_enabled(),
         do_topology=topology_features_enabled(),
+        origin=origin,
+        test_end=stop,
     )
     catch.append(
         _blank(
@@ -718,6 +755,7 @@ def main(argv: list[str] | None = None) -> None:
     for name in PRODUCT_FLAGS:
         if os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}:
             raise SystemExit(f"{name} is on. This script does not run with a product model flag set.")
+    require_xgboost(args.backend)
     if args.data == "gaia":
         os.chdir(ROOT / "app")
         run_gaia(args.out, backend=args.backend, device=args.device)
