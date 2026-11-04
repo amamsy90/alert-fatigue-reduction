@@ -63,7 +63,7 @@ Table 2. Home lab day 12, pooled, 559 test faults; ranker caught 68 at K = 20
 | Alertmanager, first-come | 28 | [0.0429, 0.1002] | KEEP |
 | proposed at K = 50 | 81 (ranker 75) | [−0.0215, −0.0018] | DROP |
 
-At K = 20 the ranker precision is 0.6731 and false items a day are 5.67, against 0.4775 and 9.67 for proposed (pooled_bootstrap.csv, feedback_bootstrap.csv). The KEEP against proposed and static_p99 also holds at K = 5 and 10. Against tuned jumps it holds at K = 10 and 20 only; the K = 5 cell is DROP. Leave-one-company-out at K = 20 is DROP for acme (32 of 220), borealis (25 of 159) and cassini (21 of 180), each identical to its baseline. Overall detection is 68 of 559, about 12%. The 120-second episode rule is the main deduplication step (1,182 evaluated episodes). Alertmanager grouping then merged none of the 762 routed episodes. Network-delay faults alert on their own service in 1 of 321 cases. Appendix I checks four optional experiments, flags off by default. None beat the published ranker at K = 20, and none beat proposed at K = 50.
+At K = 20 the ranker precision is 0.6731 and false items a day are 5.67, against 0.4775 and 9.67 for proposed (pooled_bootstrap.csv, feedback_bootstrap.csv). The KEEP against proposed and static_p99 also holds at K = 5 and 10. Against tuned jumps it holds at K = 10 and 20 only; the K = 5 cell is DROP. Leave-one-company-out at K = 20 is DROP for acme (32 of 220), borealis (25 of 159) and cassini (21 of 180), each identical to its baseline. Alertmanager grouping merged none of the 762 routed episodes. On GAIA the learned hybrid at K = 20 catches 893 against the learned ranker's 887 (interval [0.0016, 0.0090], Appendix I), and the home-lab leave-one-company-out DROP still stands.
 
 ### 3.5 Interpretation
 
@@ -1132,7 +1132,7 @@ Table H2. Library interfaces
 
 ## Appendix I. Optional queue checks
 
-The four checks live in `src/enhancements.py`. Each stays off unless its flag is `1`, `true`, `yes` or `on`. This run set the three flags in the scoring process only. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN` stayed unset, and nothing was paged. The keep rule is the same paired bootstrap as Table 2: 4,000 draws, seed 42, KEEP only when the interval's lower bound is above 0. The input is the committed day-12 snapshot. A GAIA run used the metric span instead of the published alert window, so its counts are not the Table 1 baseline and are not cited. The scorer now uses that alert window. Re-run `experiments/run_enhancements_gaia.sh` before adding GAIA rows.
+The four checks live in `src/enhancements.py`. Each stays off unless its flag is `1`, `true`, `yes` or `on`. This run set the three flags in the scoring process only. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN` stayed unset, and nothing was paged. The keep rule is the same paired bootstrap as Table 2: 4,000 draws, seed 42, KEEP only when the interval's lower bound is above 0. The home-lab input is the committed day-12 snapshot. The GAIA rows use the published alert window: 1,223 test faults, and at K = 20 proposed catches 851 and the learned ranker 887, the same baseline as Table 1. E1 is not scored because GAIA is one tenant. Flags stayed off in the product. The run is `docs/results/enhancements/gaia-20261104T194507Z/`.
 
 When M equals K, a hybrid queue is the ranker it starts from, so those rows repeat a ranker-versus-proposed result. The new question is a smaller M filled out by proposed.
 
@@ -1171,3 +1171,31 @@ Table I2. Minutes from fault start to the first catching item, pooled. The inter
 | jump hybrid, M = 20 | 50 | 82 | 0.80 | 3.24 | 0.00 | [0.00, 0.00] |
 
 On faults both queues caught, the ranker and proposed have the same median delay. Alertmanager is slower by about two and a half minutes. The static p99 median is negative because the credited spike was shown before the fault start. Severity caught nothing, so it has no delay. Full rows are in `docs/results/enhancements/homelab-20261104T192524Z/`.
+
+Table I3. GAIA catch comparisons, 1,223 faults. Counts and intervals are from `summary.csv`, rounded to four decimals. When M is capped by K, the M = 10, M = 20 and min(K, 20) rows are the same queue.
+
+| Check | Comparison | Caught | 95% CI | Decision |
+|---|---|---|---|---|
+| E2 learned hybrid, M = 20 and min(K, 20), K = 20 | vs proposed | 893 vs 851 | [0.0213, 0.0491] | KEEP |
+| E2 learned hybrid, M = 20 and min(K, 20), K = 20 | vs learned ranker | 893 vs 887 | [0.0016, 0.0090] | KEEP |
+| E2 learned hybrid, M = 10, K = 20 | vs proposed | 848 vs 851 | [−0.0057, 0.0000] | DROP |
+| E2 learned hybrid, M = 10, K = 20 | vs learned ranker | 848 vs 887 | [−0.0466, −0.0172] | DROP |
+| E2 learned hybrid, K = 5 | vs learned ranker | 250 vs 242 | [0.0025, 0.0114] | KEEP |
+| E2 learned hybrid, K = 5 | vs proposed | 250 vs 239 | [−0.0090, 0.0270] | DROP |
+| E2 learned hybrid, K = 50 | vs proposed and vs learned ranker | 1049 vs 1049 | [0.0000, 0.0000] | DROP |
+| E2 jump hybrid, K = 5 | vs proposed | 238 vs 239 | [−0.0025, 0.0000] | DROP |
+| E2 jump hybrid, K = 5 | vs p3 ranker | 238 vs 238 | [0.0000, 0.0000] | DROP |
+| E2 jump hybrid, K = 10 | vs proposed | 476 vs 475 | [0.0000, 0.0025] | DROP |
+| E2 jump hybrid, K = 10 | vs p3 ranker | 476 vs 474 | [0.0000, 0.0041] | DROP |
+| E2 jump hybrid, M = 10, K = 20 | vs proposed | 848 vs 851 | [−0.0057, 0.0000] | DROP |
+| E2 jump hybrid, M = 10, K = 20 | vs p3 ranker | 848 vs 852 | [−0.0090, 0.0016] | DROP |
+| E2 jump hybrid, M = 20, K = 20 | vs proposed | 853 vs 851 | [−0.0033, 0.0065] | DROP |
+| E2 jump hybrid, M = 20, K = 20 | vs p3 ranker | 853 vs 852 | [0.0000, 0.0025] | DROP |
+| E2 jump hybrid, K = 50 | vs proposed | 1049 vs 1049 | [0.0000, 0.0000] | DROP |
+| E2 jump hybrid, K = 50 | vs p3 ranker | 1049 vs 1047 | [0.0000, 0.0041] | DROP |
+| E3 topology, K = 20 | vs proposed | 886 vs 851 | [0.0139, 0.0433] | KEEP |
+| E3 topology, K = 20 | vs learned ranker | 886 vs 887 | [−0.0065, 0.0049] | DROP |
+| E3 topology, K = 50 | vs proposed and vs learned ranker | 1049 vs 1049 | [0.0000, 0.0000] | DROP |
+| E1 company calibration |  |  |  | not scored |
+
+At K = 50 the learned hybrid, the jump hybrid and topology each catch 1049, the same as proposed. The jump hybrid does not beat p3 (1,047): the interval includes 0. M = 10 at K = 20 is worse than both proposed and the learned ranker. The K = 5 KEEP is against the learned ranker only.
