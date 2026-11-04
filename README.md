@@ -2,73 +2,121 @@
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
-An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts, pages safely, learns from Real / Noise marks, and ships as one Docker container.
+An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts. An optional learned ranker stays off. The app ships as one Docker container and pages nothing unless Live is armed.
 
-[![CI](https://github.com/amamsy90/alert-fatigue-reduction/actions/workflows/ci.yml/badge.svg)](https://github.com/amamsy90/alert-fatigue-reduction/actions/workflows/ci.yml)
+The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). On GAIA at K = 20 the learned ranker catches 887 of 1,223 faults against a baseline of 851. The detector alone catches 72.6%. Those are different rows (`docs/results/gaia_ranker_rerun/summary_by_k.csv` and `jumps_tuned` in `app/results/queue_eval_gaia.csv`).
 
-On the GAIA microservice benchmark at 20 items a day, the detector catches **72.6%** of 1,223 test faults (the best possible is 84.9%), against 68.9% for a Prometheus rate rule and 0% for log severity. It wins all 8 walk-forward weeks with fewer false items. Details and limits are in [`FINAL_REPORT.md`](FINAL_REPORT.md).
+## Team
 
-## Start
+Aishah Mohamed Alyammahi is the sole member: requirements, design, implementation, evaluation, the home lab, and documentation. AI coding assistants were used for review, tests and drafting. The author is responsible for the design, the method and the claims.
 
-```bash
-cd app
-docker compose up -d                 # http://127.0.0.1:8080  (shadow mode: nothing is paged)
-```
-
-For development:
-
-```bash
-cd app
-uv sync --group dev                  # exact versions from uv.lock
-uv run pytest -q                     # 431 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
-uv run python run_validate.py        # the report's 195 checked numbers match app/results/
-uv run uvicorn product.app:app --reload
-```
-
-**Runtime (measured 14 Oct 2026, clean clone in a Linux container `ghcr.io/astral-sh/uv:python3.14-bookworm`):** `uv sync --group dev` 8 min 13 s with an empty uv cache, `pytest -q` 58 s (300 passed, 1 skipped), `run_validate.py` a few seconds. `docker compose up -d --build` serves `/health` within about 30 s of the build finishing.
-
-**Benchmark data** is not in the repository or the zip (about 420 MB). `run_validate.py` and the tests need only the committed `app/results/`. To rerun an experiment, fetch its data first; each script pins its source URL and checks SHA-256 where the source publishes stable files:
-
-```bash
-cd app
-uv run python ../tools/fetch_nab.py            # NAB, MIT licence (~15 MB); then: uv run python run_nab.py  (about 1 min in total)
-uv run python ../tools/fetch_smd.py            # SMD (OmniAnomaly)
-uv run python ../tools/fetch_rcaeval_mem.py    # RCAEval memory cases
-uv run python ../tools/fetch_rcaeval_re23.py   # RCAEval RE2/RE3, checked against tools/rcaeval_re23_sha256.txt
-uv run python ../tools/fetch_gaia.py           # GAIA, ~1.8 GB download, SHA-256 checked (--check to verify only)
-```
-
-Try it on your own data without code: open `/evaluate` ([`USE_YOUR_DATA.md`](USE_YOUR_DATA.md)).
-
-## What is where
+## Project structure
 
 | Path | What |
 |---|---|
-| [`FINAL_REPORT.md`](FINAL_REPORT.md) | The report: Part A follows the course brief's 13 sections (with a rubric map), Part B the results, Part C how to reproduce them |
-| [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
+| [`FINAL_REPORT.md`](FINAL_REPORT.md) | Main report (sections 1–5) and Appendices A–G |
+| [`docs/`](docs/README.md) | Requirements, architecture, ADRs, threat model, test plan, deployment, MLOps, monitoring, privacy |
+| [`docs/results/`](docs/results/homelab_day12/README.md) | Frozen GAIA ranker re-run and home-lab day-12 summaries |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 441 tests (431 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
-| `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
-| [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |
-| [`app/deploy/`](app/deploy) | Settings for development, test and production |
-| [`app/perf/`](app/perf) | Load test |
+| [`app/tests/`](app/tests) | Application tests |
+| [`homelab/`](homelab/README.md) | Single-machine multi-company lab (shadow only) |
+| `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results) |
+| [`figures/`](figures) | Plots and the architecture diagram |
+| [`app/deploy/`](app/deploy) | Settings templates for development, test and production |
+| [`tools/`](tools) | Data fetch scripts and the report builder |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
-| [`submission/`](submission/README.md) | Word / PDF copies for upload (regenerate from the Markdown first) |
-| `design_specification.md`, `project_plan.md`, `ROADMAP.md`, `VALIDATION.md`, `CODE_REVIEW.md` | Design detail, plan, roadmap, result files, the first review |
-| `DEMO_SCRIPT.md`, `VIVA_ANSWERS.md`, `Alert_Fatigue_Speaker_Notes.md` | Presentation and viva material |
-| [`submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`](submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf) | The proposal as submitted (5 October 2026), with its Word source |
-| `PROJECT_PROPOSAL.md`, `proposal.md`, `UAE_PILOT_OFFER.md` | Earlier proposal drafts in Markdown, and a pilot offer |
+
+## Prerequisites
+
+- Python 3.10, 3.11 or 3.12 (`requires-python` is `>=3.10,<3.13` in `app/pyproject.toml`). This tree was re-tested on CPython 3.12.3.
+- [uv](https://docs.astral.sh/uv/) for the locked environment.
+- Docker, if you run the container or the integration test.
+- The home lab also needs k3d, kubectl, Helm 3, curl and systemd. See [`homelab/README.md`](homelab/README.md).
+- Node.js and `npm ci` only if you regenerate the Word report (`tools/md2docx.js`).
+
+No paid API is required. PagerDuty, Slack and Opsgenie accounts are optional, and only for Live paging, which is off by default. There is no OpenAI or other hosted-model key. Optional GPU packages (PyTorch, XGBoost) are for ablations only.
+
+## Installation
+
+```bash
+cd app
+uv sync --group dev
+```
+
+Or the container, which stays in shadow mode:
+
+```bash
+cd app
+docker compose up -d
+```
+
+Open http://127.0.0.1:8080.
+
+## Configuration
+
+Copy a template and fill the placeholders. Do not commit `.env` or `deploy/prod.env`.
+
+```bash
+cp app/.env.example app/.env
+```
+
+`app/.env.example` leaves `APP_PASSWORD` and `INGEST_TOKEN` empty. `app/deploy/prod.env.example` is the production template. `app/deploy/dev.env` is the laptop file. `app/deploy/test.env` uses the obvious placeholder `CHANGE_ME_TEST_ONLY` and never pages. The variable list is in [`app/README.md`](app/README.md). To point Compose at a file:
+
+```bash
+cd app
+ENV_FILE=deploy/prod.env docker compose up -d
+```
+
+## Usage
+
+Shadow mode records what would have been paged. Live paging needs `APP_PASSWORD`, a channel, and the typed word `LIVE`, and only ingest jobs page.
+
+```bash
+cd app
+uv run uvicorn product.app:app --reload
+uv run python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv
+```
+
+Own data, without code changes: open `/evaluate` ([`USE_YOUR_DATA.md`](USE_YOUR_DATA.md)).
+
+## Testing and evaluation
+
+Tested on Linux with CPython 3.12.3. GitHub Actions also runs Python 3.10 and 3.12 on `ubuntu-latest`. On this commit:
+
+```bash
+cd app
+uv run pytest -q                      # 421 passed, 10 skipped
+uv run ruff check .                   # clean
+uv run python run_validate.py         # 195 checked numbers
+uv run --with pyyaml pytest -q ../homelab/tests   # 62 passed
+```
+
+The integration job needs Docker (`app/tests/integration`, started from `.github/workflows/ci.yml`).
+
+CPU is enough for the app, the tests and the published GAIA tables. About 20 GB of free RAM is the estimate for the full home lab. An NVIDIA GPU is optional and was used only for the ranker re-run (RTX 5090 Laptop, torch 2.14.1+cu130, xgboost 3.4.1; `docs/results/gaia_ranker_rerun/env.txt`).
+
+Fetch benchmark data, then score it. Each fetch script names its source. GAIA and RCAEval RE2/RE3 check SHA-256.
+
+```bash
+cd app
+uv run python ../tools/fetch_gaia.py
+uv run python ../tools/fetch_nab.py
+uv run python ../tools/fetch_smd.py
+uv run python ../tools/fetch_rcaeval_mem.py
+uv run python ../tools/fetch_rcaeval_re23.py
+uv run python run_queue_eval.py
+uv run python run_validate.py
+```
+
+The GAIA ranker command is in [`docs/results/gaia_ranker_rerun/commands.sh`](docs/results/gaia_ranker_rerun/commands.sh). Home-lab setup is in [`homelab/README.md`](homelab/README.md). The day-12 snapshot is in the repository. Reproduce Table 2 with:
+
+```bash
+./homelab/scripts/reproduce_day12.sh
+```
+
+That checks SHA-256 `378dc71f3ef4143662acc1d0a3dda8c5e32f7752f3ceb77efe9b88bf0985c56e`, scores plain and learned-ranker modes, and diffs the tables in `docs/results/homelab_day12/`. The rebuild has 1,184 episodes; the scored alert file has 1,182 after the metric-window cutoff. Models are trained locally. No paid API is required.
 
 ## Safety defaults
 
-Shadow mode is on: every job records what it *would* have paged. Live paging needs a login password, at least one channel, and `LIVE` typed on the Connectors page, and only webhook-ingest jobs page. See [`docs/deployment.md`](docs/deployment.md) and [`docs/threat_model.md`](docs/threat_model.md).
-
-## Ranker audit (off)
-
-`RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` default off. They can attach SHAP reasons, a needs-human-review list, and a disagreement flag to the shadow queue. They do not remove a shown item, and a review item is not paged. The measured run on the shipped synthetic sample is in [`docs/ML_MODELS.md`](docs/ML_MODELS.md) (`app/results/ranker_audit_synthetic.json`). GAIA was not scored. From `app/`, the command that still has to be run where `data/gaia_raw` and `data/gaia_metrics` exist:
-
-```bash
-uv run --no-sync python run_ranker_audit.py --data gaia --backend xgboost --device cuda \
-    --seeds 42,0,1,2,3 --walk-forward --out results/ranker_audit_gaia.json
-```
+Shadow mode is on. See [`docs/deployment.md`](docs/deployment.md) and [`docs/threat_model.md`](docs/threat_model.md).
