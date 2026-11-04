@@ -85,6 +85,27 @@ def published_bounds(
     return origin, stop, "last alert"
 
 
+def published_scoring_window(
+    metrics: pd.DataFrame,
+    alerts: list[Alert],
+    faults: list[Fault],
+    config: Config,
+) -> tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp, pd.DataFrame, list[Fault]]:
+    """Train boundary, exclusive stop, and test faults for the published GAIA split.
+
+    The window is the first alert through one second after the last alert, the
+    same cut ``evaluate_models`` and ``run_queue_eval`` use. Metric points and
+    faults outside that span do not move the origin or the stop.
+    """
+    frame = metrics.copy()
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+    origin, stop, _how = published_bounds(frame, alerts)
+    boundary = origin + pd.Timedelta(days=config.split_day)
+    trimmed = frame[frame["timestamp"] < stop]
+    test_faults = [fault for fault in faults if boundary <= _utc(fault.start) < stop]
+    return origin, boundary, stop, trimmed, test_faults
+
+
 def _decision(base: set[str], cand: set[str] | None, faults: list[Fault], spec: EvalSpec, status: str) -> dict:
     if status != "scored" or cand is None:
         return {

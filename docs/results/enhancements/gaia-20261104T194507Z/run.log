@@ -1,0 +1,7 @@
+gaia window origin=2021-07-01 04:25:08+00:00 train_end=2021-07-08 04:25:08+00:00 stop=2021-08-31 15:57:42+00:00 test_faults=1223
+gaia: detecting
+gaia K=5 faults=1223 proposed=239 ranker_status=trained
+gaia K=10 faults=1223 proposed=475 ranker_status=trained
+gaia K=20 faults=1223 proposed=851 ranker_status=trained
+gaia K=50 faults=1223 proposed=1049 ranker_status=trained
+wrote /home/ai/work/enh-gaia-wt/docs/results/enhancements/gaia-20261104T194507Z rows=65 keep=8

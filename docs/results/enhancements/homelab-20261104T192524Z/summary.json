@@ -1,0 +1,34 @@
+{
+  "dataset": "homelab",
+  "source": "/tmp/enh-day12/data/collected",
+  "created_utc": "2026-11-04T19:27:41Z",
+  "bootstrap_draws": 4000,
+  "bootstrap_seed": 42,
+  "rule": "KEEP iff the 95% paired bootstrap interval on the per-fault catch difference has low > 0",
+  "backend": "pointwise",
+  "device": "cpu",
+  "calibration_days": [
+    1,
+    2,
+    3
+  ],
+  "calibration_weight": 4.0,
+  "hybrid_m": [
+    10,
+    20
+  ],
+  "neighbour_minutes": 15,
+  "experiment_flags": {
+    "RANKER_COMPANY_CALIBRATION": "1",
+    "HYBRID_QUEUE": "1",
+    "RANKER_TOPOLOGY_FEATURES": "1"
+  },
+  "product_flags": {
+    "LEARNED_RANKER": null,
+    "METRIC_MODEL": null,
+    "LLM_EXPLAIN": null
+  },
+  "graph": "public demo call graphs for the service names in homelab/catalog.py; GAIA names that miss the graph have fan-out 0",
+  "e1_window": "labels strictly before held-out origin + N days; score faults that start after that boundary. Alert decisions in that candidate list use K=20; other K values change only the slot cap.",
+  "e4": "median and p90 of minutes from fault start to the first catching shown item; CI is on the median difference versus proposed for faults both caught"
+}
