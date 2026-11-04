@@ -4,6 +4,9 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+### Fixed
+- Home lab alerts: a still-firing `ALERTS` series was written again on every collector pass, because the series has no 0 sample and each pass's window start became a new episode id. A gap longer than 120 seconds now ends the stretch, and the open episode is stored in `collected/.alerts.episodes.json` so a continuing alert keeps its first start and id. A re-fire after that gap is a new row. `alerts.csv` collected before this fix (the live file had about 87k rows for about 979 episodes) is not usable as-is. Do not delete the live files: the collector only re-reads 7 days. `homelab/rebuild_alerts.py` rebuilds episodes from Prometheus history inside the 15-day retention, in 5-day chunks at a 60-second step, into a separate `alerts.csv`. Copy metrics and faults beside that file and point `HOMELAB_DATA` at the snapshot.
+
 ## [1.1.0] - 2026-10-21
 
 Optional models from PRs #25, #26 and #27 (merged at `d329532`). Every new flag stays off. Live paging is unchanged: `APP_PASSWORD`, a channel, the typed word `LIVE`, and an ingest job. LLM notes are written after the page decision, onto the shadow record only. They do not page and they do not reorder the queue.
