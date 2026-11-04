@@ -1,6 +1,6 @@
 # Optional models
 
-**Status:** all off. **Version:** 1.1.0. Release 1.1.0 does not set any flag below. A keep in the measured section is not a default. Live paging is unchanged (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). LLM notes never page. `RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` are also off. They do not page, and a review item is not a page.
+**Status:** all off. **Version:** 1.2.0. Release 1.1.0 does not set any flag below. A keep in the measured section is not a default. Live paging is unchanged (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). LLM notes never page. `RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` are also off. They do not page, and a review item is not a page.
 
 The decisions, using only the counts already in this file:
 

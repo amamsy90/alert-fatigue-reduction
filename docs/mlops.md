@@ -1,6 +1,6 @@
 # MLOps and lifecycle
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.1.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.2.0
 
 This page explains how the AI part of the system is versioned, reproduced, updated and tracked after it is deployed. The AI component is a cost-sensitive logistic regression that scores log alerts (scikit-learn), next to rule-based metric detectors. No external model API is used.
 
@@ -46,7 +46,7 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 | **Detector settings change** (jump size, window) | Tuned on *Evaluate my data* against the team's past incidents with a held-out part and a chance line; applying them is an explicit action recorded with the evaluation id. |
 | **The knowledge base / an external AI API changes** | Not applicable: no knowledge base or external model API. |
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On this commit, Python 3.12.3 collected 450 tests: 440 passed, 10 skipped, line coverage 86.61% (7,784 of 8,987 statements). The ≥ 85% gate is met. The 21 October note had the same 86.43% total. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On this commit, Python 3.12.3 collected 460 tests: 450 passed, 10 skipped, line coverage 86.19% (8,077 of 9,370 statements). The ≥ 85% gate is met. The 21 October note had the same 86.43% total. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 
