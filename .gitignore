@@ -31,6 +31,10 @@ desktop.ini
 # Files the Claude desktop app drops here
 Claude outputs/
 
+# Home lab runtime: collected telemetry, ground truth, renders, cluster state
+homelab/data/
+homelab/results/
+
 # Course material: not ours to publish
 lectures/
 *rubric*.pdf
