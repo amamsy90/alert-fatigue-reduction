@@ -1,0 +1,920 @@
+{
+  "snapshot": "/home/ai/work/analysis/day12-rebuilt-20261103T150116Z",
+  "split_day": 7,
+  "bootstrap_draws": 4000,
+  "bootstrap_seed": 42,
+  "rule": "KEEP iff 95% bootstrap interval low > 0 on per-fault catch delta (candidate - baseline)",
+  "alertmanager_model": {
+    "group_by": [
+      "alertname",
+      "company",
+      "service"
+    ],
+    "group_wait_s": 10,
+    "group_interval_s": 120,
+    "repeat_interval": "1h (not modelled: rebuilt episodes carry start times only)",
+    "null_route": [
+      "InfoInhibitor",
+      "Watchdog"
+    ],
+    "severity_rank": {
+      "critical": 4,
+      "error": 4,
+      "high": 3,
+      "medium": 2,
+      "warning": 2,
+      "low": 1,
+      "info": 0
+    }
+  },
+  "populations": {
+    "pooled": {
+      "train_end": "2026-10-28 19:15:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00",
+      "test_episodes": 547,
+      "budgets": {
+        "5": {
+          "test_faults": 559,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 18,
+            "items_per_day": 5.0,
+            "precision": 0.6,
+            "false_items_per_day": 2.0,
+            "attached_alerts": 2
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.33,
+            "precision": 0.0,
+            "false_items_per_day": 0.33
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 18,
+              "baseline_caught": 0,
+              "diff": 18,
+              "only_candidate": 18,
+              "only_baseline": 0,
+              "mean": 0.03220035778175313,
+              "low": 0.017889087656529516,
+              "high": 0.04830053667262969,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 18,
+              "baseline_caught": 0,
+              "diff": 18,
+              "only_candidate": 18,
+              "only_baseline": 0,
+              "mean": 0.03220035778175313,
+              "low": 0.017889087656529516,
+              "high": 0.04830053667262969,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 18,
+              "baseline_caught": 4,
+              "diff": 14,
+              "only_candidate": 16,
+              "only_baseline": 2,
+              "mean": 0.025044722719141325,
+              "low": 0.01073345259391771,
+              "high": 0.04114490161001789,
+              "n": 559,
+              "decision": "KEEP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 5.0,
+            "precision": 0.0,
+            "false_items_per_day": 5.0,
+            "faults_caught": 0
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 5.0,
+            "precision": 0.1333,
+            "false_items_per_day": 4.33,
+            "faults_caught": 4
+          }
+        },
+        "10": {
+          "test_faults": 559,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 38,
+            "items_per_day": 9.67,
+            "precision": 0.6724,
+            "false_items_per_day": 3.17,
+            "attached_alerts": 4
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.33,
+            "precision": 0.0,
+            "false_items_per_day": 0.33
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 38,
+              "baseline_caught": 0,
+              "diff": 38,
+              "only_candidate": 38,
+              "only_baseline": 0,
+              "mean": 0.06797853309481217,
+              "low": 0.046511627906976744,
+              "high": 0.08944543828264759,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 38,
+              "baseline_caught": 2,
+              "diff": 36,
+              "only_candidate": 36,
+              "only_baseline": 0,
+              "mean": 0.06440071556350627,
+              "low": 0.044722719141323794,
+              "high": 0.08586762075134168,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 38,
+              "baseline_caught": 13,
+              "diff": 25,
+              "only_candidate": 31,
+              "only_baseline": 6,
+              "mean": 0.044722719141323794,
+              "low": 0.023255813953488372,
+              "high": 0.06618962432915922,
+              "n": 559,
+              "decision": "KEEP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 10.0,
+            "precision": 0.0333,
+            "false_items_per_day": 9.67,
+            "faults_caught": 2
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 10.0,
+            "precision": 0.2167,
+            "false_items_per_day": 7.83,
+            "faults_caught": 13
+          }
+        },
+        "20": {
+          "test_faults": 559,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 68,
+            "items_per_day": 17.33,
+            "precision": 0.6731,
+            "false_items_per_day": 5.67,
+            "attached_alerts": 5
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.33,
+            "precision": 0.0,
+            "false_items_per_day": 0.33
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 68,
+              "baseline_caught": 0,
+              "diff": 68,
+              "only_candidate": 68,
+              "only_baseline": 0,
+              "mean": 0.12164579606440072,
+              "low": 0.09481216457960644,
+              "high": 0.148479427549195,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 68,
+              "baseline_caught": 21,
+              "diff": 47,
+              "only_candidate": 57,
+              "only_baseline": 10,
+              "mean": 0.08407871198568873,
+              "low": 0.055456171735241505,
+              "high": 0.11270125223613596,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 68,
+              "baseline_caught": 28,
+              "diff": 40,
+              "only_candidate": 55,
+              "only_baseline": 15,
+              "mean": 0.07155635062611806,
+              "low": 0.04293381037567084,
+              "high": 0.1001788908765653,
+              "n": 559,
+              "decision": "KEEP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 20.0,
+            "precision": 0.175,
+            "false_items_per_day": 16.5,
+            "faults_caught": 21
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 20.0,
+            "precision": 0.2333,
+            "false_items_per_day": 15.33,
+            "faults_caught": 28
+          }
+        },
+        "50": {
+          "test_faults": 559,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 75,
+            "items_per_day": 19.0,
+            "precision": 0.6754,
+            "false_items_per_day": 6.17,
+            "attached_alerts": 5
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.33,
+            "precision": 0.0,
+            "false_items_per_day": 0.33
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 75,
+              "baseline_caught": 0,
+              "diff": 75,
+              "only_candidate": 75,
+              "only_baseline": 0,
+              "mean": 0.13416815742397137,
+              "low": 0.10554561717352415,
+              "high": 0.16104651162790715,
+              "n": 559,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 75,
+              "baseline_caught": 69,
+              "diff": 6,
+              "only_candidate": 43,
+              "only_baseline": 37,
+              "mean": 0.01073345259391771,
+              "low": -0.01967799642218247,
+              "high": 0.04114490161001789,
+              "n": 559,
+              "decision": "DROP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 75,
+              "baseline_caught": 73,
+              "diff": 2,
+              "only_candidate": 41,
+              "only_baseline": 39,
+              "mean": 0.0035778175313059034,
+              "low": -0.026833631484794274,
+              "high": 0.03398926654740608,
+              "n": 559,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 45.33,
+            "precision": 0.2537,
+            "false_items_per_day": 33.83,
+            "faults_caught": 69
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 45.33,
+            "precision": 0.2684,
+            "false_items_per_day": 33.17,
+            "faults_caught": 73
+          }
+        }
+      },
+      "alertmanager_unbounded": {
+        "episodes": 547,
+        "episodes_after_null_route": 362,
+        "groups": 31,
+        "notifications": 362,
+        "notifications_per_day": 60.33,
+        "n_days": 6,
+        "notifications_by_severity": {
+          "2": 331,
+          "4": 31
+        },
+        "test_faults": 559,
+        "faults_with_any_aligned_episode": 90,
+        "faults_with_any_aligned_routed_episode": 90,
+        "unbounded_items_per_day": 60.33,
+        "unbounded_precision": 0.2486,
+        "unbounded_false_items_per_day": 45.33,
+        "unbounded_faults_caught": 90
+      }
+    },
+    "acme": {
+      "train_end": "2026-10-28 19:15:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00",
+      "test_episodes": 232,
+      "budgets": {
+        "5": {
+          "test_faults": 220,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 19,
+            "items_per_day": 4.5,
+            "precision": 0.7037,
+            "false_items_per_day": 1.33,
+            "attached_alerts": 2
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.17,
+            "precision": 0.0,
+            "false_items_per_day": 0.17
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 19,
+              "baseline_caught": 0,
+              "diff": 19,
+              "only_candidate": 19,
+              "only_baseline": 0,
+              "mean": 0.08636363636363636,
+              "low": 0.05,
+              "high": 0.1228409090909095,
+              "n": 220,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 19,
+              "baseline_caught": 3,
+              "diff": 16,
+              "only_candidate": 17,
+              "only_baseline": 1,
+              "mean": 0.07272727272727272,
+              "low": 0.03636363636363636,
+              "high": 0.11363636363636363,
+              "n": 220,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 19,
+              "baseline_caught": 13,
+              "diff": 6,
+              "only_candidate": 13,
+              "only_baseline": 7,
+              "mean": 0.02727272727272727,
+              "low": -0.013636363636363636,
+              "high": 0.06363636363636363,
+              "n": 220,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 4.83,
+            "precision": 0.1034,
+            "false_items_per_day": 4.33,
+            "faults_caught": 3
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 4.83,
+            "precision": 0.4483,
+            "false_items_per_day": 2.67,
+            "faults_caught": 13
+          }
+        },
+        "10": {
+          "test_faults": 220,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 28,
+            "items_per_day": 6.33,
+            "precision": 0.7632,
+            "false_items_per_day": 1.5,
+            "attached_alerts": 2
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.17,
+            "precision": 0.0,
+            "false_items_per_day": 0.17
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 28,
+              "baseline_caught": 0,
+              "diff": 28,
+              "only_candidate": 28,
+              "only_baseline": 0,
+              "mean": 0.12727272727272726,
+              "low": 0.08636363636363636,
+              "high": 0.17727272727272728,
+              "n": 220,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 28,
+              "baseline_caught": 16,
+              "diff": 12,
+              "only_candidate": 21,
+              "only_baseline": 9,
+              "mean": 0.05454545454545454,
+              "low": 0.004545454545454545,
+              "high": 0.10454545454545454,
+              "n": 220,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 28,
+              "baseline_caught": 23,
+              "diff": 5,
+              "only_candidate": 19,
+              "only_baseline": 14,
+              "mean": 0.022727272727272728,
+              "low": -0.02727272727272727,
+              "high": 0.07727272727272727,
+              "n": 220,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 9.0,
+            "precision": 0.2963,
+            "false_items_per_day": 6.33,
+            "faults_caught": 16
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 9.0,
+            "precision": 0.4259,
+            "false_items_per_day": 5.17,
+            "faults_caught": 23
+          }
+        },
+        "20": {
+          "test_faults": 220,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 29,
+            "items_per_day": 6.5,
+            "precision": 0.7692,
+            "false_items_per_day": 1.5,
+            "attached_alerts": 2
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.17,
+            "precision": 0.0,
+            "false_items_per_day": 0.17
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 29,
+              "baseline_caught": 0,
+              "diff": 29,
+              "only_candidate": 29,
+              "only_baseline": 0,
+              "mean": 0.1318181818181818,
+              "low": 0.09090909090909091,
+              "high": 0.18181818181818182,
+              "n": 220,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 29,
+              "baseline_caught": 36,
+              "diff": -7,
+              "only_candidate": 15,
+              "only_baseline": 22,
+              "mean": -0.031818181818181815,
+              "low": -0.08636363636363636,
+              "high": 0.022727272727272728,
+              "n": 220,
+              "decision": "DROP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 29,
+              "baseline_caught": 38,
+              "diff": -9,
+              "only_candidate": 14,
+              "only_baseline": 23,
+              "mean": -0.04090909090909091,
+              "low": -0.09545454545454546,
+              "high": 0.013636363636363636,
+              "n": 220,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 17.33,
+            "precision": 0.3462,
+            "false_items_per_day": 11.33,
+            "faults_caught": 36
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 17.33,
+            "precision": 0.3654,
+            "false_items_per_day": 11.0,
+            "faults_caught": 38
+          }
+        },
+        "50": {
+          "test_faults": 220,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 29,
+            "items_per_day": 6.5,
+            "precision": 0.7692,
+            "false_items_per_day": 1.5,
+            "attached_alerts": 2
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.17,
+            "precision": 0.0,
+            "false_items_per_day": 0.17
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 29,
+              "baseline_caught": 0,
+              "diff": 29,
+              "only_candidate": 29,
+              "only_baseline": 0,
+              "mean": 0.1318181818181818,
+              "low": 0.09090909090909091,
+              "high": 0.18181818181818182,
+              "n": 220,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 29,
+              "baseline_caught": 49,
+              "diff": -20,
+              "only_candidate": 12,
+              "only_baseline": 32,
+              "mean": -0.09090909090909091,
+              "low": -0.15,
+              "high": -0.031818181818181815,
+              "n": 220,
+              "decision": "DROP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 29,
+              "baseline_caught": 49,
+              "diff": -20,
+              "only_candidate": 12,
+              "only_baseline": 32,
+              "mean": -0.09090909090909091,
+              "low": -0.15,
+              "high": -0.031818181818181815,
+              "n": 220,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 23.0,
+            "precision": 0.3551,
+            "false_items_per_day": 14.83,
+            "faults_caught": 49
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 23.0,
+            "precision": 0.3551,
+            "false_items_per_day": 14.83,
+            "faults_caught": 49
+          }
+        }
+      },
+      "alertmanager_unbounded": {
+        "episodes": 232,
+        "episodes_after_null_route": 138,
+        "groups": 15,
+        "notifications": 138,
+        "notifications_per_day": 23.0,
+        "n_days": 6,
+        "notifications_by_severity": {
+          "2": 118,
+          "4": 20
+        },
+        "test_faults": 220,
+        "faults_with_any_aligned_episode": 49,
+        "faults_with_any_aligned_routed_episode": 49,
+        "unbounded_items_per_day": 23.0,
+        "unbounded_precision": 0.3551,
+        "unbounded_false_items_per_day": 14.83,
+        "unbounded_faults_caught": 49
+      }
+    },
+    "borealis": {
+      "train_end": "2026-10-28 19:15:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00",
+      "test_episodes": 11,
+      "budgets": {},
+      "status": "not scored: Training data needs both fault and noise alerts"
+    },
+    "cassini": {
+      "train_end": "2026-10-28 19:17:11+00:00",
+      "test_end": "2026-11-02 19:15:03+00:00",
+      "test_episodes": 303,
+      "budgets": {
+        "5": {
+          "test_faults": 180,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 19,
+            "items_per_day": 4.67,
+            "precision": 0.6786,
+            "false_items_per_day": 1.5,
+            "attached_alerts": 3
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.0,
+            "precision": 0.0,
+            "false_items_per_day": 0.0
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 19,
+              "baseline_caught": 0,
+              "diff": 19,
+              "only_candidate": 19,
+              "only_baseline": 0,
+              "mean": 0.10555555555555556,
+              "low": 0.06111111111111111,
+              "high": 0.15555555555555556,
+              "n": 180,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 19,
+              "baseline_caught": 2,
+              "diff": 17,
+              "only_candidate": 17,
+              "only_baseline": 0,
+              "mean": 0.09444444444444444,
+              "low": 0.05555555555555555,
+              "high": 0.14444444444444443,
+              "n": 180,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 19,
+              "baseline_caught": 2,
+              "diff": 17,
+              "only_candidate": 17,
+              "only_baseline": 0,
+              "mean": 0.09444444444444444,
+              "low": 0.05555555555555555,
+              "high": 0.14444444444444443,
+              "n": 180,
+              "decision": "KEEP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 5.0,
+            "precision": 0.0667,
+            "false_items_per_day": 4.67,
+            "faults_caught": 2
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 5.0,
+            "precision": 0.0667,
+            "false_items_per_day": 4.67,
+            "faults_caught": 2
+          }
+        },
+        "10": {
+          "test_faults": 180,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 24,
+            "items_per_day": 6.5,
+            "precision": 0.6154,
+            "false_items_per_day": 2.5,
+            "attached_alerts": 3
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.0,
+            "precision": 0.0,
+            "false_items_per_day": 0.0
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 24,
+              "baseline_caught": 0,
+              "diff": 24,
+              "only_candidate": 24,
+              "only_baseline": 0,
+              "mean": 0.13333333333333333,
+              "low": 0.08333333333333333,
+              "high": 0.18333333333333332,
+              "n": 180,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 24,
+              "baseline_caught": 8,
+              "diff": 16,
+              "only_candidate": 20,
+              "only_baseline": 4,
+              "mean": 0.08888888888888889,
+              "low": 0.03888888888888889,
+              "high": 0.14444444444444443,
+              "n": 180,
+              "decision": "KEEP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 24,
+              "baseline_caught": 8,
+              "diff": 16,
+              "only_candidate": 20,
+              "only_baseline": 4,
+              "mean": 0.08888888888888889,
+              "low": 0.03888888888888889,
+              "high": 0.14444444444444443,
+              "n": 180,
+              "decision": "KEEP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 10.0,
+            "precision": 0.1333,
+            "false_items_per_day": 8.67,
+            "faults_caught": 8
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 10.0,
+            "precision": 0.1333,
+            "false_items_per_day": 8.67,
+            "faults_caught": 8
+          }
+        },
+        "20": {
+          "test_faults": 180,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 24,
+            "items_per_day": 6.5,
+            "precision": 0.6154,
+            "false_items_per_day": 2.5,
+            "attached_alerts": 3
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.0,
+            "precision": 0.0,
+            "false_items_per_day": 0.0
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 24,
+              "baseline_caught": 0,
+              "diff": 24,
+              "only_candidate": 24,
+              "only_baseline": 0,
+              "mean": 0.13333333333333333,
+              "low": 0.08333333333333333,
+              "high": 0.18333333333333332,
+              "n": 180,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 24,
+              "baseline_caught": 26,
+              "diff": -2,
+              "only_candidate": 11,
+              "only_baseline": 13,
+              "mean": -0.011111111111111112,
+              "low": -0.06111111111111111,
+              "high": 0.044444444444444446,
+              "n": 180,
+              "decision": "DROP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 24,
+              "baseline_caught": 26,
+              "diff": -2,
+              "only_candidate": 11,
+              "only_baseline": 13,
+              "mean": -0.011111111111111112,
+              "low": -0.06111111111111111,
+              "high": 0.044444444444444446,
+              "n": 180,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 19.5,
+            "precision": 0.2222,
+            "false_items_per_day": 15.17,
+            "faults_caught": 26
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 19.5,
+            "precision": 0.2222,
+            "false_items_per_day": 15.17,
+            "faults_caught": 26
+          }
+        },
+        "50": {
+          "test_faults": 180,
+          "n_days": 6,
+          "p3_ranker": {
+            "faults_caught": 24,
+            "items_per_day": 6.5,
+            "precision": 0.6154,
+            "false_items_per_day": 2.5,
+            "attached_alerts": 3
+          },
+          "logs_severity": {
+            "faults_caught": 0,
+            "items_per_day": 0.0,
+            "precision": 0.0,
+            "false_items_per_day": 0.0
+          },
+          "comparisons": {
+            "logs_severity": {
+              "candidate_caught": 24,
+              "baseline_caught": 0,
+              "diff": 24,
+              "only_candidate": 24,
+              "only_baseline": 0,
+              "mean": 0.13333333333333333,
+              "low": 0.08333333333333333,
+              "high": 0.18333333333333332,
+              "n": 180,
+              "decision": "KEEP"
+            },
+            "alertmanager_severity": {
+              "candidate_caught": 24,
+              "baseline_caught": 39,
+              "diff": -15,
+              "only_candidate": 5,
+              "only_baseline": 20,
+              "mean": -0.08333333333333333,
+              "low": -0.1388888888888889,
+              "high": -0.03333333333333333,
+              "n": 180,
+              "decision": "DROP"
+            },
+            "alertmanager_fcfs": {
+              "candidate_caught": 24,
+              "baseline_caught": 39,
+              "diff": -15,
+              "only_candidate": 5,
+              "only_baseline": 20,
+              "mean": -0.08333333333333333,
+              "low": -0.1388888888888889,
+              "high": -0.03333333333333333,
+              "n": 180,
+              "decision": "DROP"
+            }
+          },
+          "alertmanager_severity": {
+            "items_per_day": 33.5,
+            "precision": 0.194,
+            "false_items_per_day": 27.0,
+            "faults_caught": 39
+          },
+          "alertmanager_fcfs": {
+            "items_per_day": 33.5,
+            "precision": 0.194,
+            "false_items_per_day": 27.0,
+            "faults_caught": 39
+          }
+        }
+      },
+      "alertmanager_unbounded": {
+        "episodes": 303,
+        "episodes_after_null_route": 212,
+        "groups": 14,
+        "notifications": 212,
+        "notifications_per_day": 35.33,
+        "n_days": 6,
+        "notifications_by_severity": {
+          "2": 212
+        },
+        "test_faults": 180,
+        "faults_with_any_aligned_episode": 41,
+        "faults_with_any_aligned_routed_episode": 41,
+        "unbounded_items_per_day": 35.33,
+        "unbounded_precision": 0.1934,
+        "unbounded_false_items_per_day": 28.5,
+        "unbounded_faults_caught": 41
+      }
+    }
+  }
+}
