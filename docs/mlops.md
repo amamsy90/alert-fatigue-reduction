@@ -17,7 +17,7 @@ This page explains how the AI part of the system is versioned, reproduced, updat
 
 A model card records: version, training time, label source (real labels, on-call marks), number of training alerts, thresholds, training-data fingerprint, code version (git commit), held-out precision / recall / false positives / misses, the active model's result on the same held-out alerts, and the promotion decision with its reason.
 
-The optional metric model and learned ranker are not versions in that registry. They are separate hash-checked files (`METRIC_MODEL_DIR`, `LEARNED_RANKER_PATH`), off unless those flags are set, and they do not pass the promotion gate because they do not replace the alert classifier. `docs/ML_MODELS.md` is the keep rule for turning them on.
+The optional metric model and learned ranker are not versions in that registry. They are separate hash-checked files (`METRIC_MODEL_DIR`, `LEARNED_RANKER_PATH`), off unless those flags are set, and they do not pass the promotion gate because they do not replace the alert classifier. `RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` are recorded on the experiment line and stay off unless set. They do not page. `docs/ML_MODELS.md` is the keep rule for turning a model on, and the synthetic audit of the three ranker flags.
 
 ## 2. Reproducibility
 
@@ -26,7 +26,7 @@ If another team member receives the project tomorrow:
 ```bash
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
-uv run pytest -q                      # 421 passed, 10 skipped on CPU CI (21 October 2026); the integration test needs Docker (see test_plan.md)
+uv run pytest -q                      # 431 passed, 10 skipped on CPU CI (21 October 2026); the integration test needs Docker (see test_plan.md)
 uv run python run_validate.py         # the report's 195 checked numbers match the committed results
 docker compose up -d                  # the CPU app, built from the hash-pinned lock (dev settings)
 # optional GPU machine: docker compose --profile gpu up --build oncall-queue-gpu
@@ -46,7 +46,7 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 | **Detector settings change** (jump size, window) | Tuned on *Evaluate my data* against the team's past incidents with a held-out part and a chance line; applying them is an explicit action recorded with the evaluation id. |
 | **The knowledge base / an external AI API changes** | Not applicable: no knowledge base or external model API. |
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On 21 October 2026, Python 3.12 collected 431 tests: 421 passed, 10 skipped, coverage 86%. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On 21 October 2026, Python 3.12 collected 441 tests: 431 passed, 10 skipped, coverage 86.01%. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 
