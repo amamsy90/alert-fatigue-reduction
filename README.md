@@ -86,7 +86,7 @@ Tested on Linux with CPython 3.12.3. GitHub Actions also runs Python 3.10 and 3.
 
 ```bash
 cd app
-uv run pytest -q                      # 421 passed, 10 skipped
+uv run pytest -q                      # 440 passed, 10 skipped
 uv run ruff check .                   # clean
 uv run python run_validate.py         # 195 checked numbers
 uv run --with pyyaml pytest -q ../homelab/tests   # 62 passed
