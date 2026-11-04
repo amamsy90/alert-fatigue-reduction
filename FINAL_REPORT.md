@@ -30,7 +30,7 @@ The stack is Python 3.10–3.12, FastAPI, scikit-learn, pandas, SQLite, Docker a
 
 ### 3.1 Testing
 
-Tests cover units, an integration stack with Prometheus and Alertmanager, security, performance and the AI path. On this commit, in app/, uv run pytest -q reported 421 passed and 10 skipped on CPython 3.12.3. uv run --with pyyaml pytest -q ../homelab/tests reported 62 passed. uv run ruff check . was clean. uv run python run_validate.py matched 195 checked numbers. An earlier draft of the expected product said 296 tests; that count is stale. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C).
+Tests cover units, an integration stack with Prometheus and Alertmanager, security, performance and the AI path. On this commit, in app/, uv run pytest -q reported 438 passed and 10 skipped on CPython 3.12.3. uv run --with pyyaml pytest -q ../homelab/tests reported 62 passed. uv run ruff check . was clean. uv run python run_validate.py matched 195 checked numbers. An earlier draft of the expected product said 296 tests; that count is stale. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C).
 
 ### 3.2 Method and success criteria
 
@@ -63,7 +63,7 @@ Table 2. Home lab day 12, pooled, 559 test faults; ranker caught 68 at K = 20
 | Alertmanager, first-come | 28 | [0.0429, 0.1002] | KEEP |
 | proposed at K = 50 | 81 (ranker 75) | [−0.0215, −0.0018] | DROP |
 
-At K = 20 the ranker precision is 0.6731 and false items a day are 5.67, against 0.4775 and 9.67 for proposed (pooled_bootstrap.csv, feedback_bootstrap.csv). The KEEP against proposed and static_p99 also holds at K = 5 and 10. Against tuned jumps it holds at K = 10 and 20 only; the K = 5 cell is DROP. Leave-one-company-out at K = 20 is DROP for acme (32 of 220), borealis (25 of 159) and cassini (21 of 180), each identical to its baseline. Overall detection is 68 of 559, about 12%. The 120-second episode rule is the main deduplication step (1,182 evaluated episodes). Alertmanager grouping then merged none of the 762 routed episodes. Network-delay faults alert on their own service in 1 of 321 cases.
+At K = 20 the ranker precision is 0.6731 and false items a day are 5.67, against 0.4775 and 9.67 for proposed (pooled_bootstrap.csv, feedback_bootstrap.csv). The KEEP against proposed and static_p99 also holds at K = 5 and 10. Against tuned jumps it holds at K = 10 and 20 only; the K = 5 cell is DROP. Leave-one-company-out at K = 20 is DROP for acme (32 of 220), borealis (25 of 159) and cassini (21 of 180), each identical to its baseline. Overall detection is 68 of 559, about 12%. The 120-second episode rule is the main deduplication step (1,182 evaluated episodes). Alertmanager grouping then merged none of the 762 routed episodes. Network-delay faults alert on their own service in 1 of 321 cases. Appendix I checks four optional experiments, flags off by default. None beat the published ranker at K = 20, and none beat proposed at K = 50.
 
 ### 3.5 Interpretation
 
@@ -112,10 +112,10 @@ The queue is tested, deployable, and causal. At K = 20 the ranker beats the caus
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 421 passed, 10 skipped, 86.43% line coverage (7,433 of 8,600 statements; criterion met), 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 438 passed, 10 skipped, 86.55% line coverage (7,768 of 8,975 statements; criterion met), 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 421 passed and 10 skipped on Python 3.12.3 at the submission re-run (an earlier draft said 296 tests) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 438 passed and 10 skipped on Python 3.12.3 at the submission re-run (an earlier draft said 296 tests) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ### 4. Target users and use case
 
@@ -342,7 +342,7 @@ An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That fl
 | Criterion | Target | Result |
 |---|---|---|
 | Tests passing | 100% of tests that run | 421 passed, 0 failed, 10 skipped on Python 3.12 (21 October 2026). Nine skips need torch, xgboost or CUDA, which CPU CI does not install. One skip is the Compose integration job |
-| Line coverage | ≥ 85% | 86.43% (7,433 of 8,600 statements; re-measured on this commit; criterion met) |
+| Line coverage | ≥ 85% | 86.55% (7,768 of 8,975 statements; re-measured on this commit; criterion met) |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
@@ -357,7 +357,7 @@ CI runs lint, type checks, the tests on two Python versions with coverage, `run_
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 421 passed, 0 failed (10 skipped) | Yes |
+| At least 90% of predefined test cases pass | 438 passed, 0 failed (10 skipped) | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds +13.3 points over no log alerts, with an interval above zero (+2.2 over severity alerts), and the gate promotes it, at its margin, judged on the same 45 cases that are scored (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, on one of six RCAEval application suites, not on GAIA |
@@ -1129,3 +1129,45 @@ Table H2. Library interfaces
 | `src.experiment.run_window` | `src.classifier.AlertClassifier` | log alerts inside the window |
 | `homelab.evaluate` | `src.experiment.run_window` | day-12 plain and learned-ranker scores |
 | `homelab.evaluate` | `src.ranker.fit_ranker` | only when `--learned-ranker` is passed; does not set `LEARNED_RANKER` |
+
+## Appendix I. Optional queue checks
+
+The four checks live in `src/enhancements.py`. Each stays off unless its flag is `1`, `true`, `yes` or `on`. This run set the three flags in the scoring process only. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN` stayed unset, and nothing was paged. The keep rule is the same paired bootstrap as Table 2: 4,000 draws, seed 42, KEEP only when the interval's lower bound is above 0. The input is the committed day-12 snapshot. GAIA was not on this machine. `experiments/run_enhancements_gaia.sh` is the command for that run on ai-ROG.
+
+When M equals K, a hybrid queue is the ranker it starts from, so those rows repeat a ranker-versus-proposed result. The new question is a smaller M filled out by proposed.
+
+Table I1. Catch comparisons on the home lab. Counts are faults caught. The interval is the per-fault difference.
+
+| Check | Comparison | Caught | 95% CI | Decision |
+|---|---|---|---|---|
+| E1 acme, N = 3, threshold retune, K = 10 | vs unadapted ranker | 44 vs 38 of 397 | [0.0025, 0.0302] | KEEP |
+| E1 acme, N = 3, threshold retune, K = 10 | vs proposed | 44 vs 47 of 397 | [−0.0202, 0.0050] | DROP |
+| E1, every company, N = 1, 2, 3, K = 20 | vs unadapted and vs proposed | see the CSV | includes 0, or no calibration items for acme N = 1 | DROP |
+| E2 learned hybrid, pooled, M = 20, K = 20 | vs proposed | 63 vs 51 of 559 | [0.0107, 0.0340] | KEEP |
+| E2 jump hybrid, pooled, M = 20, K = 20 | vs proposed | 68 vs 51 of 559 | [0.0161, 0.0465] | KEEP |
+| E2 jump hybrid, pooled, M = 20, K = 50 | vs proposed | 82 vs 81 of 559 | [0.0000, 0.0054] | DROP |
+| E2 jump hybrid, pooled, M = 10, K = 50 | vs p3 ranker | 81 vs 75 of 559 | [0.0018, 0.0215] | KEEP |
+| E2 jump hybrid, pooled, M = 10, K = 50 | vs proposed | 81 vs 81 of 559 | [0.0000, 0.0000] | DROP |
+| E3 topology, pooled, K = 20 | vs proposed | 60 vs 51 of 559 | [0.0072, 0.0268] | KEEP |
+| E3 topology, pooled, K = 20 | vs learned ranker | 60 vs 63 of 559 | [−0.0125, 0.0000] | DROP |
+| E3 topology, leave-one-company-out, K = 20 | vs unadapted | acme 32/220, borealis 25/159, cassini 21/180 | [0.0000, 0.0000] | DROP |
+
+E1 uses only the held-out company's labels before origin plus N days, then scores faults that start after that boundary, so the fault count is not the day-7 test count. Acme's first day produced no calibration items, so N = 1 is not scored. The K = 10 KEEP does not hold at K = 20 (54 vs 57 unadapted, DROP). Borealis and cassini match the unadapted ranker at every N and K. The M = 20 jump hybrid at K = 20 is the published ranker (68 vs 51). Training data chose M = 10 for the learned hybrid at K = 50; that queue ties proposed at 81. Topology features are the public demo call graph (neighbour alerts in 15 minutes, an open jump on the same service, fan-out). They do not move leave-one-company-out.
+
+Table I2. Minutes from fault start to the first catching item, pooled. The interval is the median difference versus proposed on faults both caught.
+
+| Queue | K | Caught | Median | p90 | Median minus proposed | 95% CI |
+|---|---|---|---|---|---|---|
+| proposed | 20 | 51 | 0.78 | 2.92 | 0.00 | [0.00, 0.00] |
+| p3 ranker | 20 | 68 | 0.78 | 2.82 | 0.00 | [0.00, 0.00] |
+| learned ranker | 20 | 63 | 0.78 | 2.89 | 0.00 | [0.00, 0.00] |
+| topology | 20 | 60 | 0.80 | 2.95 | 0.00 | [0.00, 0.00] |
+| jumps tuned | 20 | 54 | 0.78 | 1.14 | 0.00 | [0.00, 0.00] |
+| static p99 | 20 | 15 | −351.93 | 0.75 | −40.73 | [−81.47, 0.00] |
+| severity | 20 | 0 | none | none | none | none |
+| Alertmanager, first-come | 20 | 28 | 3.53 | 4.08 | 2.57 | [0.17, 2.92] |
+| Alertmanager, severity-first | 20 | 21 | 3.58 | 4.13 | 2.60 | [0.17, 3.10] |
+| proposed | 50 | 81 | 0.80 | 3.25 | 0.00 | [0.00, 0.00] |
+| jump hybrid, M = 20 | 50 | 82 | 0.80 | 3.24 | 0.00 | [0.00, 0.00] |
+
+On faults both queues caught, the ranker and proposed have the same median delay. Alertmanager is slower by about two and a half minutes. The static p99 median is negative because the credited spike was shown before the fault start. Severity caught nothing, so it has no delay. Full rows are in `docs/results/enhancements/homelab-20261104T192524Z/`.
