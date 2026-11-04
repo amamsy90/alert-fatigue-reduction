@@ -13,10 +13,12 @@ KEEP means the 95% paired bootstrap interval on the per-fault catch difference h
 
 The home-lab tables are in `homelab-20261104T192524Z/summary.csv` and `detection.csv`. Appendix I of `FINAL_REPORT.md` quotes the headline rows.
 
-GAIA was not on this machine, so there are no GAIA enhancement numbers here. On ai-ROG, from a worktree that has `app/data/gaia_raw` and `app/data/gaia_metrics`:
+`gaia-20261104T193400Z-uncorrected/` is the ai-ROG run from before the window fix. Its fault count is not the published 1,223, so those rows are not results. Do not cite them.
+
+On ai-ROG, from a worktree that has `app/data/gaia_raw` and `app/data/gaia_metrics`:
 
 ```bash
 ./experiments/run_enhancements_gaia.sh
 ```
 
-That writes `docs/results/enhancements/gaia-<utc>/summary.csv` and `detection.csv`. It runs E2, E3 and E4. E1 is the home-lab company split and is not part of that script.
+The script installs the `gpu` dependency group and stops if `xgboost` cannot be imported. It writes `docs/results/enhancements/gaia-<utc>/`. Cite E2, E3 and E4 only after K = 20 shows 1,223 faults, proposed 851 and the learned ranker 887. E1 is the home-lab company split and is not part of that script.

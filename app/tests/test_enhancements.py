@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.config import Config
 from src.enhancements import (
@@ -23,12 +24,14 @@ from src.enhancements import (
     neighbour_services,
     note_catch_minutes,
     recalibrate_threshold,
+    require_xgboost,
     slice_before,
     topology_features_enabled,
     topology_frame,
 )
 from src.entities import Alert, Fault
 from src.memory_spikes import Spike
+from src.model_eval import published_scoring_window
 from src.queue import QueueItem, build_queue
 from src.ranker import candidate_frame, fit_ranker, learned_ranker_enabled, select_by_score
 
@@ -275,6 +278,52 @@ def test_keep_requires_the_interval_lower_bound_above_zero():
     assert dropped["low"] <= 0
     empty = compare_caught(set(), set(), [], n_draw=20, seed=42)
     assert empty["decision"] is None
+
+
+def test_published_gaia_window_ignores_metrics_and_faults_outside_the_alerts():
+    """The published split starts at the first alert and stops one second after the last.
+
+    A metric point before that alert, or a fault after the last alert, must not
+    add a test fault. The home-lab span would include both.
+    """
+    first = T0 + pd.Timedelta(days=10)
+    last = T0 + pd.Timedelta(days=20)
+    alerts = [
+        Alert("a1", first, "api", "error", "error", "up"),
+        Alert("a2", last, "api", "error", "error", "up"),
+    ]
+    metrics = pd.DataFrame(
+        {
+            "timestamp": [T0, last + pd.Timedelta(days=5)],
+            "value": [1.0, 2.0],
+            "service": ["api", "api"],
+            "series_id": ["api", "api"],
+        }
+    )
+    early = Fault("early", T0 + pd.Timedelta(days=8), T0 + pd.Timedelta(days=8, hours=1), "api")
+    held = Fault("held", T0 + pd.Timedelta(days=18), T0 + pd.Timedelta(days=18, hours=1), "api")
+    late = Fault("late", T0 + pd.Timedelta(days=25), T0 + pd.Timedelta(days=25, hours=1), "api")
+    origin, train_end, stop, frame, test_faults = published_scoring_window(
+        metrics, alerts, [early, held, late], Config(split_day=7)
+    )
+    assert origin == first
+    assert train_end == first + pd.Timedelta(days=7)
+    assert stop == last + pd.Timedelta(seconds=1)
+    assert [fault.fault_id for fault in test_faults] == ["held"]
+    assert frame["timestamp"].max() < stop
+    assert early.start < train_end
+    assert late.start >= stop
+
+
+def test_xgboost_backend_fails_when_the_library_is_missing():
+    from src.ranker import xgboost_importable
+
+    if xgboost_importable():
+        require_xgboost("xgboost")
+        return
+    with pytest.raises(SystemExit, match="xgboost cannot be imported"):
+        require_xgboost("xgboost")
+    require_xgboost("pointwise")
 
 
 def test_alertmanager_drops_the_null_route_and_respects_the_budget_order():
