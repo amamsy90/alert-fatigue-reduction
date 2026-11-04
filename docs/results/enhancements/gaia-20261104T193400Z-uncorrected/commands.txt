@@ -1,0 +1,4 @@
+commit 00c03271b6c4548935394160d7c90f6b8e26394e
+python /home/ai/work/alert-fatigue-reduction/app/.venv/bin/python (GPU venv with xgboost; the uv env from run_enhancements_gaia.sh lacked xgboost and fell back to pointwise, that run was stopped)
+flags RANKER_COMPANY_CALIBRATION=1 HYBRID_QUEUE=1 RANKER_TOPOLOGY_FEATURES=1
+cmd: python ../experiments/run_enhancements.py --data gaia --backend xgboost --device cuda --out /home/ai/work/enh-gaia-wt/docs/results/enhancements/gaia-20261104T193400Z
