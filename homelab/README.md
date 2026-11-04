@@ -12,9 +12,11 @@ per-company budgets live in the collector and the evaluation script. The
 running app still has one shared daily budget.
 
 The numbers below that describe RAM, CPU and disk are **estimates**. They were
-not measured on ai-ROG. Detection rates are not in this repository. `scripts/evaluate.sh`
-writes them only after a real collection, and a run that cannot score says so
-instead of filling in a rate.
+not measured on ai-ROG. The day-12 detection rates are in
+`docs/results/homelab_day12/` and in `FINAL_REPORT.md` section 3 and Appendix E.
+`scripts/evaluate.sh` writes a new score only after a real collection, and a
+run that cannot score says so instead of filling in a rate. The raw snapshot
+is not in this repository.
 
 ## Companies
 
@@ -285,7 +287,18 @@ laptop `docker pull` is the check that the registry tag still resolves.
 
 ## Evaluation
 
-After the series is longer than seven days, and at least one closed fault
+The day-12 snapshot is in the repository. From the repository root:
+
+```bash
+./homelab/scripts/reproduce_day12.sh
+```
+
+That checks the xz SHA-256, scores plain and `--learned-ranker` modes, and
+prints MATCH or MISMATCH against `docs/results/homelab_day12/`. The Prometheus
+rebuild has 1,184 episodes (`alerts_rebuilt.csv`). The scored file
+`data/collected/alerts.csv` has 1,182, the episodes inside the metric window.
+
+After a new collection is longer than seven days, and at least one closed fault
 starts after that first week:
 
 ```bash
