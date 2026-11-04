@@ -16,7 +16,7 @@ An on-call engineer sees thousands of alerts and can check only a few. Faults ar
 
 ![Figure 1. System architecture](figures/architecture.png)
 
-Alerts arrive on POST /ingest/alertmanager. Metrics are pulled from Prometheus or uploaded as CSV on /evaluate. The product layer (app/product) is a FastAPI application: security middleware, an ingest buffer with deduplication, a job pipeline, SQLite, a model registry with a promotion gate and rollback, and /metrics and /monitoring. The library (app/src) holds the detectors, the alert classifier and the causal queue. An optional learned ranker stays off unless LEARNED_RANKER is set. Real or Noise marks become labels for the next gated retrain. The evaluation harness scores GAIA, NAB, SMD and RCAEval, and the home lab runs three simulated companies in shadow mode.
+Alerts arrive on POST /ingest/alertmanager. Metrics are pulled from Prometheus or uploaded as CSV on /evaluate. The product layer (app/product) is a FastAPI application: security middleware, an ingest buffer with deduplication, a job pipeline, SQLite, a model registry with a promotion gate and rollback, and /metrics and /monitoring. The library (app/src) holds the detectors, the alert classifier and the causal queue. An optional learned ranker stays off unless LEARNED_RANKER is set. Real or Noise marks become labels for the next gated retrain. The evaluation harness scores GAIA, NAB, SMD and RCAEval, and the home lab runs three simulated companies in shadow mode. Appendix H lists the HTTP routes and the library calls.
 
 ### 2.2 How the queue decides
 
@@ -71,7 +71,7 @@ The system wins when attention is scarce, which is the alert-fatigue setting: po
 
 ## 4. Deliverables, setup and use
 
-The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Submitted commit: SUBMITTED_COMMIT_SHA (fill after merge). Version: 1.1.0 until that tag. The delivery is the app, API and CLI, the Docker image, connectors, the home lab, experiment scripts and results, and seven ADRs. From `app/`: `docker compose up -d` serves http://127.0.0.1:8080 in shadow mode; `uv sync --group dev && uv run pytest -q && uv run python run_validate.py` runs the checks. `tools/fetch_*.py` downloads data and checks SHA-256 where a stable file exists. The workflow is webhook, scoring job, queue, Real or Noise mark, gated retrain, then optional Live paging. Commands, OS, Python, hardware and data access are in README.md. Assistants helped with review and drafting. The author owns the design, method and claims.
+The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Submitted commit: SUBMITTED_COMMIT_SHA (fill after merge). Version: 1.1.0 until that tag. The delivery is the app, API and CLI, the Docker image, connectors, the home lab, the day-12 snapshot, experiment scripts and results, and seven ADRs. From `app/`: `docker compose up -d` serves http://127.0.0.1:8080 in shadow mode; `uv sync --group dev && uv run pytest -q && uv run python run_validate.py` runs the checks. `tools/fetch_*.py` downloads data and checks SHA-256 where a stable file exists. The workflow is webhook, scoring job, queue, Real or Noise mark, gated retrain, then optional Live paging. Commands, OS, Python, hardware and data access are in README.md. Assistants helped with review and drafting. The author owns the design, method and claims.
 
 ## 5. Conclusion
 
@@ -112,7 +112,7 @@ The queue is tested, deployable, and causal. At K = 20 the ranker beats the caus
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 421 passed, 0 failed, 86% coverage, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 421 passed, 10 skipped, 86.43% line coverage (7,433 of 8,600 statements; criterion met), 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
 **Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 421 passed and 10 skipped on Python 3.12.3 at the submission re-run (an earlier draft said 296 tests) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
@@ -342,7 +342,7 @@ An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That fl
 | Criterion | Target | Result |
 |---|---|---|
 | Tests passing | 100% of tests that run | 421 passed, 0 failed, 10 skipped on Python 3.12 (21 October 2026). Nine skips need torch, xgboost or CUDA, which CPU CI does not install. One skip is the Compose integration job |
-| Line coverage | ≥ 85% | 86% (86.43% on that run) |
+| Line coverage | ≥ 85% | 86.43% (7,433 of 8,600 statements; re-measured on this commit; criterion met) |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
@@ -856,7 +856,7 @@ uv run python make_figures.py
 uv run python run_validate.py
 ```
 
-On PowerShell, set `$env:PYTHONPATH` to the `app` directory and call `python` instead of `uv run python`. The GAIA ranker re-run is `docs/results/gaia_ranker_rerun/commands.sh`.
+On PowerShell, set `$env:PYTHONPATH` to the `app` directory and call `python` instead of `uv run python`. The GAIA ranker re-run is `docs/results/gaia_ranker_rerun/commands.sh`. The day-12 snapshot is `homelab/snapshots/day12/day12-rebuilt-20261103T150116Z.tar.xz` (xz SHA-256 `378dc71f3ef4143662acc1d0a3dda8c5e32f7752f3ceb77efe9b88bf0985c56e`; the original gzip SHA-256 is `968940267defb49a6f92c93824369560c417fa8df4546d85c3009938cf9da782`). Reproduce Table 2 with `./homelab/scripts/reproduce_day12.sh`.
 
 Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large). `python tools/fetch_gaia.py` (from the repository root) downloads them from the GAIA MicroSS dataset (https://github.com/CloudWise-OpenSource/GAIA-DataSet, `MicroSS/run/run.zip` and the split archive `MicroSS/metric/metric_split.*`, about 1.8 GB), extracts the two run tables and the 37 `docker_memory_usage_total` series into that layout, and checks each file's SHA-256 against the copy used for these results (`--check` verifies files already in place). Without GAIA: `python examples/make_example.py`, then `python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv`.
 
@@ -1098,3 +1098,34 @@ AI coding assistants were used while building this project: for code review, ref
 | `rcalogs.RE3.tt.test_cases` | 15 | §B5 RCAEval RE2/RE3 |
 | `rcalogs.early_jump_share` | 43% | §B5 RCAEval RE2/RE3 |
 | `rcalogs.gate.margin` | 10 | §9, §B5 RCAEval RE2/RE3 |
+
+## Appendix H. Interfaces
+
+Taken from `app/product/web/` and `app/src/experiment.py`. When `APP_PASSWORD` is unset, routes other than `/health` accept only a private or loopback client. When it is set, those routes need a session or HTTP basic login. Ingest accepts `Authorization: Bearer` matching `INGEST_TOKEN` when that variable is set.
+
+Table H1. Main HTTP endpoints
+
+| Method | Path | Auth | Input | Output |
+|---|---|---|---|---|
+| GET | /health | open | none | JSON status |
+| POST | /login | none | password | session cookie |
+| POST | /logout | session | none | cookie cleared |
+| POST | /ingest/alertmanager | ingest token or private client | Alertmanager webhook | firing alerts buffered |
+| POST | /ingest/alerts | ingest token or private client | `{alerts:[{timestamp,source,severity,message}]}` | same |
+| POST | /jobs/run | session or private client | `{mode,budget_k,shadow_mode}` | queue result; pages only if Live rules hold |
+| GET | /queue | session or private client | none | current queue |
+| POST | /feedback | operator if a password is set | Real or Noise mark | label stored |
+| GET | /metrics | session or private client | none | Prometheus text |
+| GET | /monitoring | session or private client | none | monitoring JSON |
+| POST | /evaluate | session or private client | alerts, metrics, faults CSV | evaluation report |
+
+Table H2. Library interfaces
+
+| Caller | Callee | Role |
+|---|---|---|
+| `product.pipeline` | `src.classifier.AlertClassifier` | fit and score log alerts |
+| `product.pipeline` | `src.queue.build_queue` | causal queue for the product gate |
+| `src.experiment.run_window` | `src.queue.build_queue` | each named queue, including `proposed` and `p3_ranker` |
+| `src.experiment.run_window` | `src.classifier.AlertClassifier` | log alerts inside the window |
+| `homelab.evaluate` | `src.experiment.run_window` | day-12 plain and learned-ranker scores |
+| `homelab.evaluate` | `src.ranker.fit_ranker` | only when `--learned-ranker` is passed; does not set `LEARNED_RANKER` |

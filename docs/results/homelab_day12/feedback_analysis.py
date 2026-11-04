@@ -1,4 +1,6 @@
-"""Read-only feedback analysis on the frozen day-12 snapshot.
+"""Read-only feedback analysis on a day-12 snapshot directory.
+
+Arguments: SNAPSHOT_DIR OUT_DIR. SNAPSHOT_DIR contains data/collected and data/faults.csv.
 
 A1  paired bootstrap p3_ranker vs logs_severity (project queue, unchanged).
 A2  Alertmanager-style baseline built from the homelab's real route
