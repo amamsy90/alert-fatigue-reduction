@@ -27,7 +27,11 @@ across 44 series.
 | `fault_fanout.csv`, `fanout_chance.json`, `fanout_chance.py` | Loose 10-minute company window and the shifted-window chance line |
 | `worked_example.json`, `worked_example.py` | One test-window alert and the jump that caught its fault |
 
-The Python scripts were run on ai-ROG against that snapshot. Their paths point
-at that machine. They are kept so the tables can be traced, not so CI can
-rerun them. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN` stay off in
-`summary.json` (`flags_changed` is false).
+The Python scripts take a snapshot directory and an output directory as
+arguments. They do not embed a machine path. The JSON files still record the
+directory used on ai-ROG, as the original run wrote it. Reproduce the tables
+with `./homelab/scripts/reproduce_day12.sh`. The raw snapshot is
+`homelab/snapshots/day12/`. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN`
+stay off in `summary.json` (`flags_changed` is false). The rebuild file has
+1,184 episodes. `data/collected/alerts.csv` in the snapshot has 1,182, which
+is what the day-12 evaluator scored after the metric-window cutoff.
