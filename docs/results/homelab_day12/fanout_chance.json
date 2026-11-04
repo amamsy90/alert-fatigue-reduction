@@ -1,0 +1,29 @@
+{
+  "real": {
+    "ge1": 512,
+    "ge2_services": 26,
+    "own_service": 369
+  },
+  "shifted_mean": {
+    "ge1": 239.2,
+    "ge2_services": 9.7,
+    "own_service": 17.4
+  },
+  "shifted_min_max": {
+    "ge1": [
+      220,
+      256
+    ],
+    "ge2_services": [
+      5,
+      16
+    ],
+    "own_service": [
+      10,
+      21
+    ]
+  },
+  "faults": 1205,
+  "repeats": 20,
+  "seed": 42
+}

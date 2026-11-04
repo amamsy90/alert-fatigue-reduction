@@ -1,0 +1,428 @@
+{
+  "episodes_rebuilt_file": 1184,
+  "episodes_evaluated_file": 1182,
+  "by_alertname": {
+    "HomelabCpuHigh": 444,
+    "InfoInhibitor": 420,
+    "HomelabMemoryHigh": 159,
+    "HomelabLatencyP95High": 76,
+    "HomelabErrorRateHigh": 75,
+    "NodeMemoryMajorPagesFaults": 3,
+    "HomelabRestarted": 2,
+    "KubePodNotReady": 1,
+    "KubePodCrashLooping": 1,
+    "KubeDeploymentRolloutStuck": 1
+  },
+  "by_category": {
+    "cpu": 444,
+    "meta (null route)": 420,
+    "memory": 159,
+    "latency": 76,
+    "error_rate": 75,
+    "pod_restart": 3,
+    "cluster_node": 3,
+    "cluster_k8s": 2
+  },
+  "by_severity": {
+    "warning": 687,
+    "none": 420,
+    "critical": 75
+  },
+  "by_company": {
+    "cassini": 619,
+    "acme": 523,
+    "borealis": 34,
+    "cluster": 6
+  },
+  "company_x_category": {
+    "acme": {
+      "meta (null route)": 218,
+      "cpu": 159,
+      "latency": 76,
+      "error_rate": 42,
+      "memory": 27,
+      "pod_restart": 1
+    },
+    "borealis": {
+      "error_rate": 33,
+      "pod_restart": 1
+    },
+    "cassini": {
+      "cpu": 285,
+      "meta (null route)": 202,
+      "memory": 132
+    },
+    "cluster": {
+      "cluster_node": 3,
+      "cluster_k8s": 2,
+      "pod_restart": 1
+    }
+  },
+  "distinct_sources": 33,
+  "top_sources": {
+    "acme/unknown": 218,
+    "cassini/unknown": 202,
+    "acme/otel-collector": 118,
+    "cassini/front-end": 107,
+    "cassini/loadgenerator": 91,
+    "cassini/carts": 54,
+    "cassini/orders": 39,
+    "cassini/queue-master": 39,
+    "cassini/shipping": 37,
+    "borealis/otel-collector": 33,
+    "acme/adservice": 32,
+    "acme/paymentservice": 25,
+    "acme/productcatalogservice": 19,
+    "cassini/catalogue": 18,
+    "acme/checkoutservice": 17
+  },
+  "severity_x_alertname": {
+    "critical": {
+      "HomelabErrorRateHigh": 75
+    },
+    "none": {
+      "InfoInhibitor": 420
+    },
+    "warning": {
+      "HomelabCpuHigh": 444,
+      "HomelabMemoryHigh": 159,
+      "HomelabLatencyP95High": 76,
+      "NodeMemoryMajorPagesFaults": 3,
+      "HomelabRestarted": 2,
+      "KubePodNotReady": 1,
+      "KubePodCrashLooping": 1,
+      "KubeDeploymentRolloutStuck": 1
+    }
+  },
+  "faults_closed": 1205,
+  "faults_not_injected": 50,
+  "faults_by_company_type": {
+    "acme": {
+      "network-delay": 166,
+      "pod-kill": 165,
+      "cpu-stress": 159
+    },
+    "borealis": {
+      "memory-stress": 128,
+      "network-loss": 125,
+      "http-abort": 55
+    },
+    "cassini": {
+      "network-delay": 155,
+      "pod-kill": 127,
+      "cpu-stress": 125
+    }
+  },
+  "strict_alignment": {
+    "episodes_aligned_to_a_fault": 215,
+    "episodes_noise": 967,
+    "faults_with_ge1_aligned_episode": 214,
+    "faults_total": 1205,
+    "aligned_by_alertname": {
+      "HomelabCpuHigh": 214,
+      "HomelabMemoryHigh": 1
+    }
+  },
+  "fanout_grace_10min": {
+    "pooled": {
+      "faults": 1205,
+      "with_ge1_episode": 512,
+      "with_episodes_on_ge2_services": 26,
+      "with_episode_on_faulted_service": 369,
+      "with_episode_only_on_other_services": 143,
+      "episodes_in_windows": 586,
+      "mean_episodes_when_any": 1.14
+    },
+    "acme": {
+      "faults": 490,
+      "with_ge1_episode": 278,
+      "with_episodes_on_ge2_services": 0,
+      "with_episode_on_faulted_service": 178,
+      "with_episode_only_on_other_services": 100,
+      "episodes_in_windows": 296,
+      "mean_episodes_when_any": 1.06
+    },
+    "borealis": {
+      "faults": 308,
+      "with_ge1_episode": 9,
+      "with_episodes_on_ge2_services": 0,
+      "with_episode_on_faulted_service": 0,
+      "with_episode_only_on_other_services": 9,
+      "episodes_in_windows": 9,
+      "mean_episodes_when_any": 1.0
+    },
+    "cassini": {
+      "faults": 407,
+      "with_ge1_episode": 225,
+      "with_episodes_on_ge2_services": 26,
+      "with_episode_on_faulted_service": 191,
+      "with_episode_only_on_other_services": 34,
+      "episodes_in_windows": 281,
+      "mean_episodes_when_any": 1.25
+    },
+    "by_fault_type": {
+      "cpu-stress": {
+        "faults": 284,
+        "with_ge1_episode": 284,
+        "with_episodes_on_ge2_services": 17,
+        "with_episode_on_faulted_service": 284,
+        "with_episode_only_on_other_services": 0,
+        "episodes_in_windows": 302,
+        "mean_episodes_when_any": 1.06
+      },
+      "http-abort": {
+        "faults": 55,
+        "with_ge1_episode": 1,
+        "with_episodes_on_ge2_services": 0,
+        "with_episode_on_faulted_service": 0,
+        "with_episode_only_on_other_services": 1,
+        "episodes_in_windows": 1,
+        "mean_episodes_when_any": 1.0
+      },
+      "memory-stress": {
+        "faults": 128,
+        "with_ge1_episode": 3,
+        "with_episodes_on_ge2_services": 0,
+        "with_episode_on_faulted_service": 0,
+        "with_episode_only_on_other_services": 3,
+        "episodes_in_windows": 3,
+        "mean_episodes_when_any": 1.0
+      },
+      "network-delay": {
+        "faults": 321,
+        "with_ge1_episode": 117,
+        "with_episodes_on_ge2_services": 1,
+        "with_episode_on_faulted_service": 1,
+        "with_episode_only_on_other_services": 116,
+        "episodes_in_windows": 137,
+        "mean_episodes_when_any": 1.17
+      },
+      "network-loss": {
+        "faults": 125,
+        "with_ge1_episode": 5,
+        "with_episodes_on_ge2_services": 0,
+        "with_episode_on_faulted_service": 0,
+        "with_episode_only_on_other_services": 5,
+        "episodes_in_windows": 5,
+        "mean_episodes_when_any": 1.0
+      },
+      "pod-kill": {
+        "faults": 292,
+        "with_ge1_episode": 102,
+        "with_episodes_on_ge2_services": 8,
+        "with_episode_on_faulted_service": 84,
+        "with_episode_only_on_other_services": 18,
+        "episodes_in_windows": 138,
+        "mean_episodes_when_any": 1.35
+      }
+    }
+  },
+  "top_cofiring_pairs": {
+    "acme/cartservice -> acme/otel-collector": 27,
+    "acme/frontend -> acme/otel-collector": 21,
+    "acme/productcatalogservice -> acme/otel-collector": 14,
+    "acme/redis-cart -> acme/otel-collector": 12,
+    "acme/adservice -> acme/otel-collector": 10,
+    "acme/currencyservice -> acme/otel-collector": 10,
+    "cassini/queue-master -> cassini/front-end": 7,
+    "acme/recommendationservice -> acme/otel-collector": 6,
+    "cassini/catalogue -> cassini/loadgenerator": 6,
+    "cassini/front-end -> cassini/loadgenerator": 5,
+    "cassini/orders -> cassini/loadgenerator": 5,
+    "cassini/user -> cassini/front-end": 5,
+    "cassini/carts -> cassini/loadgenerator": 4,
+    "cassini/payment -> cassini/loadgenerator": 4,
+    "cassini/shipping -> cassini/loadgenerator": 4
+  },
+  "routed_episodes": 762,
+  "routed_episodes_in_any_same_company_fault_window_grace": 586,
+  "fold_down": {
+    "episodes": 1182,
+    "after_null_route": 762,
+    "alertmanager_groups": 41,
+    "alertmanager_notifications_no_repeat": 762,
+    "same_company_bursts_2min_chain": 713
+  },
+  "queue_eval_pooled": [
+    {
+      "queue": "logs_severity",
+      "budget_k": 5,
+      "faults_caught": 0,
+      "items_per_day": 0.33,
+      "attached_alerts": 0,
+      "false_items_per_day": 0.33,
+      "precision": 0.0
+    },
+    {
+      "queue": "proposed",
+      "budget_k": 5,
+      "faults_caught": 12,
+      "items_per_day": 5.0,
+      "attached_alerts": 2,
+      "false_items_per_day": 3.0,
+      "precision": 0.4
+    },
+    {
+      "queue": "p3_ranker",
+      "budget_k": 5,
+      "faults_caught": 18,
+      "items_per_day": 5.0,
+      "attached_alerts": 2,
+      "false_items_per_day": 2.0,
+      "precision": 0.6
+    },
+    {
+      "queue": "p3_grouped",
+      "budget_k": 5,
+      "faults_caught": 12,
+      "items_per_day": 5.0,
+      "attached_alerts": 3,
+      "false_items_per_day": 3.17,
+      "precision": 0.3667
+    },
+    {
+      "queue": "p3_carryover",
+      "budget_k": 5,
+      "faults_caught": 12,
+      "items_per_day": 5.0,
+      "attached_alerts": 2,
+      "false_items_per_day": 3.0,
+      "precision": 0.4
+    },
+    {
+      "queue": "logs_severity",
+      "budget_k": 10,
+      "faults_caught": 0,
+      "items_per_day": 0.33,
+      "attached_alerts": 0,
+      "false_items_per_day": 0.33,
+      "precision": 0.0
+    },
+    {
+      "queue": "proposed",
+      "budget_k": 10,
+      "faults_caught": 31,
+      "items_per_day": 9.83,
+      "attached_alerts": 4,
+      "false_items_per_day": 4.67,
+      "precision": 0.5254
+    },
+    {
+      "queue": "p3_ranker",
+      "budget_k": 10,
+      "faults_caught": 38,
+      "items_per_day": 9.67,
+      "attached_alerts": 4,
+      "false_items_per_day": 3.17,
+      "precision": 0.6724
+    },
+    {
+      "queue": "p3_grouped",
+      "budget_k": 10,
+      "faults_caught": 31,
+      "items_per_day": 9.83,
+      "attached_alerts": 7,
+      "false_items_per_day": 5.0,
+      "precision": 0.4915
+    },
+    {
+      "queue": "p3_carryover",
+      "budget_k": 10,
+      "faults_caught": 31,
+      "items_per_day": 10.0,
+      "attached_alerts": 4,
+      "false_items_per_day": 4.83,
+      "precision": 0.5167
+    },
+    {
+      "queue": "logs_severity",
+      "budget_k": 20,
+      "faults_caught": 0,
+      "items_per_day": 0.33,
+      "attached_alerts": 0,
+      "false_items_per_day": 0.33,
+      "precision": 0.0
+    },
+    {
+      "queue": "proposed",
+      "budget_k": 20,
+      "faults_caught": 51,
+      "items_per_day": 18.5,
+      "attached_alerts": 5,
+      "false_items_per_day": 9.67,
+      "precision": 0.4775
+    },
+    {
+      "queue": "p3_ranker",
+      "budget_k": 20,
+      "faults_caught": 68,
+      "items_per_day": 17.33,
+      "attached_alerts": 5,
+      "false_items_per_day": 5.67,
+      "precision": 0.6731
+    },
+    {
+      "queue": "p3_grouped",
+      "budget_k": 20,
+      "faults_caught": 53,
+      "items_per_day": 18.5,
+      "attached_alerts": 11,
+      "false_items_per_day": 9.83,
+      "precision": 0.4685
+    },
+    {
+      "queue": "p3_carryover",
+      "budget_k": 20,
+      "faults_caught": 54,
+      "items_per_day": 20.0,
+      "attached_alerts": 5,
+      "false_items_per_day": 10.67,
+      "precision": 0.4667
+    },
+    {
+      "queue": "logs_severity",
+      "budget_k": 50,
+      "faults_caught": 0,
+      "items_per_day": 0.33,
+      "attached_alerts": 0,
+      "false_items_per_day": 0.33,
+      "precision": 0.0
+    },
+    {
+      "queue": "proposed",
+      "budget_k": 50,
+      "faults_caught": 81,
+      "items_per_day": 30.17,
+      "attached_alerts": 5,
+      "false_items_per_day": 16.33,
+      "precision": 0.4586
+    },
+    {
+      "queue": "p3_ranker",
+      "budget_k": 50,
+      "faults_caught": 75,
+      "items_per_day": 19.0,
+      "attached_alerts": 5,
+      "false_items_per_day": 6.17,
+      "precision": 0.6754
+    },
+    {
+      "queue": "p3_grouped",
+      "budget_k": 50,
+      "faults_caught": 81,
+      "items_per_day": 28.33,
+      "attached_alerts": 16,
+      "false_items_per_day": 15.33,
+      "precision": 0.4588
+    },
+    {
+      "queue": "p3_carryover",
+      "budget_k": 50,
+      "faults_caught": 81,
+      "items_per_day": 30.17,
+      "attached_alerts": 5,
+      "false_items_per_day": 16.33,
+      "precision": 0.4586
+    }
+  ]
+}
