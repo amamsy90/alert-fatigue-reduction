@@ -1,0 +1,14 @@
+{
+  "out": "/home/ai/work/analysis/day12-rebuilt-20261103T150116Z/alerts_rebuilt.csv",
+  "prom_url": "http://127.0.0.1:9090",
+  "requested_start": "2026-10-21T19:15:11Z",
+  "read_from": "2026-10-21T18:15:00Z",
+  "end": "2026-11-02T19:15:00Z",
+  "step_seconds": 60,
+  "chunk_hours": 120,
+  "gap_rule_seconds": 120.0,
+  "prometheus_lowest_sample": "2026-10-21T18:56:50Z",
+  "first_alerts_sample": "2026-10-21T18:59:00Z",
+  "series": 44,
+  "episodes": 1184
+}
