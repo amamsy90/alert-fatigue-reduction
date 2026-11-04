@@ -109,7 +109,13 @@ uv run python run_queue_eval.py
 uv run python run_validate.py
 ```
 
-The GAIA ranker command is in [`docs/results/gaia_ranker_rerun/commands.sh`](docs/results/gaia_ranker_rerun/commands.sh). Home-lab setup and evaluation are in [`homelab/README.md`](homelab/README.md). The raw day-12 snapshot (`day12-rebuilt-20261103T150116Z`) is not in the repository. Only the frozen summaries in `docs/results/homelab_day12/` are provided. Models are trained locally. Nothing is downloaded from a paid model host.
+The GAIA ranker command is in [`docs/results/gaia_ranker_rerun/commands.sh`](docs/results/gaia_ranker_rerun/commands.sh). Home-lab setup is in [`homelab/README.md`](homelab/README.md). The day-12 snapshot is in the repository. Reproduce Table 2 with:
+
+```bash
+./homelab/scripts/reproduce_day12.sh
+```
+
+That checks SHA-256 `378dc71f3ef4143662acc1d0a3dda8c5e32f7752f3ceb77efe9b88bf0985c56e`, scores plain and learned-ranker modes, and diffs the tables in `docs/results/homelab_day12/`. The rebuild has 1,184 episodes; the scored alert file has 1,182 after the metric-window cutoff. Models are trained locally. No paid API is required.
 
 ## Safety defaults
 

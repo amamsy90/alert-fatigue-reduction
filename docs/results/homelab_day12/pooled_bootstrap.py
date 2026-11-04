@@ -1,4 +1,6 @@
-"""Read-only paired bootstrap on the frozen day-12 snapshot.
+"""Read-only paired bootstrap on a day-12 snapshot directory.
+
+Arguments: SNAPSHOT_DIR OUT_DIR. SNAPSHOT_DIR contains data/collected and data/faults.csv.
 
 Reuses homelab.evaluate (load_tables, _population, _bounds, lab_config,
 BOOTSTRAP_DRAWS=4000, BOOTSTRAP_SEED=42) and the app's run_window,
