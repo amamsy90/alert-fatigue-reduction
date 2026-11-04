@@ -2,6 +2,8 @@
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
+**Version:** 1.2.0
+
 An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts. An optional learned ranker stays off. The app ships as one Docker container and pages nothing unless Live is armed.
 
 The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). On GAIA at K = 20 the learned ranker catches 887 of 1,223 faults against a baseline of 851. The detector alone catches 72.6%. Those are different rows (`docs/results/gaia_ranker_rerun/summary_by_k.csv` and `jumps_tuned` in `app/results/queue_eval_gaia.csv`).
@@ -86,7 +88,7 @@ Tested on Linux with CPython 3.12.3. GitHub Actions also runs Python 3.10 and 3.
 
 ```bash
 cd app
-uv run pytest -q                      # 440 passed, 10 skipped
+uv run pytest -q                      # 450 passed, 10 skipped
 uv run ruff check .                   # clean
 uv run python run_validate.py         # 195 checked numbers
 uv run --with pyyaml pytest -q ../homelab/tests   # 62 passed
