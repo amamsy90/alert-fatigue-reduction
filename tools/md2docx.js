@@ -1,7 +1,9 @@
 // Markdown -> DOCX for the course final report.
-// node tools/md2docx.js FINAL_REPORT.md submission/Alert_Fatigue_Final_Report.docx "" figures
+// node tools/md2docx.js FINAL_REPORT.md submission/Alert_Fatigue_Final_Report_v1.2.0.docx "" figures
 // A4, 2.5 cm margins, Times New Roman. LibreOffice may substitute Liberation Serif;
 // the submitted PDF should be exported from Word, which has Times New Roman.
+// Sizes are half-points: title 32 = 16 pt, heading 1 = 28 = 14 pt, heading 2 = 24 = 12 pt.
+// Named styles must be set too. The library default Title is 28 pt and Heading 1/2 are blue.
 const fs = require("fs");
 const path = require("path");
 const {
@@ -103,6 +105,10 @@ function caption(text) {
   });
 }
 
+const TITLE_RUN = { font: FONT, size: 32, bold: true, color: INK };
+const H1_RUN = { font: FONT, size: 28, bold: true, color: INK };
+const H2_RUN = { font: FONT, size: 24, bold: true, color: INK };
+
 function heading(text, kind, pageBreakBefore) {
   const main = kind === "main" || kind === "appendix";
   return new Paragraph({
@@ -110,7 +116,7 @@ function heading(text, kind, pageBreakBefore) {
     keepNext: true,
     pageBreakBefore: Boolean(pageBreakBefore),
     spacing: { before: pageBreakBefore ? 0 : 240, after: 120, line: 276, lineRule: "auto" },
-    children: [new TextRun({ text, font: FONT, size: main ? 28 : 24, bold: true, color: INK })],
+    children: [new TextRun({ text, ...(main ? H1_RUN : H2_RUN) })],
   });
 }
 
@@ -166,7 +172,7 @@ for (let i = 0; i < lines.length; i++) {
         heading: HeadingLevel.TITLE,
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 60, line: 276, lineRule: "auto" },
-        children: [new TextRun({ text, font: FONT, size: 32, bold: true, color: INK })],
+        children: [new TextRun({ text, ...TITLE_RUN })],
       }));
       titleDone = true;
       expectMembers = true;
@@ -259,7 +265,16 @@ flush();
 const doc = new Document({
   creator: "Aishah Mohamed Alyammahi",
   styles: {
-    default: { document: { run: { font: FONT, size: 24 } } },
+    default: {
+      document: { run: { font: FONT, size: 24, color: INK } },
+      title: { run: TITLE_RUN },
+      heading1: { run: H1_RUN },
+      heading2: { run: H2_RUN },
+      heading3: { run: H2_RUN },
+      heading4: { run: H2_RUN },
+      heading5: { run: H2_RUN },
+      heading6: { run: H2_RUN },
+    },
     characterStyles: [{
       id: "Hyperlink",
       name: "Hyperlink",
