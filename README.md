@@ -4,13 +4,11 @@
 
 **Version:** 1.2.0
 
-An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts. An optional learned ranker stays off. The app ships as one Docker container and pages nothing unless Live is armed.
-
-The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). On GAIA at K = 20 the learned ranker catches 887 of 1,223 faults against a baseline of 851. The detector alone catches 72.6%. Those are different rows (`docs/results/gaia_ranker_rerun/summary_by_k.csv` and `jumps_tuned` in `app/results/queue_eval_gaia.csv`).
+An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity, and it wins all 8 walk-forward weeks with fewer false items. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Optional ranker, metric, trace and LLM paths stay off by default. Their measurements stay in the report appendices.
 
 ## Team
 
-Aishah Mohamed Alyammahi is the sole member: requirements, design, implementation, evaluation, the home lab, and documentation. AI coding assistants were used for review, tests and drafting. The author is responsible for the design, the method and the claims.
+Aishah Mohamed Alyammahi, solo, responsible for the design, implementation, evaluation, and report.
 
 ## Project structure
 
@@ -31,7 +29,7 @@ Aishah Mohamed Alyammahi is the sole member: requirements, design, implementatio
 
 ## Prerequisites
 
-- Python 3.10, 3.11 or 3.12 (`requires-python` is `>=3.10,<3.13` in `app/pyproject.toml`). This tree was re-tested on CPython 3.12.3.
+- Python 3.10, 3.11 or 3.12 (`requires-python` is `>=3.10,<3.13` in `app/pyproject.toml`).
 - [uv](https://docs.astral.sh/uv/) for the locked environment.
 - Docker, if you run the container or the integration test.
 - The home lab also needs k3d, kubectl, Helm 3, curl and systemd. See [`homelab/README.md`](homelab/README.md).
@@ -84,19 +82,18 @@ Own data, without code changes: open `/evaluate` ([`USE_YOUR_DATA.md`](USE_YOUR_
 
 ## Testing and evaluation
 
-Tested on Linux with CPython 3.12.3. GitHub Actions also runs Python 3.10 and 3.12 on `ubuntu-latest`. On this commit:
+Published GAIA timing was measured on a Windows laptop (20 logical CPUs, Python 3.12.14; `app/results/resources_gaia.json`). Clean-clone timing used the uv Python 3.14 Bookworm image. No paid API is required. PagerDuty, Slack and Opsgenie are optional and unused in shadow mode.
+
+Tests and `run_validate.py` read the committed files in `app/results/`. GAIA is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks SHA-256.
 
 ```bash
 cd app
-uv run pytest -q                      # 450 passed, 10 skipped
-uv run ruff check .                   # clean
-uv run python run_validate.py         # 195 checked numbers
-uv run --with pyyaml pytest -q ../homelab/tests   # 62 passed
+uv sync --group dev
+uv run pytest -q
+uv run python run_validate.py
 ```
 
-The integration job needs Docker (`app/tests/integration`, started from `.github/workflows/ci.yml`).
-
-CPU is enough for the app, the tests and the published GAIA tables. About 20 GB of free RAM is the estimate for the full home lab. An NVIDIA GPU is optional and was used only for the ranker re-run (RTX 5090 Laptop, torch 2.14.1+cu130, xgboost 3.4.1; `docs/results/gaia_ranker_rerun/env.txt`).
+On this commit, `uv run pytest -q` reported 450 passed and 10 skipped. Line coverage is 86%. `uv run python run_validate.py` matched 195 checked numbers. Exact steps for a grader are these four commands. The same four commands are in section 4 of [`FINAL_REPORT.md`](FINAL_REPORT.md).
 
 Fetch benchmark data, then score it. Each fetch script names its source. GAIA and RCAEval RE2/RE3 check SHA-256.
 
@@ -111,7 +108,7 @@ uv run python run_queue_eval.py
 uv run python run_validate.py
 ```
 
-The GAIA ranker command is in [`docs/results/gaia_ranker_rerun/commands.sh`](docs/results/gaia_ranker_rerun/commands.sh). Home-lab setup is in [`homelab/README.md`](homelab/README.md). The day-12 snapshot is in the repository. Reproduce Table 2 with:
+Home-lab setup is in [`homelab/README.md`](homelab/README.md). The day-12 snapshot is in the repository. Reproduce the day-12 tables with:
 
 ```bash
 ./homelab/scripts/reproduce_day12.sh
