@@ -4,7 +4,7 @@
 
 **Version:** 1.2.0
 
-An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity, and it wins all 8 walk-forward weeks with fewer false items. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Optional ranker, metric, trace and LLM paths stay off by default. Their measurements stay in the report appendices.
+An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Optional ranker, metric, trace and LLM paths stay off by default. Their measurements stay in the report appendices.
 
 ## Team
 
@@ -82,7 +82,7 @@ Own data, without code changes: open `/evaluate` ([`USE_YOUR_DATA.md`](USE_YOUR_
 
 ## Testing and evaluation
 
-Published GAIA timing was measured on a Windows laptop (20 logical CPUs, Python 3.12.14; `app/results/resources_gaia.json`). Clean-clone timing used the uv Python 3.14 Bookworm image. No paid API is required. PagerDuty, Slack and Opsgenie are optional and unused in shadow mode.
+The project requires Python 3.10, 3.11, or 3.12 (`requires-python` is `>=3.10,<3.13`). Published GAIA timing was measured on a Windows laptop with Python 3.12.14 and 20 logical CPUs (`app/results/resources_gaia.json`). The container image is `python:3.12-slim` (`app/Dockerfile`). No committed log records a Python 3.14 timing image. No paid API is required. PagerDuty, Slack and Opsgenie are optional and unused in shadow mode.
 
 Tests and `run_validate.py` read the committed files in `app/results/`. GAIA is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks SHA-256.
 
