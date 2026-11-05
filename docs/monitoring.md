@@ -60,8 +60,8 @@ groups:
 | Successful requests under load | ≥ 99% | 100% (3,000 requests) | load tests at 20 and 50 users |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s | `oncall_job_duration_seconds` |
 | Full GAIA month (34,863 alerts) | ≤ 5 min | 54.9 s | `perf/resources.py`, median of 3 runs (`app/results/resources_gaia.json`) |
-| Automated tests passing | 100% of tests that run | 421 passed, 0 failed, 10 skipped | Python 3.12, 21 October 2026 |
-| Line coverage | ≥ 85% | 86.19% (8,077 of 9,370; re-measured on this commit) | `uv run pytest -q --cov` from `app/` |
+| Automated tests passing | 100% of tests that run | 450 passed, 10 skipped | `uv run pytest -q` from `app/` |
+| Line coverage | ≥ 85% | 86% | `uv run pytest -q --cov` from `app/` |
 | Faults caught at K = 20 (detector vs Prometheus rate rule) | beats it | 72.6% vs 68.9%, 8/8 weeks | `run_validate.py` |
 | False items a day at K = 20 | fewer than the rate rule | 1.0 (detector), 1.8 (full queue) vs 2.1 | same |
 | Time from fault start to confirmation | ≤ 1 min | 0.72 min median | same |
