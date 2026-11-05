@@ -4,7 +4,7 @@ Aishah Mohamed Alyammahi
 
 ## Abstract
 
-On-call engineers can read only a few alerts a day, and 82% of GAIA faults never write a log line. The system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 it catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity, and it wins all 8 walk-forward weeks with fewer false items.
+On-call engineers can read only a few alerts a day, and 82% of GAIA faults never write a log line. The system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day.
 
 ## 1. Motivation and objectives
 
@@ -16,7 +16,7 @@ Each objective below is paired with the measurement this submission reports. The
 
 | Objective | Target | Measured result |
 |---|---|---|
-| Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector wins 8 of 8 walk-forward weeks |
+| Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector (`jumps_tuned`) wins 8 of 8 walk-forward weeks against the Prometheus rate rule |
 | Decide with no future data | No decision uses a later point, the end of a jump, or its peak | A jump is shown at the second confirming point. `tests/test_causality.py` checks that rule |
 | Ship with shadow paging and a versioned model | Record what would have been paged until Live is armed. Models are versioned and can be rolled back | Shadow is the default. Live needs `APP_PASSWORD`, a channel, and the typed word LIVE, and only an ingest job may page. Models load as skops |
 | Let another team run the tests | The checks run from the README on the committed results, with no paid API | 450 passed, 10 skipped; line coverage 86%; `run_validate.py` matches the printed figures |
@@ -52,7 +52,7 @@ Table 1. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in 
 | Jump detector | 72.6% | 1.0 |
 | Best possible on this data | 84.9% | — |
 
-The jump detector is the row `jumps_tuned`: 888 of 1,223 faults (72.6%) and 1.0 false item a day. The Prometheus rate rule is `delta_5m`: 843 of 1,223 (68.9%) and 2.1 false items a day. Log severity catches 0 of 1,223. The same jump detector wins all 8 walk-forward weeks, and it shows fewer false items a day than the rate rule. Walk-forward learns every threshold again from the past only, then scores the next week once. The mean, and the week that is weak because the metrics stop, are in Appendix D. Median time from the start of a fault to the confirming point is 0.72 minutes.
+The jump detector is the row `jumps_tuned`: 888 of 1,223 faults (72.6%) and 1.0 false item a day. The Prometheus rate rule is `delta_5m`: 843 of 1,223 (68.9%) and 2.1 false items a day. Log severity catches 0 of 1,223. The jump detector (`jumps_tuned`) wins all 8 walk-forward weeks against the Prometheus rate rule (`delta_5m`), and on the 55-day test it shows 1.0 false item a day against the rate rule's 2.1. Walk-forward learns every threshold again from the past only, then scores the next week once. Appendix D plots that detector and, separately, the full queue on the same weeks. The full queue is a different comparison, and it does not win every week. Median time from the start of a fault to the confirming point is 0.72 minutes.
 
 About 22 faults are injected a day, more than 20 slots on 34 of the 55 test days, which is why the best possible result at this budget is 84.9% rather than 100%. When the full queue misses, Appendix D shows that the misses are mostly a monitoring gap or a day whose 20 slots were already full. The jump rule itself fails on only a small share of those misses.
 
