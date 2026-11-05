@@ -10,7 +10,7 @@ Your services raise more alerts than one person can read. This tool gives on-cal
 It runs in **shadow mode** by default: nothing is paged until you turn **Live** on from Connectors (with a routing key). Demos (sample / GAIA / Evaluate) never page. After any run the UI shows a **would-have-paged** card (what Live would have opened) so a sales demo can show PagerDuty value without sending.
 Buyer path on the main page: Run sample → Evaluate shop/my data → Review queue + would-have → Connectors (key, stay Shadow until pilot agrees).
 
-On the public GAIA benchmark it catches **70–73%** of injected faults at 20 items a day (the best possible is 85%; 98% of the rest are metric outages or a full budget), against **69%** for a Prometheus `delta()` rule and **0%** for log severity, with fewer false items. On synthetic faults added to real series it catches 0.5–2 GB steps and spikes 98–100% of the time and slow leaks 73–99%. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
+On the public GAIA benchmark it catches **72.6%** of injected faults at 20 items a day (the best possible is 84.9%; 98% of the rest are metric outages or a full budget), against **68.9%** for a Prometheus `delta()` rule and **0%** for log severity, with fewer false items. On synthetic faults added to real series it catches 0.5–2 GB steps and spikes 98–100% of the time and slow leaks 73–99%. Details: [../FINAL_REPORT.md](../FINAL_REPORT.md).
 
 **Not microservices?** It works on any number over time — orders, sign-ups, sensor readings, ad clicks, notification or ticket counts. Open **/evaluate** in the web app, upload your metrics (plus past problems and alerts if you have them), and the app tunes itself on the early part of your data and tells you — against a random-chance line — whether it would have caught your past problems. Step-by-step guide: [../USE_YOUR_DATA.md](../USE_YOUR_DATA.md).
 
@@ -171,4 +171,4 @@ Older alert-only experiments live in `experiments/legacy_alerts_only/` (`run_m1`
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `../tools/build_rehearsal.py`, `../tools/md2docx.js` | Rebuild the slide deck and the Word copies of the Markdown docs |
-| `tests/` | 431 tests: 421 pass on CPU CI, 9 skip without torch, xgboost or CUDA, and `tests/integration` runs only with the Docker stack (`python -m pytest -q`) |
+| `tests/` | 450 passed, 10 skipped (`uv run pytest -q`). Line coverage 86% |
