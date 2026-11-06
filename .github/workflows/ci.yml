@@ -61,6 +61,17 @@ jobs:
       - name: Report numbers match the result files
         run: uv run python run_validate.py
 
+  # The author develops on Windows. This job catches POSIX-only code such as the
+  # `resource` import that once broke tests/test_trace_model.py there.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --group dev --python 3.12
+      - name: Tests
+        run: uv run pytest -q
+
   audit:
     runs-on: ubuntu-latest
     steps:

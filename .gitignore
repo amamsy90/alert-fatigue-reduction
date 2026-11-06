@@ -20,6 +20,13 @@ __pycache__/
 .venv/
 *.pyc
 
+# Generated Word / PDF copies (rebuild with tools/md2docx.js); the submitted proposal stays tracked
+submission/*.docx
+submission/*.pptx
+submission/Alert_Fatigue_*.pdf
+submission/Project_Proposal.pdf
+!submission/Project_Proposal_200010549_Aishah_Alyammahi.docx
+
 # Node (tools/md2docx.js)
 node_modules/
 
@@ -39,3 +46,8 @@ course_project_proposal.md
 
 # Draft and duplicate Word files, kept locally only
 submission/archive/
+
+# LaTeX build files
+report/*.aux
+report/*.log
+report/*.out
