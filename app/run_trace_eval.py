@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import resource
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -120,6 +119,10 @@ def _read_spans(path: Path) -> pd.DataFrame:
 
 
 def _rss_gb() -> float:
+    try:
+        import resource  # POSIX only; absent on Windows
+    except ImportError:
+        return float("nan")
     # Linux reports ru_maxrss in kilobytes.
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
 

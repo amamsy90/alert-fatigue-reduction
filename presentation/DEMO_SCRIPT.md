@@ -2,7 +2,7 @@
 
 App: http://127.0.0.1:8080  
 From `app/`: `docker compose up -d --build` (shadow mode), or `uv run uvicorn product.app:app --port 8080`  
-Numbers below match `FINAL_REPORT.md` / `run_validate.py` (not the older `CODE_REVIEW.md`).
+Numbers below match `../FINAL_REPORT.md` / `run_validate.py` (not the older `../CODE_REVIEW.md`).
 
 ---
 
