@@ -4,6 +4,23 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+### Added
+
+- `run_baseline_compare.py` and `src/baselines_anomaly.py`: z-score, EWMA and isolation-forest baselines through the same causal queue, with 95% bootstrap intervals over the 1,223 GAIA test faults and a paired difference to the rate rule. Re-run from the raw GAIA files, it reproduces 72.6% and 68.9% exactly. At K = 50 the detector and the rate rule are tied.
+- `run_rcaeval_gate_split.py`: RCAEval RE2/RE3 with train, validation and test cases kept apart, so the promotion gate decides on cases that are never scored. It refuses the classifier on all six applications; the earlier "promoted on RE2 Train Ticket" was decided on its own test cases.
+- `report/`: the four-page final report (LaTeX source and PDF) for the course brief.
+- A Windows job in CI.
+- `README.md`: team and contributions, tested environment, and sections in the brief's order.
+
+### Fixed
+
+- `run_trace_eval.py` imported the POSIX-only `resource` module at load time, which failed five tests on Windows.
+
+### Changed
+
+- The viva, demo and speaker notes moved to `presentation/`, the proposal drafts to `docs/history/`, and the generated Word and PDF copies are no longer tracked.
+- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (443 tests: 433 pass, 10 skip).
+
 ## [1.1.0] - 2026-10-21
 
 Optional models from PRs #25, #26 and #27 (merged at `d329532`). Every new flag stays off. Live paging is unchanged: `APP_PASSWORD`, a channel, the typed word `LIVE`, and an ingest job. LLM notes are written after the page decision, onto the shadow record only. They do not page and they do not reorder the queue.
