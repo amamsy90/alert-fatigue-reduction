@@ -53,13 +53,13 @@ Open the queue page and press **Run sample**, or post alerts from Alertmanager. 
 
 ```bash
 cd app
-uv run pytest -q                     # 421 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
+uv run pytest -q                     # 433 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
 uv run ruff check .
 uv run mypy
-uv run python run_validate.py        # the report's 195 checked numbers match app/results/
+uv run python run_validate.py        # the report's 259 checked numbers match app/results/
 ```
 
-**Measured:** Windows 11, Python 3.12: `pytest -q` takes about 2 min 20 s (431 tests: 421 passed, 10 skipped). A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
+**Measured:** Windows 11, Python 3.12: `pytest -q` takes about 2 min (443 tests: 433 passed, 10 skipped). A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
 
 ## Evaluation
 
@@ -76,6 +76,14 @@ uv run python ../tools/fetch_gaia.py           # GAIA, ~1.8 GB download, SHA-256
 
 The full list of experiment commands is in `FINAL_REPORT.md`, Part C.
 
+Two checks added for the final report (both need the data above):
+
+```bash
+cd app
+uv run python run_baseline_compare.py     # z-score, EWMA, isolation forest and 95% intervals on GAIA (a few minutes)
+uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases that are never scored (RE2 and RE3; several GB of RAM, about 15 minutes)
+```
+
 ## Project structure
 
 | Path | What |
@@ -84,7 +92,7 @@ The full list of experiment commands is in `FINAL_REPORT.md`, Part C.
 | [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 431 tests (421 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
+| [`app/tests/`](app/tests) | 443 tests (433 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
 | [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |
 | [`app/deploy/`](app/deploy) | Settings for development, test and production |
