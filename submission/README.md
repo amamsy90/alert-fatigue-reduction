@@ -1,5 +1,7 @@
 # Submission copies
 
+**Not tracked in git (except the proposal as submitted).** The Word and PDF copies are generated locally and ignored via `.gitignore`. The final-project report for the course brief is `report/final_report.pdf` (see `report/README.md`), not the long report copy here.
+
 Word and PDF copies made from the Markdown sources for uploading to the course. **The Markdown files in the repository are the source of truth.** Regenerated on 21 October 2026 from the 1.1.0 Markdown: the report (Word and PDF; header version 1.1.0, dated 21 October 2026, 195 checked numbers), the design specification, the project plan, the Use Your Data guide, and the 30 September proposal draft (Word and PDF). The rehearsal deck was rebuilt with `python tools/build_rehearsal.py`. The report PDF of this release was exported with LibreOffice. `Project_Proposal_200010549_Aishah_Alyammahi.pdf` is the proposal as submitted on 5 October 2026 and was not regenerated.
 
 Project title on every copy: *AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices*, subtitle *Alert Fatigue Reduction in Cloud Microservice Operations*. The file names keep the older `Alert_Fatigue_` prefix so that earlier links still work.
@@ -11,7 +13,7 @@ Project title on every copy: *AI-Assisted On-Call Queue: Budgeted Incident Detec
 | `Alert_Fatigue_Design_Specification.docx` | `design_specification.md` | `node tools/md2docx.js design_specification.md submission/Alert_Fatigue_Design_Specification.docx ""` |
 | `Alert_Fatigue_Project_Plan.docx` | `project_plan.md` | `node tools/md2docx.js project_plan.md submission/Alert_Fatigue_Project_Plan.docx ""` |
 | `Use_Your_Data_Guide.docx` | `USE_YOUR_DATA.md` | `node tools/md2docx.js USE_YOUR_DATA.md submission/Use_Your_Data_Guide.docx ""` |
-| `Project_Proposal.docx`, `Project_Proposal.pdf` | `proposal.md` (the 30 September draft) | `node tools/md2docx.js proposal.md submission/Project_Proposal.docx ""`, then export to PDF as above |
+| `Project_Proposal.docx`, `Project_Proposal.pdf` | `docs/history/proposal.md` (the 30 September draft) | `node tools/md2docx.js docs/history/proposal.md submission/Project_Proposal.docx ""`, then export to PDF as above |
 | `Project_Proposal_200010549_Aishah_Alyammahi.pdf` | `Project_Proposal_200010549_Aishah_Alyammahi.docx` | **The proposal as submitted on 5 October 2026.** Edited in Word, not generated from Markdown; do not regenerate. `queue_flowchart.png` is its figure |
 | `Alert_Fatigue_Proposal_Rehearsal.pptx` | `tools/build_rehearsal.py` | `python tools/build_rehearsal.py` (needs `pip install python-pptx`) |
 

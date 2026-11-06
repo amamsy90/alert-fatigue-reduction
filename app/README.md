@@ -54,7 +54,7 @@ python ../tools/fetch_nab.py                                                    
 uvicorn product.app:app --port 8080
 ```
 
-Open http://127.0.0.1:8080 → **Run sample**, or upload your CSVs. **Run sample** builds one synthetic day (a memory jump, a monitoring gap, a slow leak, and a few log lines) and scores it with the built-in rules, so the queue is not alerts-only. Mark items **Real / Noise**; the next run that has enough labels trains on the marks. **Download confirmed faults** exports them as `faults.csv`. A short script for an instructor demo is [../VIVA_ANSWERS.md](../VIVA_ANSWERS.md).
+Open http://127.0.0.1:8080 → **Run sample**, or upload your CSVs. **Run sample** builds one synthetic day (a memory jump, a monitoring gap, a slow leak, and a few log lines) and scores it with the built-in rules, so the queue is not alerts-only. Mark items **Real / Noise**; the next run that has enough labels trains on the marks. **Download confirmed faults** exports them as `faults.csv`. A short script for an instructor demo is [../../presentation/VIVA_ANSWERS.md](../../presentation/VIVA_ANSWERS.md).
 
 Docker (bound to localhost; set `APP_PASSWORD` before sharing — behind a reverse proxy every request looks local, so the private-network guard alone does not protect it):
 
