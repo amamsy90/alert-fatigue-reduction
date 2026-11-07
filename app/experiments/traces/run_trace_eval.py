@@ -5,11 +5,11 @@ difference lies entirely above zero against both, at K = 20. A catch counts
 only on the root-cause service. The flag stays off. GAIA is not a trace
 dataset here. RCAEval is scored only when ``traces.parquet`` is on disk.
 
-    python run_trace_eval.py --data synthetic --backend plain --epochs 20
+    python -m experiments.traces.run_trace_eval --data synthetic --backend plain --epochs 20
     python tools/fetch_rcaeval_re23.py
     python tools/fetch_rcaeval_traces.py --suite RE2
-    python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8
-    python run_trace_eval.py --data rcaeval --suite RE2 --max-cases 2
+    python -m experiments.traces.run_trace_eval --data rcaeval --device cuda --backend auto --epochs 8
+    python -m experiments.traces.run_trace_eval --data rcaeval --suite RE2 --max-cases 2
 """
 from __future__ import annotations
 
@@ -22,12 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from run_rcaeval_logs import ROOT as CASE_ROOT
-from run_rcaeval_logs import SYSTEMS, Case, base_config, case_alerts, case_metrics, load_cases
-from src.config import Config
-from src.entities import Alert, Fault
-from src.torch_determinism import enable_cublas_workspace
-from src.trace_eval import (
+from experiments.traces.trace_eval import (
     TraceSpec,
     combine_suite_scores,
     evaluate_traces,
@@ -36,8 +31,13 @@ from src.trace_eval import (
     synthetic_traces,
     tiny_train,
 )
-from src.trace_graph import CallGraph, build_graph, normalize_spans, with_baseline_feature
-from src.trace_model import TraceArchive, _utc, caught_ids, fit_trace_model, predict_services
+from experiments.traces.trace_graph import CallGraph, build_graph, normalize_spans, with_baseline_feature
+from experiments.traces.trace_model import TraceArchive, _utc, caught_ids, fit_trace_model, predict_services
+from run_rcaeval_logs import ROOT as CASE_ROOT
+from run_rcaeval_logs import SYSTEMS, Case, base_config, case_alerts, case_metrics, load_cases
+from src.config import Config
+from src.entities import Alert, Fault
+from src.torch_determinism import enable_cublas_workspace
 from src.tracking import record_run
 
 enable_cublas_workspace()
@@ -56,7 +56,7 @@ def cases_missing_message(root: Path | None = None) -> str | None:
         "RCAEval cases.parquet is not in data/rcaeval_re23. Nothing was scored. "
         "From the repo root, run python tools/fetch_rcaeval_re23.py first "
         "(it writes cases.parquet), then python tools/fetch_rcaeval_traces.py, "
-        "then from app/ python run_trace_eval.py --data rcaeval."
+        "then from app/ python -m experiments.traces.run_trace_eval --data rcaeval."
     )
 
 

@@ -19,9 +19,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .entities import Fault
+from src.entities import Fault
+from src.weight_io import load_bytes, save_bytes
+
 from .trace_graph import CallGraph, build_graph, root_cause_hit
-from .weight_io import load_bytes, save_bytes
 
 log = logging.getLogger(__name__)
 

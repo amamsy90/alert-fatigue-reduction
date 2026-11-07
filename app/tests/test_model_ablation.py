@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pandas as pd
 
+from experiments.model_ablation.model_eval import EvalSpec, evaluate_models, published_bounds, walk_forward_models
 from src.config import Config
 from src.entities import Alert, Fault
-from src.model_eval import EvalSpec, evaluate_models, published_bounds, walk_forward_models
 from src.sample_data import generate_multivariate, load_multivariate
 
 SPEC = EvalSpec(

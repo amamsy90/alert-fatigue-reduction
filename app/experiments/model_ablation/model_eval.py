@@ -15,20 +15,20 @@ from dataclasses import dataclass, replace
 
 import pandas as pd
 
-from .baseline import baseline_decisions
-from .classifier import AlertClassifier
-from .config import Config
-from .entities import Alert, Fault
-from .eval_stats import bootstrap_mean_ci
-from .features import build_feature_frame
-from .memory_spikes import detect_gaps, detect_jumps, detect_leaks
-from .metric_model import (
+from src.baseline import baseline_decisions
+from src.classifier import AlertClassifier
+from src.config import Config
+from src.entities import Alert, Fault
+from src.eval_stats import bootstrap_mean_ci
+from src.features import build_feature_frame
+from src.memory_spikes import detect_gaps, detect_jumps, detect_leaks
+from src.metric_model import (
     fit_metric_model,
     proposals_from_scores,
     tune_metric_threshold,
 )
-from .policy import bayes_threshold, spike_review_decisions, tune_threshold
-from .queue import (
+from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
+from src.queue import (
     QueueItem,
     alert_items,
     build_queue,
@@ -37,7 +37,7 @@ from .queue import (
     spike_items,
     tune_confirm_thresholds,
 )
-from .ranker import caught_fault_ids, fit_ranker
+from src.ranker import caught_fault_ids, fit_ranker
 
 VARIANTS = ("baseline", "metric_model", "ranker", "both")
 

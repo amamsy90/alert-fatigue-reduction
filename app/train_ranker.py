@@ -98,7 +98,7 @@ def main() -> None:
     summary = {
         "status": status,
         "dataset": dataset,
-        "gaia": "pending: not scored here" if dataset != "gaia" else "weights only; run run_model_ablation.py to score",
+        "gaia": "pending: not scored here" if dataset != "gaia" else "weights only; run python -m experiments.model_ablation.run_model_ablation to score",
         "backend": ranker.backend,
         "device": ranker.device,
         "fell_back": ranker.fell_back,
