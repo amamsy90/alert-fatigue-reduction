@@ -63,7 +63,7 @@ uv run python run_validate.py        # the report's 259 checked numbers match ap
 
 ## Evaluation
 
-**Reproduce in one command (no download, about 10 seconds after install).** A real 10-day slice of GAIA is committed in [`app/examples/gaia_sample/`](app/examples/gaia_sample) (1.7 MB, untouched logs and memory series; made by `tools/make_gaia_sample.py`). The command trains on its first 7 days, scores the last 3 at K = 10 and 20, and fails unless the caught-fault counts equal the recorded ones in `expected.json` and the jump detector beats the rate rule at K = 20:
+**Reproduce in one command (no download; about 10 s warm, 45 s on a first run).** A real 10-day slice of GAIA is committed in [`app/examples/gaia_sample/`](app/examples/gaia_sample) (1.7 MB, untouched logs and memory series; made by `tools/make_gaia_sample.py`). The command trains on its first 7 days, scores the last 3 at K = 10 and 20, and fails unless the caught-fault counts equal the recorded ones in `expected.json` and the jump detector beats the rate rule at K = 20:
 
 ```bash
 cd app
@@ -76,6 +76,8 @@ To check that a fresh clone works with nothing carried over from this machine (c
 ```bash
 python tools/check_fresh_clone.py          # or: --source https://github.com/amamsy90/alert-fatigue-reduction --ref <commit>
 ```
+
+**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `bb635c5`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (435 passed, 10 skipped), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
 
 The sample is a smoke-scale check, not the 1,223-fault result in the report; `--full` reproduces that.
 
