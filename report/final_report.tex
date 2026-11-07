@@ -8,6 +8,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,shapes.geometric}
 \usepackage{titlesec}
@@ -90,14 +91,32 @@ An on-call engineer can read only a few alerts a day, yet most real faults never
 \label{fig:arch}
 \end{figure}
 
-The code has two layers. \texttt{app/src/} is a library with no HTTP (detectors, causal queue, classifier, evaluation); \texttt{app/product/} is the web app, job pipeline, connectors, model registry and monitoring. The queue is first come, first served: a point is hot when it is 0.5~GB above the median of the previous 15 minutes, two hot points within two minutes confirm a jump, and a jump is shown at confirmation only if its rise passes a threshold learned on week 1 (0.62~GB). A 3-hour median catches slow leaks, a service silent for 10 minutes becomes a gap item, and log alerts may use at most a quarter of the slots. Nothing uses a later point, the end of a jump or its peak; \texttt{tests/test\_causality.py} checks this.
+The code has two layers. \texttt{app/src/} is a library with no HTTP (detectors, causal queue, classifier, evaluation); \texttt{app/product/} is the web app, job pipeline, connectors, model registry and monitoring. The queue is first come, first served: a point is hot when it is 0.5~GB above the median of the previous 15 minutes, two hot points within two minutes confirm a jump, and a jump is shown at confirmation only if its rise passes a threshold learned on week 1 (0.62~GB). A 3-hour median catches slow leaks, a service silent for 10 minutes becomes a gap item, and log alerts may use at most a quarter of the slots. Nothing uses a later point, the end of a jump or its peak; \texttt{tests/test\_causality.py} checks this. Table~\ref{tab:comp} lists the components and their interfaces.
 
-\textbf{Design decisions.} (1) Rules do the detection and learning is limited to a confirmation threshold and the log-alert classifier, because a rule can be read and audited. (2) Time split only: train on the first 7 days, test on the next 55, never shuffled. (3) Shadow mode is the default; live paging needs a password, a channel and the typed word LIVE. (4) A new classifier is promoted only if, on held-out data, the queue with it costs at least one missed fault less than the queue without log alerts and the queue it replaces (a miss costs 10, a false item 1); the operator can roll back. (5) Models are stored as skops archives, never pickle. (6) A single worker with SQLite, one container per team. Technologies: Python 3.12, scikit-learn, FastAPI, SQLite, Docker, uv with a hash-pinned lock, GitHub Actions.
+\begin{table}[ht]
+\centering\tablefont
+\begin{tabular}{@{}L{3.1cm}L{7.4cm}L{3.5cm}@{}}
+\toprule
+Component & Responsibility and interface & Main tests\\
+\midrule
+Ingest (\texttt{inputs.py}) & Validate and de-duplicate alerts and webhooks; returns \texttt{Alert} list & \texttt{alertmanager}, \texttt{ai\_inputs}\\
+Detectors (\texttt{memory\_spikes.py}) & \texttt{detect\_jumps/leaks/gaps(metrics, config)} returns \texttt{Spike} list & \texttt{memory\_spikes}\\
+Causal queue (\texttt{queue.py}) & \texttt{build\_queue(items, config)} keeps at most \textit{K} a day, first come first served & \texttt{queue}, \texttt{causality}\\
+Classifier, gate (\texttt{classifier.py}, \texttt{promotion.py}) & Alert probabilities; \texttt{promotion\_decision(report, incumbent, config)} returns promote or keep & \texttt{classifier}, \texttt{model\_registry}\\
+Paging, store (\texttt{paging.py}) & Shadow or LIVE decision per job; SQLite queue, marks, audit log & \texttt{would\_have\_paged}, \texttt{security}\\
+Evaluation (\texttt{run\_*.py}) & Scripts write \texttt{results/*.csv}; \texttt{run\_validate.py} checks the report & \texttt{run\_validate}, \texttt{reproduce\_sample}\\
+\bottomrule
+\end{tabular}
+\caption{Components, interfaces and the test files (\texttt{app/tests/test\_*.py}) that cover them.}
+\label{tab:comp}
+\end{table}
 
-\textbf{Changes from the proposal.} The proposal planned an alert classifier as the main result. Measurement showed that on GAIA the metric rules carry the result, so the classifier became an optional component behind the promotion gate. A code review also removed five uses of later-in-the-day information, which lowered the full queue from 70.2\% to 69.6\%. A real Prometheus integration test then found that a 121~s query step meant live jumps could never be confirmed; the fetch now uses 60~s steps.
+\textbf{Design decisions.} (1) Rules do the detection and learning is limited to a confirmation threshold and the log-alert classifier, because a rule can be read and audited. (2) Time split only: train on the first 7 days, test on the next 55, never shuffled. (3) Shadow mode is the default; live paging needs a password, a channel and the typed word LIVE. (4) A new classifier is promoted only if, on held-out data, the queue with it costs at least one missed fault less than the queue without log alerts and the queue it replaces (a miss costs 10, a false item 1); the operator can roll back. (5) Models are stored as skops archives, never pickle. (6) A single worker with SQLite, one container per team. \textbf{Trade-offs.} Rules are auditable but their jump size must be set for each team's services (the robustness replay shows this); the strict gate refuses a gain of one case, so a useful classifier can be turned away; shadow mode is safe but nothing pages until the operator opts in; SQLite is simple but gives no failover. Technologies: Python 3.12, scikit-learn, FastAPI, SQLite, Docker, uv with a hash-pinned lock, GitHub Actions.
+
+\textbf{Changes from the proposal.} The proposal planned an alert classifier as the main result. Measurement showed that on GAIA the metric rules carry the result, so the classifier became an optional component behind the promotion gate. A code review removed five uses of later-in-the-day information (full queue 70.2\% to 69.6\%), and a Prometheus integration test found that a 121~s query step meant live jumps never confirmed; the fetch now uses 60~s steps.
 
 \section{Testing, evaluation and results}
-\textbf{Methods.} The suite has 446 tests: unit tests for detectors, queue and policy; API and pipeline integration tests with outbound calls mocked; AI-specific cases (malformed rows, one-class labels, a worse model not promoted); security tests (login lock, SSRF, CSRF); a Docker integration test against real Prometheus and Alertmanager; and a load test. CI runs lint, type checks, tests on two Python versions, a dependency audit and a Docker build. A script, \texttt{run\_validate.py}, checks every number in the long report against \texttt{app/results/}. Evaluation uses the 55 test days of GAIA MicroSS (1{,}223 faults), an 8-week walk-forward in which everything is re-learned from the past, and bootstrap intervals and sign tests.
+\textbf{Methods.} The suite has 446 tests: unit tests for detectors, queue and policy; API and pipeline integration tests with outbound calls mocked; AI-specific cases (malformed rows, one-class labels, a worse model not promoted); security tests (login lock, SSRF, CSRF); a Docker integration test against real Prometheus and Alertmanager; and a load test. CI runs lint, type checks, tests on two Python versions, a dependency audit and a Docker build. A script, \texttt{run\_validate.py}, checks every number in the long report against \texttt{app/results/}. Evaluation uses the 55 test days of GAIA MicroSS (1{,}223 faults), an 8-week walk-forward, bootstrap intervals and sign tests.
 
 \begin{table}[ht]
 \centering\tablefont
@@ -118,21 +137,46 @@ Shipped queue (log alerts by severity) & 71.0\% & 1.4 & 92\%\\
 \label{tab:main}
 \end{table}
 
-\textbf{Results.} Table~\ref{tab:main} shows the detector beats the rate rule in 8 of 8 weeks (sign test \textit{p}\,=\,0.0039) and by 3.7 points overall (interval 2.6 to 4.8), with fewer false items. At \textit{K}\,=\,50 the two are tied (the detector is 0.25 points behind, interval −0.65 to +0.08), so the advantage exists only where slots are scarce. The three textbook detectors use their default settings and are not tuned. The full queue does not beat it week by week (4 wins, 3 losses, 1 tie), so the first claim is the detector. Median time to confirm is 0.72 minutes. Only 2\% of misses are the detector's fault: 45\% fall in a monitoring outage and 53\% lose to the budget. The classifier ablation is the main negative result: with classifier-chosen log alerts the queue catches 69.6\%, with severity-chosen alerts 71.0\%, with none 71.2\%. On RCAEval, an earlier run promoted the classifier on RE2 Train Ticket, but its gate was run on the cases that were scored. I re-ran it with train, validation and test cases kept apart: the gate then refuses the classifier on all six applications (on Train Ticket it saves 4 against a margin of 10). Pooled over 69 RE2 test cases, the shipped queue, which uses severity alerts, catches 68.1\% against 60.9\% with no log alerts (+7.2 points, interval +1.5 to +14.5), and the classifier adds one case over severity. A robustness replay shows the learned threshold over-fits 1~GB faults: it rejects every 0.5~GB fault, so it is off unless trained on a team's own incidents. Under load the app serves 50 users with p95 0.32~s and 0\% errors, and one GAIA month scores in 54.9~s with 505~MB peak memory.
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.42\textwidth]{../figures/detection_vs_k.png}
+\caption{Faults caught versus daily budget \textit{K} on GAIA. The detector leads at small \textit{K} and ties the rate rule at 50.}
+\label{fig:k}
+\end{figure}
 
-\textbf{Beyond GAIA.} The same engine, tuned on the first half of each series, was run on NAB (five cloud, traffic and machine datasets), SMD (28 servers with CPU, memory, disk and network faults) and RCAEval (three microservice applications). On SMD it catches 55.1\% of 196 incidents at 20 items a day per machine against a 12.4\% chance line, but with low precision (11 false items a day). On NAB it is clearly above chance on traffic and machine data and no better than chance on Twitter volume. On RCAEval RE1 memory faults the jump rule overlaps 61--100\% of faults, but the budgeted queue catches 0 of 13 on every application. These failures are reported in the repository, not hidden: they show the 0.5~GB jump size and the learned threshold must be set for each team's own services.
+\textbf{Results.} Table~\ref{tab:main} shows the detector beats the rate rule in 8 of 8 weeks (sign test \textit{p}\,=\,0.0039) and by 3.7 points overall (interval 2.6 to 4.8), with fewer false items. At \textit{K}\,=\,50 the two are tied (the detector is 0.25 points behind, interval −0.65 to +0.08), so the advantage exists only where slots are scarce. The full queue does not beat it week by week (4 wins, 3 losses, 1 tie). Median time to confirm is 0.72 minutes; only 2\% of misses are the detector's fault (45\% fall in a monitoring outage, 53\% lose to the budget). The classifier ablation is the main negative result: with classifier-chosen log alerts the queue catches 69.6\%, with severity-chosen alerts 71.0\%, with none 71.2\%. On RCAEval, an earlier run promoted the classifier on RE2 Train Ticket, but its gate was run on the cases that were scored. I re-ran it with train, validation and test cases kept apart: the gate then refuses the classifier on all six applications (on Train Ticket it saves 4 against a margin of 10). Pooled over 69 RE2 test cases, the shipped queue, which uses severity alerts, catches 68.1\% against 60.9\% with no log alerts (+7.2 points, interval +1.5 to +14.5), and the classifier adds one case over severity. A robustness replay shows the learned threshold rejects every 0.5~GB fault, so it should be trained on a team's own incidents. The app serves 50 users with p95 0.32~s and 0\% errors.
 
-\textbf{Against the criteria.} Tests: 436 pass, 10 skip (nine need torch, xgboost or CUDA; one needs Docker), 0 fail; coverage 86\%; p95 0.32~s. O1 is met for the detector and tied for the full queue; O5 is met, with NAB, SMD and RCAEval results including failures. No live pilot with a real team was run.
+\textbf{Beyond GAIA.} The same engine, tuned on the first half of each series, was run on NAB, SMD (28 servers) and RCAEval. On SMD it catches 55.1\% of 196 incidents against a 12.4\% chance line, with low precision (11 false items a day). On NAB it is above chance on traffic and machine data and no better on Twitter volume. On RCAEval RE1 memory faults the budgeted queue catches 0 of 13 on every application. These failures are reported in the repository: the 0.5~GB jump size and the learned threshold must be set for each team's own services.
+
+\textbf{Against the objectives.} Table~\ref{tab:trace} traces each objective to its design and evidence (test files under \texttt{app/tests/}); 10 tests skip (torch, xgboost, CUDA or Docker) and none fail. O1 is met for the detector and tied for the full queue; no live pilot was run.
+
+\begin{table}[ht]
+\centering\tablefont
+\begin{tabular}{@{}L{3.4cm}L{5.3cm}L{6.3cm}@{}}
+\toprule
+Objective & Design element & Evidence\\
+\midrule
+O1 beat rules & Jump detector, learned threshold & Table~\ref{tab:main}; 8 of 8 weeks; \texttt{experiment}\\
+O2 real time & Causal queue, no later data & \texttt{causality}; median 0.72 min\\
+O3 production & Shadow default, gate, skops, login & \texttt{security}, \texttt{model\_registry}\\
+O4 tested & pytest, CI, load test & 436 passed, 87\% coverage, p95 0.32~s\\
+O5 other teams & \texttt{/evaluate}, NAB, SMD, RCAEval & \texttt{generic}, \texttt{rcaeval\_logs}\\
+\bottomrule
+\end{tabular}
+\caption{Objectives traced to design and evidence.}
+\label{tab:trace}
+\end{table}
+
 
 \section{Deliverables, setup and use}
 \textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, version 1.1.0, submitted commit \texttt{COMMIT\_HASH}. The README lists the team, structure, prerequisites, exact commands, the tested system and the data sources. No paid API is needed and the system calls no external AI service.
 
-\textbf{Setup and use.} From \texttt{app/}: \texttt{docker compose up -d} serves the app at \texttt{127.0.0.1:8080} in shadow mode; for development, \texttt{uv sync --group dev}, \texttt{uv run pytest -q} and \texttt{uv run python run\_validate.py} reproduce the test results and check the reported numbers against the committed result files. Re-running the experiments needs the GAIA data (about 1.8~GB, fetched by \texttt{tools/fetch\_gaia.py} with SHA-256 checks). Workflow: Alertmanager posts alerts, a job pulls memory from Prometheus and builds the day's queue with a reason for each item, the engineer marks items Real or Noise, and the marks train the next model. The \texttt{/evaluate} page runs the same engine on a team's own CSV files.
+\textbf{Setup and use.} From \texttt{app/}: \texttt{docker compose up -d} serves the app at \texttt{127.0.0.1:8080} in shadow mode; \texttt{uv sync --group dev}, \texttt{uv run pytest -q} and \texttt{uv run python run\_validate.py} run the tests and check the reported numbers. \texttt{uv run python run\_reproduce.py} reproduces the GAIA result on a committed 10-day real sample in under a minute; \texttt{--full} uses the 1.8~GB data fetched by \texttt{tools/fetch\_gaia.py}. Workflow: Alertmanager posts alerts, a job pulls memory from Prometheus and builds the day's queue with a reason for each item, the engineer marks items Real or Noise, and the marks train the next model. The \texttt{/evaluate} page runs the same engine on a team's own CSV files.
 
 \section{Conclusion}
 The project delivers a tested, deployable, causal on-call queue. Its measured contribution is a metric detector that catches 72.6\% of GAIA faults at 20 items a day with 1.0 false item, against 68.9\% and 2.1 for a Prometheus rate rule. Its main findings are negative or limited: the log-alert classifier earns its slots only where faults write logs, the full queue ties the rate rule, and all GAIA faults are one injected shape. The next step is a shadow-mode pilot with a real team.
 
-\textbf{Limitations and honest use of tools.} The work is a solo project. AI coding assistants were used for code review, refactoring, test writing and drafting documentation (see \texttt{AGENTS.md} and the pull-request history); the running system uses no generative AI. Design decisions, the evaluation method and the claims made here are the author's responsibility. The timings come from one Windows laptop and are not a benchmark of other hardware.
+\textbf{Limitations and honest use of tools.} The work is a solo project. AI coding assistants helped with code review, refactoring, tests and documentation (see \texttt{AGENTS.md}); the running system uses no generative AI. The claims made here are the author's responsibility. Timings come from one Windows laptop.
 
 \newpage
 \appendix
@@ -193,12 +237,7 @@ RE3 & Train Ticket & 8 & 100\% & 100\% & 100\% & refused\\
 \caption{Independent gate test at \textit{K}\,=\,10: train, validation and test cases kept apart; the gate sees only train and validation.}
 \end{table}
 
-\section{Figures}
-\begin{figure}[ht]
-\centering
-\includegraphics[width=0.8\textwidth]{../figures/detection_vs_k.png}
-\caption{Faults caught versus daily budget \textit{K} on GAIA.}
-\end{figure}
+\section{Walk-forward figure}
 \begin{figure}[ht]
 \centering
 \includegraphics[width=0.8\textwidth]{../figures/walkforward.png}
