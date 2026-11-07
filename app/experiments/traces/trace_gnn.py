@@ -129,7 +129,7 @@ def train_state(
 
     if not graphs:
         raise ValueError("no graphs")
-    from .torch_determinism import apply_cuda_determinism, epoch_order
+    from src.torch_determinism import apply_cuda_determinism, epoch_order
 
     switches = apply_cuda_determinism(torch, device, seed)
     print(f"trace determinism {' '.join(switches)}", flush=True)

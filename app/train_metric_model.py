@@ -82,7 +82,7 @@ def main() -> None:
     summary = {
         "status": status,
         "dataset": dataset,
-        "gaia": "pending: not scored here" if dataset != "gaia" else "weights only; run run_model_ablation.py to score",
+        "gaia": "pending: not scored here" if dataset != "gaia" else "weights only; run python -m experiments.model_ablation.run_model_ablation to score",
         "device": archive.device,
         "device_requested": archive.device_requested,
         "fell_back": archive.fell_back,
