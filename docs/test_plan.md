@@ -32,7 +32,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 436 passed, 10 skipped on Python 3.12 (7 November 2026); coverage report
+uv run pytest -q --cov           # 465 passed, 10 skipped on Python 3.12 (7 November 2026); coverage report
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -47,8 +47,8 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 436 passed, 10 skipped on Python 3.12 (7 November 2026). Python 3.10 is the other CI job and was not rerun for this note |
-| Coverage | line coverage ≥ `COVERAGE_MIN` | 87% (86.78%; min 85%) |
+| Tests | all pass on Python 3.10 and 3.12 | 465 passed, 10 skipped on Python 3.12 (7 November 2026). Python 3.10 is the other CI job and was not rerun for this note |
+| Coverage | line coverage ≥ `COVERAGE_MIN` | 87% (86.52%; min 85%) |
 | Results | `run_validate.py` passes | 259 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
@@ -56,7 +56,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 ## 5. Coverage by module (re-measured on this commit, CPython 3.12.3)
 
-`uv run pytest -q --cov` from `app/`: 436 passed, 10 skipped, total coverage 86.78%. Eleven modules are at 100% and the reporter omitted them. Other measured modules are 90–98%. Modules under 90%:
+`uv run pytest -q --cov` from `app/`: 465 passed, 10 skipped, total coverage 86.52%. Eleven modules are at 100% and the reporter omitted them. Other measured modules are 90–98%. Modules under 90%:
 
 | Module | Coverage | Note |
 |---|---:|---|
@@ -74,13 +74,13 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | `src/gaia_loader.py` | 62% | GAIA files are not in the test run |
 | `experiments/traces/trace_model.py` | 60% | torch load path skipped |
 | `src/metric_model.py` | 52% | torch training and scoring paths skipped |
-| **Total** | **86.78%** | minimum 85% |
+| **Total** | **86.52%** | minimum 85% |
 
 ## 6. Measurable test criteria
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% of tests that run | 436 passed, 0 failed, 10 skipped (Python 3.12, 7 November 2026) |
+| Automated tests passing | 100% of tests that run | 465 passed, 0 failed, 10 skipped (Python 3.12, 7 November 2026) |
 | Line coverage | ≥ 85% | 87% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |

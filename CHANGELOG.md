@@ -46,7 +46,7 @@ No keep is claimed. The three flags stay off. The GAIA command is in `docs/ML_MO
 ### Changed
 
 - The viva, demo and speaker notes moved to `presentation/`, the proposal drafts to `docs/history/`, and the generated Word and PDF copies are no longer tracked.
-- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (446 tests: 436 pass, 10 skip).
+- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (475 tests: 465 pass, 10 skip).
 
 ## [1.1.0] - 2026-10-21
 
