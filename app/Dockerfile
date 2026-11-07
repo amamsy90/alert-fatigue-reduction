@@ -1,6 +1,9 @@
 # CPU image. CI builds this file. The optional CUDA image is Dockerfile.gpu.
 FROM python:3.12-slim
 
+# Debian security fixes published since the base image was built (the release scan fails on HIGH or CRITICAL with a fix).
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Exact versions with hashes, exported from uv.lock (`uv export --no-dev`); CI checks it is current.

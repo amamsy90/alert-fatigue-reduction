@@ -4,4 +4,4 @@ description: AI-assisted on-call queue (one replica, SQLite, shadow mode by defa
 type: application
 version: 0.1.0
 # Must equal product.__version__ (tests/test_helm_chart.py checks it). The default image tag is v<appVersion>.
-appVersion: "1.2.2"
+appVersion: "1.2.3"

@@ -33,12 +33,10 @@ jobs:
       - name: Build the image
         run: docker build -t oncall-queue:${GITHUB_REF_NAME} -t oncall-queue:latest app
       - name: Scan the image for known vulnerabilities (HIGH and CRITICAL with a fix fail the release)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0 (the un-prefixed tag 0.28.0 no longer resolves)
-        with:
-          image-ref: oncall-queue:${{ github.ref_name }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+        # Trivy runs from its container image, pinned to a version. The trivy-action wrapper pulled in a
+        # second action (setup-trivy) whose tags had been removed, which stopped releases 1.2.1 and 1.2.2.
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.1 image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "oncall-queue:${GITHUB_REF_NAME}"
       - name: Software bill of materials
         uses: anchore/sbom-action@v0.17.9
         with:

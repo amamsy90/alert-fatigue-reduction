@@ -2,6 +2,11 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [1.2.3] - 2026-11-07
+
+### Fixed
+- Release 1.2.2 also stopped before publishing: `trivy-action` needs `setup-trivy`, whose tag no longer resolves. The scan now runs Trivy from its container image, pinned to 0.76.1, with no wrapper action. Run locally, it found two HIGH zlib1g issues in the Debian base with fixes available; the image now applies Debian security updates at build time, and the scan is clean. 1.2.3 has the same application code.
+
 ## [1.2.2] - 2026-11-07
 
 ### Fixed

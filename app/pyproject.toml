@@ -1,6 +1,6 @@
 [project]
 name = "oncall-queue"
-version = "1.2.2"
+version = "1.2.3"
 description = "Budgeted incident detection: a causal on-call queue of at most K items a day."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
