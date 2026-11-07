@@ -21,6 +21,7 @@ import pandas as pd
 from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
 from src.config import Config, day_of
+from src.drift import drift_report
 from src.entities import SURFACED_ACTIONS, Action, Alert, Decision, Fault
 from src.memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
@@ -168,6 +169,17 @@ class ScoredQueue:
     promoted: bool | None = None
     # Optional metric model / learned ranker. Both are "off" unless the flags are set.
     optional_models: dict | None = None
+    # Input drift between the early window the model learns from and the later one it scores
+    # (src/drift.py). Reports only; it never changes a decision.
+    drift: dict | None = None
+
+
+def batch_drift(alerts: list[Alert], config: Config) -> dict:
+    """Drift of the scored window against the training window of the same batch."""
+    if len(alerts) < 10:
+        return {"status": "n/a", "reason": "fewer than 10 alerts"}
+    early, later, _ = split_for_training(alerts, config)
+    return drift_report(early, later)
 
 
 def score_alerts(
@@ -370,6 +382,7 @@ def score_alerts(
         detector_label=(detector.label() if detector is not None else "built-in memory-jump rule"),
         confirm_by_series=confirm_by_series,
         optional_models=ml_status,
+        drift=batch_drift(alerts, config),
     )
 
 
@@ -554,6 +567,8 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
     prior_mean = template_prior_mean(result.alerts)
     if prior_mean is not None:
         meta["template_prior_mean"] = prior_mean
+    if result.drift is not None:
+        meta["drift"] = result.drift
     audit = (result.optional_models or {}).get("ranker_audit")
     if audit is not None:
         meta["ranker_audit"] = audit

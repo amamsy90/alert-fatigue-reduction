@@ -51,7 +51,8 @@ def test_monitoring_reports_every_check(client, monkeypatch):
     client.get("/connectors")
     body = client.get("/monitoring").json()
     assert set(body["checks"]) == {"latency", "errors", "precision_from_marks", "alert_volume_drift",
-                                   "metric_value_drift", "template_feature_drift", "monitoring_gaps", "paging"}
+                                   "metric_value_drift", "template_feature_drift", "input_drift", "monitoring_gaps",
+                                   "paging"}
     assert body["checks"]["template_feature_drift"]["status"] == "n/a"
     assert body["checks"]["precision_from_marks"]["status"] == "n/a"  # no marks yet: not judged
     assert body["status"] in ("ok", "warn")
@@ -170,3 +171,52 @@ def test_jobs_saved_in_the_same_clock_tick_keep_their_order(tmp_path, monkeypatc
     for n in (1, 2, 3):
         _save_ingest_job(store, n)
     assert [j["meta"]["alert_count"] for j in store.recent_jobs()] == [3, 2, 1]
+
+
+def _job_with_drift(store: QueueStore, drift: dict | None) -> None:
+    import pandas as pd
+
+    alerts = [Alert("a0", pd.Timestamp("2026-02-01T10:00:00Z"), "web", "log", "info", "m")]
+    meta = {"alert_count": 1, "gap_items": 0}
+    if drift is not None:
+        meta["drift"] = drift
+    store.save_job(source="ingest", budget_k=20, escalate_threshold=1.0, review_threshold=1.0, shadow_mode=True,
+                   alerts=alerts, decisions=[Decision("a0", Action.SUPPRESS, 0.1, "")], spike_flags=[False], meta=meta)
+
+
+def test_input_drift_follows_the_last_jobs_report(tmp_path):
+    store = QueueStore(tmp_path / "q.db")
+    assert health(store)["checks"]["input_drift"]["status"] == "n/a"  # no job: not judged
+    _job_with_drift(store, {"status": "n/a", "reason": "too few"})
+    assert health(store)["checks"]["input_drift"]["status"] == "n/a"
+    _job_with_drift(store, {"status": "ok", "psi_max": 0.03, "reasons": []})
+    assert health(store)["checks"]["input_drift"]["status"] == "ok"
+    _job_with_drift(store, {"status": "warn", "psi_max": 0.9, "text_auc": 0.97,
+                            "reasons": ["severity shifted (PSI 0.90 >= 0.25)"]})
+    report = health(store)
+    assert report["checks"]["input_drift"]["status"] == "warn"
+    assert report["checks"]["input_drift"]["reasons"] == ["severity shifted (PSI 0.90 >= 0.25)"]
+    assert report["status"] == "warn"  # a drift warning lowers the overall verdict
+    text = monitoring.gauges(store)
+    assert "oncall_input_drift_warn 1" in text
+    assert "oncall_input_drift_psi_max 0.9" in text
+    assert "oncall_input_text_drift_auc 0.97" in text
+
+
+def test_a_real_job_stores_its_drift_report():
+    """score_alerts compares the early window with the later one and keeps the report."""
+    import pandas as pd
+
+    from product.pipeline import score_alerts
+
+    rows = []
+    for i in range(160):  # 14 days, 12 a day: the first week quiet, the second week a new failure wording
+        later = i >= 80
+        msg = "out of memory killer invoked on worker" if later else "cache refresh done on worker"
+        rows.append(Alert(f"a{i}", pd.Timestamp("2026-03-02", tz="UTC") + pd.Timedelta(hours=2.1 * i),
+                          "web", "log", "error" if later else "info", msg))
+    result = score_alerts(rows, budget_k=20)
+    assert result.drift is not None
+    assert result.drift["status"] == "warn"
+    assert result.drift["text_auc"] > 0.9
+    assert any("severity" in r for r in result.drift["reasons"])

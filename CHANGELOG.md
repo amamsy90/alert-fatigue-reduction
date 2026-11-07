@@ -27,6 +27,7 @@ No keep is claimed. The three flags stay off. The GAIA command is in `docs/ML_MO
 
 ### Added
 
+- `src/drift.py`: input drift per job, between the alerts a model learns from and the alerts it scores. PSI on severity, source, alert type and message length, a KS test on alerts per hour, and a classifier two-sample test on message text (a logistic regression that tries to tell the windows apart; its AUC and the terms that moved are reported). The result is stored in each job, shown in `/monitoring` (`input_drift`), exported as `oncall_input_drift_*` gauges, and has a Prometheus alert rule. It reports only and never changes a decision.
 - `run_baseline_compare.py` and `src/baselines_anomaly.py`: z-score, EWMA and isolation-forest baselines through the same causal queue, with 95% bootstrap intervals over the 1,223 GAIA test faults and a paired difference to the rate rule. Re-run from the raw GAIA files, it reproduces 72.6% and 68.9% exactly. At K = 50 the detector and the rate rule are tied.
 - `run_rcaeval_gate_split.py`: RCAEval RE2/RE3 with train, validation and test cases kept apart, so the promotion gate decides on cases that are never scored. It refuses the classifier on all six applications; the earlier "promoted on RE2 Train Ticket" was decided on its own test cases.
 - `report/`: the four-page final report (LaTeX source and PDF) for the course brief.

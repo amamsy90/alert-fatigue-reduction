@@ -254,6 +254,7 @@ def health(store) -> dict:
         "alert_volume_drift": _check(volume_ratio, lambda v: low <= v <= high),
         "metric_value_drift": _check(metric_ratio, lambda v: m_low <= v <= m_high),
         "template_feature_drift": _template_feature_drift(jobs),
+        "input_drift": _input_drift(last),
         "monitoring_gaps": _check(last.get("gap_items") if last else None, lambda v: v <= TARGETS["gap_items_max"]),
         "paging": _check(pages_failed, lambda v: v == 0),
     }
@@ -268,7 +269,8 @@ def health(store) -> dict:
         "data": {"last_job_alerts": last.get("alert_count"), "alert_volume_ratio": volume_ratio,
                  "metric_median_ratio": metric_ratio, "metric_drift_series": drifted,
                  "last_job_metric_median": last.get("metric_median"),
-                 "last_job_gap_items": last.get("gap_items"), "last_job_has_metrics": last.get("has_metrics")},
+                 "last_job_gap_items": last.get("gap_items"), "last_job_has_metrics": last.get("has_metrics"),
+                 "input_drift": last.get("drift")},
         "targets": {**TARGETS, "alert_volume_band": list(ALERT_VOLUME_BAND),
                     "metric_value_band": list(METRIC_VALUE_BAND)},
         "accel": {"backend": _active_backend()},
@@ -338,6 +340,15 @@ def _template_feature_drift(jobs: list[dict]) -> dict:
     return _check(values[0] / base, lambda v: ALERT_VOLUME_BAND[0] <= v <= ALERT_VOLUME_BAND[1])
 
 
+def _input_drift(last: dict) -> dict:
+    """The last job's drift report (src/drift.py): ok, warn with its reasons, or n/a."""
+    report = last.get("drift") or {}
+    status = report.get("status", "n/a")
+    if status not in ("ok", "warn"):
+        return {"status": "n/a", "value": None}
+    return {"status": status, "value": report.get("psi_max"), "reasons": report.get("reasons", [])}
+
+
 def _check(value, ok) -> dict:
     if value is None:
         return {"status": "n/a", "value": None}
@@ -355,6 +366,13 @@ def gauges(store) -> str:
         "oncall_alert_volume_ratio": (h["data"]["alert_volume_ratio"], "Last ingest batch size / median of earlier ones"),
         "oncall_metric_median_ratio": (h["data"]["metric_median_ratio"], "Last job metric median / median of earlier jobs"),
         "oncall_last_job_gap_items": (h["data"]["last_job_gap_items"], "Monitoring gaps shown in the last job"),
+        "oncall_input_drift_psi_max": (
+            (h["data"]["input_drift"] or {}).get("psi_max"), "Largest feature PSI, training window vs scored window"),
+        "oncall_input_text_drift_auc": (
+            (h["data"]["input_drift"] or {}).get("text_auc"), "AUC of a classifier telling the two windows' alert text apart"),
+        "oncall_input_drift_warn": (
+            None if h["checks"]["input_drift"]["status"] == "n/a" else int(h["checks"]["input_drift"]["status"] == "warn"),
+            "1 when the last job's input drift check warned"),
         "oncall_health_ok": (1 if h["status"] == "ok" else 0, "1 when every /monitoring check passes"),
         "oncall_llm_timeout_rate": (h["llm"]["timeout_rate"], "Share of shadow-note attempts that timed out"),
         "oncall_llm_fallback_rate": (h["llm"]["fallback_rate"], "Share of shadow-note attempts that fell back"),
