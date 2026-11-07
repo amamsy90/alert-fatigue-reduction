@@ -937,9 +937,7 @@ AI coding assistants were used while building this project: for code review, ref
 | Performance results | `app/perf/load_test.py`, `app/results/perf/` |
 | Retrospective | `docs/retrospective.md` |
 | Change history | `CHANGELOG.md` |
-| Plan / roadmap | `project_plan.md`, `ROADMAP.md` |
 | Validation record | `VALIDATION.md` |
-| Review of the earlier version | `CODE_REVIEW.md` |
 | This report | `FINAL_REPORT.md` |
 | Code + tests | `app/` |
 | Result tables | `app/results/` |
