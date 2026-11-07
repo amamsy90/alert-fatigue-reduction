@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oncall.fullname" . }}
+  labels:
+    {{- include "oncall.labels" . | nindent 4 }}
+spec:
+  # One replica and Recreate, on purpose: SQLite, the login lock and the job lock live in one
+  # process (ADR 0003). Two pods on one volume could race, and a rolling update would run two.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "oncall.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oncall.selector" . | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: {{ include "oncall.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SHADOW_MODE
+              value: {{ ternary "1" "0" .Values.shadowMode | quote }}
+            - name: QUEUE_DB
+              value: /app/product/data/queue.db
+            - name: APP_USER
+              value: {{ .Values.auth.user | quote }}
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oncall.secretName" . }}
+                  key: APP_PASSWORD
+            - name: INGEST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "oncall.secretName" . }}
+                  key: INGEST_TOKEN
+            - name: ALLOWED_HOSTS
+              value: {{ include "oncall.allowedHosts" . | quote }}
+            {{- range $name, $value := .Values.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 30
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /app/product/data
+            - name: tmp
+              mountPath: /tmp
+            # The sample job writes its generated files here; the root filesystem is read-only.
+            - name: sample
+              mountPath: /app/data/sample_product
+      volumes:
+        - name: data
+          {{- if not .Values.persistence.enabled }}
+          emptyDir: {}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "oncall.fullname" .) }}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        - name: sample
+          emptyDir: {}

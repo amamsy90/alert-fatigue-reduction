@@ -108,7 +108,7 @@ def read_metric_csv(path: str | Path, service: str, series_id: str | None = None
 def load_metric_folder(path: str | Path) -> pd.DataFrame:
     folder = Path(path)
     frames = []
-    for csv_path in sorted(folder.rglob("*.csv")):
+    for csv_path in sorted([*folder.rglob("*.csv"), *folder.rglob("*.csv.gz")]):
         service = service_in_name(csv_path.name)
         if service is None:
             continue

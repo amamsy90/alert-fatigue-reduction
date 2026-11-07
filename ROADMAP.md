@@ -61,7 +61,7 @@ Why this reframe: on GAIA, log triage alone misses about 82% of faults, and a me
 | 5.1 | Paging watermark: only items new since the last ingest job are paged; one job at a time; job / evaluation retention; upload cap; URL credentials redacted | `product/ops.py`, `product/pipeline.py`, `product/app.py` |
 | 5.2 | Slack and Opsgenie paging with the same gate and the same item list as PagerDuty | `product/notifiers.py` |
 | 5.3 | Per-series jump size (the hot-point size) learned on the tuning part for series with 3+ incidents, kept only where it beats the shared size; marks feed it through the faults export | `src/generic.py` |
-| 5.4 | Demo dry-run from a fresh clone | `DEMO_SCRIPT.md` |
+| 5.4 | Demo dry-run from a fresh clone | `presentation/DEMO_SCRIPT.md` |
 
 ## Still possible after submission
 
@@ -84,7 +84,7 @@ The job reports `has_metrics=true`, `jumps_shown>=1`, and gap and leak counts (l
 
 The 14-day alerts-only generator `src.sample_data.generate` is unchanged. `run_m1.py` and the classifier smoke test still use it. Do not quote them as the system result.
 
-Instructor questions and a five-minute script: `VIVA_ANSWERS.md`. Headline numbers stay the ones in `FINAL_REPORT.md`.
+Instructor questions and a five-minute script: `presentation/VIVA_ANSWERS.md`. Headline numbers stay the ones in `FINAL_REPORT.md`.
 
 ## Out of scope before submission
 
@@ -96,5 +96,5 @@ A new dataset. It is listed as future work (RCAEval, Nezha/TrainTicket) in the r
 |---|---|
 | 1 | Phase 1 + 2 code and numbers — done |
 | 2 | Phase 3, open review items, documents (md, Word, slides) — done |
-| 3 | Fill name / course / date; rehearse the deck; dry-run the demo (Run sample now includes a jump, a gap and a leak — see `VIVA_ANSWERS.md`; CLI + Docker) |
+| 3 | Fill name / course / date; rehearse the deck; dry-run the demo (Run sample now includes a jump, a gap and a leak — see `presentation/VIVA_ANSWERS.md`; CLI + Docker) |
 | 4 | Freeze, `run_validate.py`, submit |

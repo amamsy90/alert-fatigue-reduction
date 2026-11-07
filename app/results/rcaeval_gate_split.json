@@ -1,0 +1,330 @@
+{
+  "settings": {
+    "train_fraction": 0.5,
+    "validation_fraction": 0.25,
+    "budgets": [
+      5,
+      10,
+      20
+    ],
+    "headline_k": 10
+  },
+  "apps": [
+    {
+      "suite": "RE2",
+      "app": "Online Boutique",
+      "train_cases": 45,
+      "validation_cases": 22,
+      "test_cases": 23,
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 44,
+        "margin": 10.0,
+        "queue_saving": 0.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "held-out cost 0 is not below 0 for showing no log alerts; kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 12,
+          "fault_alerts": 0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "queue_check": {
+          "faults": 21,
+          "days": 22,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 8,
+          "false_items_with_model": 5,
+          "cost_with_model": 135.0,
+          "caught_fallback": 8,
+          "false_items_fallback": 7,
+          "cost_fallback": 137.0,
+          "caught_no_log_alerts": 8,
+          "false_items_no_log_alerts": 5,
+          "cost_no_log_alerts": 135.0
+        }
+      },
+      "promoted": false,
+      "by_k": {}
+    },
+    {
+      "suite": "RE2",
+      "app": "Sock Shop",
+      "train_cases": 45,
+      "validation_cases": 22,
+      "test_cases": 23,
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 45,
+        "margin": 10.0,
+        "queue_saving": -18.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 15/22 held-out faults, 61 false items (cost 131); with rules only (severity) instead: 13/22, 67 false items (cost 157); without log alerts: 13/22, 23 false items (cost 113); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 2211,
+          "fault_alerts": 134,
+          "tp": 125,
+          "fp": 240,
+          "fn": 9
+        },
+        "queue_check": {
+          "faults": 22,
+          "days": 22,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 15,
+          "false_items_with_model": 61,
+          "cost_with_model": 131.0,
+          "caught_fallback": 13,
+          "false_items_fallback": 67,
+          "cost_fallback": 157.0,
+          "caught_no_log_alerts": 13,
+          "false_items_no_log_alerts": 23,
+          "cost_no_log_alerts": 113.0
+        }
+      },
+      "promoted": false,
+      "by_k": {}
+    },
+    {
+      "suite": "RE2",
+      "app": "Train Ticket",
+      "train_cases": 45,
+      "validation_cases": 22,
+      "test_cases": 23,
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 44,
+        "margin": 10.0,
+        "queue_saving": 4.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 18/22 held-out faults, 125 false items (cost 165); with rules only (severity) instead: 18/22, 129 false items (cost 169); without log alerts: 17/22, 121 false items (cost 171); saves 4, below the margin of 10 (1 missed fault x 10); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 196,
+          "fault_alerts": 23,
+          "tp": 8,
+          "fp": 2,
+          "fn": 15
+        },
+        "queue_check": {
+          "faults": 22,
+          "days": 22,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 18,
+          "false_items_with_model": 125,
+          "cost_with_model": 165.0,
+          "caught_fallback": 18,
+          "false_items_fallback": 129,
+          "cost_fallback": 169.0,
+          "caught_no_log_alerts": 17,
+          "false_items_no_log_alerts": 121,
+          "cost_no_log_alerts": 171.0
+        }
+      },
+      "promoted": false,
+      "by_k": {}
+    },
+    {
+      "suite": "RE3",
+      "app": "Online Boutique",
+      "train_cases": 15,
+      "validation_cases": 7,
+      "test_cases": 8,
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 15,
+        "margin": 10.0,
+        "queue_saving": -2.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 6/6 held-out faults, 6 false items (cost 6); with rules only (severity) instead: 6/6, 12 false items (cost 12); without log alerts: 6/6, 4 false items (cost 4); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 977,
+          "fault_alerts": 273,
+          "tp": 273,
+          "fp": 0,
+          "fn": 0
+        },
+        "queue_check": {
+          "faults": 6,
+          "days": 7,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 6,
+          "false_items_with_model": 6,
+          "cost_with_model": 6.0,
+          "caught_fallback": 6,
+          "false_items_fallback": 12,
+          "cost_fallback": 12.0,
+          "caught_no_log_alerts": 6,
+          "false_items_no_log_alerts": 4,
+          "cost_no_log_alerts": 4.0
+        }
+      },
+      "promoted": false,
+      "by_k": {}
+    },
+    {
+      "suite": "RE3",
+      "app": "Sock Shop",
+      "train_cases": 15,
+      "validation_cases": 7,
+      "test_cases": 8,
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 15,
+        "margin": 10.0,
+        "queue_saving": -7.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 6/7 held-out faults, 48 false items (cost 58); with rules only (severity) instead: 6/7, 52 false items (cost 62); without log alerts: 6/7, 41 false items (cost 51); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 670,
+          "fault_alerts": 86,
+          "tp": 85,
+          "fp": 34,
+          "fn": 1
+        },
+        "queue_check": {
+          "faults": 7,
+          "days": 7,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 6,
+          "false_items_with_model": 48,
+          "cost_with_model": 58.0,
+          "caught_fallback": 6,
+          "false_items_fallback": 52,
+          "cost_fallback": 62.0,
+          "caught_no_log_alerts": 6,
+          "false_items_no_log_alerts": 41,
+          "cost_no_log_alerts": 51.0
+        }
+      },
+      "promoted": false,
+      "by_k": {}
+    },
+    {
+      "suite": "RE3",
+      "app": "Train Ticket",
+      "train_cases": 15,
+      "validation_cases": 7,
+      "test_cases": 8,
+      "promotion_gate": {
+        "budget_k": 10,
+        "split_day": 15,
+        "margin": 10.0,
+        "queue_saving": 0.0,
+        "model_used": "rules_only",
+        "promoted": false,
+        "gate": "queue with its alerts: 6/6 held-out faults, 25 false items (cost 25); with rules only (severity) instead: 6/6, 37 false items (cost 37); without log alerts: 6/6, 25 false items (cost 25); kept as a candidate, rules only stays",
+        "held_out_alerts": {
+          "alerts": 189,
+          "fault_alerts": 75,
+          "tp": 73,
+          "fp": 0,
+          "fn": 2
+        },
+        "queue_check": {
+          "faults": 6,
+          "days": 7,
+          "fallback": "rules only (severity)",
+          "caught_with_model": 6,
+          "false_items_with_model": 25,
+          "cost_with_model": 25.0,
+          "caught_fallback": 6,
+          "false_items_fallback": 37,
+          "cost_fallback": 37.0,
+          "caught_no_log_alerts": 6,
+          "false_items_no_log_alerts": 25,
+          "cost_no_log_alerts": 25.0
+        }
+      },
+      "promoted": false,
+      "by_k": {}
+    }
+  ],
+  "pooled": [
+    {
+      "suite": "RE2",
+      "k": 10,
+      "test_cases": 69,
+      "classifier": [
+        0.6957,
+        0.5797,
+        0.7971
+      ],
+      "severity": [
+        0.6812,
+        0.5652,
+        0.7826
+      ],
+      "no_alerts": [
+        0.6087,
+        0.4928,
+        0.7246
+      ],
+      "shipped": [
+        0.6812,
+        0.5652,
+        0.7826
+      ],
+      "shipped_minus_no_alerts": [
+        0.0725,
+        0.0145,
+        0.1449
+      ],
+      "shipped_minus_severity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "classifier_minus_no_alerts": [
+        0.087,
+        0.029,
+        0.1594
+      ]
+    },
+    {
+      "suite": "RE3",
+      "k": 10,
+      "test_cases": 24,
+      "classifier": [
+        0.9583,
+        0.875,
+        1.0
+      ],
+      "severity": [
+        0.9583,
+        0.875,
+        1.0
+      ],
+      "no_alerts": [
+        0.9583,
+        0.875,
+        1.0
+      ],
+      "shipped": [
+        0.9583,
+        0.875,
+        1.0
+      ],
+      "shipped_minus_no_alerts": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "shipped_minus_severity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "classifier_minus_no_alerts": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}

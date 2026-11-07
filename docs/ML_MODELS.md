@@ -42,7 +42,7 @@ Flag: `LEARNED_RANKER`. Default off. `LEARNED_RANKER_PATH` is the JSON file. `LE
 
 The ranker tunes its threshold at the same K it is scored with. On a day whose slot-taking candidates already fit in that K, it does not apply the score gate, so the queue matches first-come. The gate is used only when the day has more candidates than slots. Results are reported at each K in `by_k`, not only at K = 20.
 
-`run_model_ablation.py` compares four queues: the current causal queue, that queue plus metric-model proposals, that queue with the ranker choosing slots, and both. A variant is kept only when the 95% bootstrap interval on the per-fault catch difference (`src/eval_stats.py`) lies entirely above zero. The report also gives false items a day and catch at K = 5, 10, 20 and 50. `--walk-forward` refits on the past only, one week at a time, and adds `pooled`: one interval on every held-out fault across the folds. A fold that did not score a variant leaves that variant's pool skipped.
+`experiments/model_ablation/run_model_ablation.py` compares four queues: the current causal queue, that queue plus metric-model proposals, that queue with the ranker choosing slots, and both. A variant is kept only when the 95% bootstrap interval on the per-fault catch difference (`src/eval_stats.py`) lies entirely above zero. The report also gives false items a day and catch at K = 5, 10, 20 and 50. `--walk-forward` refits on the past only, one week at a time, and adds `pooled`: one interval on every held-out fault across the folds. A fold that did not score a variant leaves that variant's pool skipped.
 
 The test window matches the published queue (`run_queue_eval.py`): it starts at the first alert and stops one second after the last alert. It does not stop at the last metric timestamp. `window_end` in the JSON is `last alert` for that default, or `caller` when `test_end` is passed in.
 
@@ -95,9 +95,9 @@ uv run --no-sync python train_metric_model.py --data gaia --device cuda --epochs
 uv run --no-sync python train_ranker.py --data gaia --backend xgboost --device cuda --out results/ranker.json
 uv run --no-sync python train_ranker.py --data gaia --backend xgboost --device cuda \
     --metric-model results/metric_model --out results/ranker_both.json
-uv run --no-sync python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 \
+uv run --no-sync python -m experiments.model_ablation.run_model_ablation --data gaia --device cuda --backend xgboost --epochs 8 \
     --out results/model_ablation_gaia.json
-uv run --no-sync python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 \
+uv run --no-sync python -m experiments.model_ablation.run_model_ablation --data gaia --device cuda --backend xgboost --epochs 8 \
     --walk-forward --out results/model_ablation_gaia_walk.json
 ```
 
@@ -115,7 +115,7 @@ export LEARNED_RANKER_SHA256=<sha256 of ranker.json>
 Synthetic check, no GAIA:
 
 ```bash
-python run_model_ablation.py --data synthetic --backend pointwise --epochs 2 \
+python -m experiments.model_ablation.run_model_ablation --data synthetic --backend pointwise --epochs 2 \
     --out results/model_ablation_synthetic.json
 ```
 
@@ -212,7 +212,7 @@ No gain is claimed. The K = 20 interval is 0. The K = 1 interval includes 0. Dis
 
 RCAEval's pinned fetch (`tools/fetch_rcaeval_re23.py`) stores logs and metrics only. Traces are a separate download. Online Boutique and Train Ticket have `traces.parquet`. Sock Shop (`re2ss_*`, `re3ss_*`) does not, and the trace fetch skips those cases. The trace bytes are not in `tools/rcaeval_re23_sha256.txt`. The first download writes `traces.parquet.sha256` beside the file, under `app/data/` (not committed). A later run refuses to replace a file that no longer matches that sidecar.
 
-`run_trace_eval.py --data rcaeval` needs `cases.parquet` from `tools/fetch_rcaeval_re23.py` before `tools/fetch_rcaeval_traces.py`. If that file is missing the eval exits and names the fetch. It does not invent a score.
+`experiments/traces/run_trace_eval.py --data rcaeval` needs `cases.parquet` from `tools/fetch_rcaeval_re23.py` before `tools/fetch_rcaeval_traces.py`. If that file is missing the eval exits and names the fetch. It does not invent a score.
 
 Each RCAEval case is its own recording. The eval reads one `traces.parquet` at a time, and only the columns the graph uses. It builds that case's window once (pandas groupby for the rates, a merge of `parentSpanID` onto `spanID` for the edges) and reuses the graph for training, the jump baseline, and the model. Span tables are not concatenated. `--suite RE2` or `--suite RE3` selects one suite. `--max-cases N` reads the first N cases (`0` means all). Each case prints a progress line (spans, services, train or test, elapsed seconds, RSS). The target for RE2+RE3 is well under 30 minutes and under 16 GB.
 
@@ -321,14 +321,14 @@ python tools/fetch_rcaeval_traces.py --suite RE3
 Then from `app/`:
 
 ```bash
-uv run --no-sync python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8 \
+uv run --no-sync python -m experiments.traces.run_trace_eval --data rcaeval --device cuda --backend auto --epochs 8 \
     --seeds 42,0,1,2,3 --out results/trace_eval_rcaeval.json
-uv run --no-sync python run_trace_eval.py --data rcaeval --suite RE2 --max-cases 2 --device cuda --epochs 1
+uv run --no-sync python -m experiments.traces.run_trace_eval --data rcaeval --suite RE2 --max-cases 2 --device cuda --epochs 1
 ```
 
 The full command reads RE2 and RE3 one case at a time, lays the suites on non-overlapping days, and prints per-suite, per-system, and pooled scores, including `trace_residual`. `--suite` and `--max-cases` are optional. A combined run is the command without `--suite`. `--seeds 42,0,1,2,3` refits each seed. The printed `seed-rule` line is the keep decision.
 
-`train_trace_model.py --data rcaeval` does not train on this machine. It exits and points at that eval command. Sock Shop cases are skipped. A missing `cases.parquet` exits before any score.
+`experiments/traces/train_trace_model.py --data rcaeval` does not train on this machine. It exits and points at that eval command. Sock Shop cases are skipped. A missing `cases.parquet` exits before any score.
 
 LoRA. Put a local snapshot of `Qwen/Qwen2.5-1.5B-Instruct` at revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` on disk. The script checks `model.safetensors` against the pin when that file is in the snapshot. Each epoch prints `train_loss`, the skeleton `held_out_loss`, and the random-sample `held_out_loss_random`. `adapter.json` includes `target_diversity` and both losses. The default held-out batch is 2.
 
@@ -388,7 +388,7 @@ Commit `fda695c`, seeds `42,0,1,2,3`, same machine. Repeating seed 42 produced t
 
 Run on this VM with torch 2.14.1+cu130 and safetensors 0.8.0. CUDA was not available, so the device stayed CPU and `fell_back` is false (the commands asked for CPU, not CUDA). GAIA and RCAEval were not scored. Flags stayed off. `pages` is false.
 
-Trace model, `python run_trace_eval.py --data synthetic --backend auto --epochs 20 --seed 42`. Geometric 2.8.1 imported, so `auto` selected `pyg`. 8 held-out faults. The same counts at K = 5, 10, 20 and 50. File: `app/results/trace_eval_synthetic.json`.
+Trace model, `python -m experiments.traces.run_trace_eval --data synthetic --backend auto --epochs 20 --seed 42`. Geometric 2.8.1 imported, so `auto` selected `pyg`. 8 held-out faults. The same counts at K = 5, 10, 20 and 50. File: `app/results/trace_eval_synthetic.json`.
 
 | Variant | Decision | Faults caught | False items/day | 95% interval (mean, low, high) |
 |---|---|---|---|---|

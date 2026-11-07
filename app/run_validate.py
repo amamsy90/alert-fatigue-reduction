@@ -128,6 +128,20 @@ def computed_numbers() -> dict[str, float]:
         out["gate.queue.false_fallback"] = float(check["false_items_fallback"])
         out["gate.margin"] = float(gate["margin"])
 
+    compare = ROOT / "baseline_compare_gaia.csv"
+    if compare.exists():  # run_baseline_compare.py (needs GAIA)
+        b = pd.read_csv(compare)
+        for name in ("zscore", "ewma", "iforest"):
+            out[f"baseline.K20.{name}"] = float(_row(b, name)["detection_rate"])
+            out[f"baseline.false.K20.{name}"] = float(_row(b, name)["false_items_per_day"])
+        out["baseline.K20.jumps_tuned.ci_low"] = float(_row(b, "jumps_tuned")["ci_low"])
+        out["baseline.K20.jumps_tuned.ci_high"] = float(_row(b, "jumps_tuned")["ci_high"])
+        for k in (20, 50):
+            gap = _row(b, "delta_5m", k)
+            out[f"baseline.K{k}.diff_vs_delta"] = float(gap["jumps_tuned_minus_this"])
+            out[f"baseline.K{k}.diff_vs_delta.ci_low"] = float(gap["diff_low"])
+            out[f"baseline.K{k}.diff_vs_delta.ci_high"] = float(gap["diff_high"])
+
     nab = ROOT / "nab_eval.csv"
     if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
         n = pd.read_csv(nab)
@@ -199,6 +213,49 @@ def computed_numbers() -> dict[str, float]:
                               "false_items_fallback", "caught_no_log_alerts", "false_items_no_log_alerts"):
                     out[f"{key}.gate.{field}"] = float(check[field])
                 out[f"{key}.gate.saving"] = float(gate["queue_saving"])
+
+    split = ROOT / "rcaeval_gate_split.csv"
+    if split.exists():  # only after tools/fetch_rcaeval_re23.py + run_rcaeval_gate_split.py
+        frame = pd.read_csv(split)
+        facts = json.loads((ROOT / "rcaeval_gate_split.json").read_text(encoding="utf-8"))
+        for app in facts["apps"]:
+            suite, short = app["suite"], RCA_APPS[app["app"]]
+            rows = frame[(frame["suite"] == suite) & (frame["app"] == app["app"]) & (frame["budget_k"] == 10)]
+            key = f"gatesplit.{suite}.{short}"
+            for name, label in (("no_alerts", "none"), ("severity", "severity"), ("classifier", "classifier"),
+                                ("shipped", "shipped")):
+                out[f"{key}.{label}"] = float(rows[rows["queue"] == name].iloc[0]["detection_rate"])
+            out[f"{key}.test_cases"] = float(app["test_cases"])
+        tt = next(a for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
+        out["gatesplit.RE2.tt.saving"] = float(tt["promotion_gate"]["queue_saving"])
+        out["gatesplit.margin"] = float(tt["promotion_gate"]["margin"])
+        for pooled in facts["pooled"]:
+            key = f"gatesplit.{pooled['suite']}.pooled"
+            out[f"{key}.test_cases"] = float(pooled["test_cases"])
+            for name, label in (("no_alerts", "none"), ("severity", "severity"), ("classifier", "classifier"),
+                                ("shipped", "shipped")):
+                out[f"{key}.{label}"] = float(pooled[name][0])
+            diff = pooled["shipped_minus_no_alerts"]
+            out[f"{key}.diff"], out[f"{key}.diff.ci_low"], out[f"{key}.diff.ci_high"] = map(float, diff)
+        re2 = frame[(frame["suite"] == "RE2") & (frame["budget_k"] == 10)]
+        extra = [float(re2[(re2["app"] == a) & (re2["queue"] == "severity")].iloc[0]["false_items_per_day"])
+                 - float(re2[(re2["app"] == a) & (re2["queue"] == "no_alerts")].iloc[0]["false_items_per_day"])
+                 for a in re2["app"].unique()]
+        out["gatesplit.RE2.severity_extra_false.min"] = min(extra)
+        out["gatesplit.RE2.severity_extra_false.max"] = max(extra)
+
+    for name, short in (("live_replay_gaia.json", "gaia"), ("live_replay_rcaeval_re2_tt.json", "tt")):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        summary = json.loads(path.read_text(encoding="utf-8"))["summary"]
+        for field in ("days", "alerts", "drift_warn_days", "drift_ok_days", "retrains_run", "retrains_promoted",
+                      "retrains_refused", "model_versions"):
+            out[f"replay.{short}.{field}"] = float(summary[field])
+        if short == "tt":
+            out["replay.tt.marks"] = float(summary["marks"])
+            out["replay.tt.real_marks"] = float(summary["real_marks"])
+            out["replay.tt.precision_from_marks"] = float(summary["precision_from_marks"])
     return out
 
 
@@ -238,6 +295,16 @@ def claims_still_hold() -> None:
             _fail("the promotion gate now promotes the classifier on GAIA; rewrite §5, §9, §12 and §B4")
         if facts["severity_K20"]["alerts_attached"] != 0:
             _fail("the severity row now attaches alerts; rewrite the 'why the severity row attaches no alerts' paragraph")
+    compare = ROOT / "baseline_compare_gaia.csv"
+    if compare.exists():
+        b = pd.read_csv(compare)
+        if float(_row(b, "delta_5m")["diff_low"]) <= 0:
+            _fail("the detector no longer beats the rate rule at K = 20 with an interval above zero; rewrite §B1")
+        if float(_row(b, "delta_5m", 50)["diff_low"]) > 0 or float(_row(b, "delta_5m", 50)["diff_high"]) < 0:
+            _fail("at K = 50 the detector and the rate rule are no longer tied; rewrite the K = 50 sentence (§B1)")
+        for name in ("zscore", "ewma", "iforest"):
+            if float(_row(b, name)["detection_rate"]) >= float(_row(b, "delta_5m")["detection_rate"]):
+                _fail(f"{name} now beats the rate rule at K = 20; rewrite the textbook-detector paragraph (§B1)")
     nab = ROOT / "nab_eval.csv"
     if nab.exists():
         n = pd.read_csv(nab)
@@ -272,6 +339,22 @@ def claims_still_hold() -> None:
                   "'gate's window is the scored window' caveat (§9, §12, §13, §B5)")
         if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
             _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
+    split = ROOT / "rcaeval_gate_split.json"
+    if split.exists():
+        facts = json.loads(split.read_text(encoding="utf-8"))
+        promoted = [f"{a['suite']} {a['app']}" for a in facts["apps"] if a["promoted"]]
+        if promoted:
+            _fail(f"the independent gate now promotes the classifier on {promoted}; rewrite the independent gate test (§B5)")
+
+
+    for name in ("live_replay_gaia.json", "live_replay_rcaeval_re2_tt.json"):
+        path = ROOT / name
+        if path.exists():
+            replay = json.loads(path.read_text(encoding="utf-8"))["summary"]
+            if replay["retrains_promoted"]:
+                _fail(f"the replay ({name}) now promotes a model; rewrite the replay section (§B8)")
+            if replay["retrains_rolled_back"]:
+                _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§B8)")
 
 
 def main() -> None:

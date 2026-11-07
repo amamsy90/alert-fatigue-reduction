@@ -13,7 +13,7 @@ from product.model_store import activate_version, load_model, load_registry, res
 from product.monitoring import record_ingest
 from product.pipeline import JobBusy, run_job
 from product.web import context as ctx
-from product.web.schemas import FeedbackRequest, ResetRequest, RunRequest
+from product.web.schemas import FeedbackRequest, ResetRequest, RetrainRequest, RunRequest
 from product.web.security import ingest_alert_cap
 from product.web.uploads import _budget, _save_upload
 
@@ -125,6 +125,14 @@ def reset_models(body: ResetRequest):
         return reset_registry(confirm=body.confirm)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/models/retrain")
+def retrain_models(body: RetrainRequest | None = None):
+    """Retrain on stored alert history if due (or forced); the gate decides promotion. Same call a scheduler makes."""
+    from product.retrain import run_retrain
+
+    return run_retrain(ctx.STORE, trigger="api", force=bool(body and body.force))
 
 
 @router.post("/models/{version}/activate")

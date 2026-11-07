@@ -42,9 +42,10 @@ def _log_time_to_utc(text: str) -> pd.Timestamp:
 
 
 def load_run_folder(path: str | Path) -> tuple[list[Alert], list[Fault]]:
-    files = sorted(Path(path).glob("run_table_*.csv"))
+    folder = Path(path)
+    files = sorted([*folder.glob("run_table_*.csv"), *folder.glob("run_table_*.csv.gz")])
     if not files:
-        raise FileNotFoundError(f"No run_table_*.csv found in {path}")
+        raise FileNotFoundError(f"No run_table_*.csv or run_table_*.csv.gz found in {path}")
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     return parse_run_table(df)
 

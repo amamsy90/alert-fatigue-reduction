@@ -204,8 +204,9 @@ def test_proposals_are_rule_items_and_do_not_page():
     assert len(proposals) == 1
     assert proposals[0].kind == "rule"
     assert proposals[0].shown_at == stamp
-    root = Path(__file__).parents[1] / "src"
-    for name in ("metric_model.py", "optional_models.py", "ranker.py", "model_eval.py"):
+    root = Path(__file__).parents[1]
+    for name in ("src/metric_model.py", "src/optional_models.py", "src/ranker.py",
+                 "experiments/model_ablation/model_eval.py"):
         tree = ast.parse((root / name).read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
