@@ -38,6 +38,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from experiments.model_ablation.model_eval import published_bounds
 from src.baseline import baseline_decisions
 from src.classifier import AlertClassifier
 from src.config import Config, day_of
@@ -45,7 +46,6 @@ from src.eval_stats import bootstrap_mean_ci
 from src.experiment import load_gaia
 from src.features import build_feature_frame
 from src.memory_spikes import detect_gaps, detect_jumps, detect_leaks
-from src.model_eval import published_bounds
 from src.policy import bayes_threshold, spike_review_decisions, tune_threshold
 from src.queue import (
     QueueItem,

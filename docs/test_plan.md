@@ -21,7 +21,7 @@
 | Performance | Latency, throughput and errors under concurrent users | `perf/load_test.py` against a live server | 50 users: 228 req/s, p95 0.32 s, 0 errors |
 | Reliability | Concurrency and persistence | `test_reliability.py`, `test_app_hardening.py` | concurrent `ops.json` writes keep every change |
 | System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
-| Acceptance of results | Report matches results | `run_validate.py` | 195 checked numbers plus guarded claims |
+| Acceptance of results | Report matches results | `run_validate.py` | 278 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
 | Integration (real services) | The app beside a real Prometheus and Alertmanager in Docker Compose: an alert fired in Alertmanager reaches `/ingest/alertmanager` with the bearer token, the ingest job pulls memory series from Prometheus, and shadow mode records but does not page | `app/integration/docker-compose.yml`, `tests/integration/test_compose.py`, CI `integration` job (skipped locally unless `INTEGRATION_BASE_URL` is set) | found that a 14-day Prometheus fetch used a 121 s step, too coarse for the jump rule to confirm anything |
 
@@ -32,7 +32,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov           # 450 passed, 10 skipped; line coverage 86%
+uv run pytest -q --cov           # 531 passed, 10 skipped on Python 3.12 (7 November 2026); coverage report
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -47,16 +47,16 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 450 passed, 10 skipped |
-| Coverage | line coverage ≥ `COVERAGE_MIN` | 86% (minimum 85% met) |
-| Results | `run_validate.py` passes | 195 numbers match |
+| Tests | all pass on Python 3.10 and 3.12 | 531 passed, 10 skipped on Python 3.12 (7 November 2026). Python 3.10 is the other CI job and was not rerun for this note |
+| Coverage | line coverage ≥ `COVERAGE_MIN` | 87% (86.86%; min 85%) |
+| Results | `run_validate.py` passes | 278 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
 ## 5. Coverage by module (re-measured on this commit, CPython 3.12.3)
 
-`uv run pytest -q --cov` from `app/`: 450 passed, 10 skipped, line coverage 86%. The ≥ 85% criterion is met. Eleven modules are at 100% and the reporter omitted them. Modules under 90%:
+`uv run pytest -q --cov` from `app/`: 531 passed, 10 skipped, total coverage 86.86%. Eleven modules are at 100% and the reporter omitted them. Other measured modules are 90–98%. Modules under 90%:
 
 | Module | Coverage | Note |
 |---|---:|---|
@@ -64,7 +64,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | `product/inputs.py`, `web/evaluate_routes.py`, `web/job_routes.py`, `backup.py` | 80–84% | error paths (missing GAIA folder, channel test pages, restore failures) |
 | `product/web/ops_routes.py` | 78% | channel test pages |
 | `product/logging_config.py` | 55% | the JSON formatter is tested; switching handlers with `LOG_FORMAT=json` at start-up is not |
-| `src/accel.py`, `generic.py`, `trace_graph.py`, `weight_io.py` | 87–89% | |
+| `src/accel.py`, `generic.py`, `weight_io.py`, `experiments/traces/trace_graph.py` | 87–89% | |
 | `src/torch_determinism.py` | 81% | CUDA branches |
 | `src/ranker.py` | 80% | XGBoost and torch rankers skip on CPU CI |
 | `src/metrics.py` | 75% | GAIA-only paths |
@@ -72,23 +72,23 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | `src/eval_stats.py` | 69% | |
 | `src/log_encoder.py` | 66% | torch training path skipped |
 | `src/gaia_loader.py` | 62% | GAIA files are not in the test run |
-| `src/trace_model.py` | 60% | torch load path skipped |
+| `experiments/traces/trace_model.py` | 60% | torch load path skipped |
 | `src/metric_model.py` | 52% | torch training and scoring paths skipped |
-| **Total** | **86%** | minimum 85% met |
+| **Total** | **86.86%** | minimum 85% |
 
 ## 6. Measurable test criteria
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% of tests that run | 450 passed, 10 skipped |
-| Line coverage | ≥ 85% | 86% |
+| Automated tests passing | 100% of tests that run | 531 passed, 0 failed, 10 skipped (Python 3.12, 7 November 2026) |
+| Line coverage | ≥ 85% | 87% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
 | Throughput | ≥ 20 req/s | 167 / 228 req/s |
 | Error rate under load | ≤ 1% | 0% (3,000 requests) |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s |
 | Full GAIA month (34,863 alerts, with training) | ≤ 5 min | 54.9 s (median of 3 runs of `perf/resources.py`, same laptop) |
-| Report numbers match results | all | 195 / 195 (`run_validate.py`) |
+| Report numbers match results | all | 278 / 278 (`run_validate.py`) |
 | Malformed webhook rows | never block a job | rejected with a reason (`test_ai_inputs.py`) |
 | Critical security issues | 0 | 0 (`docs/threat_model.md`) |
 
