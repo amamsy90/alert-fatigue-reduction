@@ -25,6 +25,7 @@ Counters are per process and reset on restart; model and data signals are read f
 | **Data** | Mean `tpl_prior` of the last job ÷ median of earlier jobs | `/monitoring` → `template_feature_drift` | between 0.5 and 2, and only when `LLM_TEMPLATE_FEATURES` is on | The flag is off (Phase 2b drop), so the check is `n/a` and does not change the verdict |
 | **Data** | Alert volume of the last ingest batch ÷ median of the earlier ones | `oncall_alert_volume_ratio`; `/monitoring` → `alert_volume_drift` | between 0.5 and 2 | A batch twice or half the usual size means an alert storm or a broken sender, and the model's inputs have shifted |
 | **Data** | Per series: median of its last hour in the last job ÷ median of the same series in earlier jobs (worst series shown; at least 3 earlier jobs) | `oncall_metric_median_ratio`; `/monitoring` → `metric_value_drift`, `data.metric_drift_series` | between 0.5 and 2 for every series | A series that jumps to a new scale (units change, scrape broken, one service leaking) is input drift the alert-count check would miss. Per series and on the last hour, because ingest jobs re-score the whole history and one fleet-wide median hides a single service |
+| **Data** | Statistical drift between the alerts a model learned from (early window) and the alerts it scores (later window), per job: PSI on severity, source, alert type and message length; KS test on alerts per hour; a classifier two-sample test on message text (`src/drift.py`) | `oncall_input_drift_psi_max`, `oncall_input_text_drift_auc`, `oncall_input_drift_warn`; `/monitoring` → `input_drift`, `data.input_drift` | PSI < 0.25 on every feature, KS p ≥ 0.01, text AUC < 0.75; `n/a` below 30 alerts per window | PSI is the standard score for a shifted feature mix. The text test trains a logistic regression to tell the two windows apart: an AUC near 0.5 means the wording is unchanged, near 1 means it moved, and the terms with the largest weights are listed. It reports only and never changes a decision; the response to a warning is to review the model before promoting it |
 | **Data** | Monitoring gaps shown in the last job | `oncall_last_job_gap_items`; `/monitoring` → `monitoring_gaps` | ≤ 3 | 11% of GAIA faults fell in monitoring gaps; several gaps at once means the metric pipeline is broken |
 | **Data** | Rejected ingest rows, duplicates | `/ingest` response (`rejected`, `duplicates`); `oncall_ingest_alerts_total{result}` | Rejected rows investigated | Bad rows are refused instead of blocking the queue |
 | **Data** | Ingest buffer waiting to be scored | `oncall_ingest_buffer_batches` | Near 0 between jobs | A growing buffer means jobs are not running |
@@ -46,6 +47,9 @@ groups:
         for: 10m
       - alert: OncallQueuePageFailures
         expr: increase(oncall_pages_total{outcome="failed"}[30m]) > 0
+      - alert: OncallQueueInputDrift
+        expr: oncall_input_drift_warn == 1
+        for: 1h
       - alert: OncallQueueLowPrecision
         expr: oncall_precision_from_marks < 0.7 and oncall_feedback_marks >= 20
         for: 1d
@@ -60,7 +64,7 @@ groups:
 | Successful requests under load | ≥ 99% | 100% (3,000 requests) | load tests at 20 and 50 users |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s | `oncall_job_duration_seconds` |
 | Full GAIA month (34,863 alerts) | ≤ 5 min | 54.9 s | `perf/resources.py`, median of 3 runs (`app/results/resources_gaia.json`) |
-| Automated tests passing | 100% of tests that run | 465 passed, 0 failed, 10 skipped | Python 3.12, 7 November 2026 |
+| Automated tests passing | 100% of tests that run | 481 passed, 0 failed, 10 skipped | Python 3.12, 7 November 2026 |
 | Line coverage | ≥ 85% | 87% | same run |
 | Faults caught at K = 20 (detector vs Prometheus rate rule) | beats it | 72.6% vs 68.9%, 8/8 weeks | `run_validate.py` |
 | False items a day at K = 20 | fewer than the rate rule | 1.0 (detector), 1.8 (full queue) vs 2.1 | same |
