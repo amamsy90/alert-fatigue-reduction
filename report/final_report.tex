@@ -169,7 +169,7 @@ O5 other teams & \texttt{/evaluate}, NAB, SMD, RCAEval & \texttt{generic}, \text
 
 
 \section{Deliverables, setup and use}
-\textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, release 1.1.0 plus the changes in \texttt{CHANGELOG.md}, submitted commit:\newline \mbox{\texttt{1a024ebc9c42e3def2d95afe5d340580118f10bc}}. The README lists the team, exact commands, the tested system and data sources. No paid API is needed and the system calls no external AI service.
+\textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, release 1.1.0 plus the changes in \texttt{CHANGELOG.md}, submitted commit:\newline \mbox{\texttt{3dc80cb9fc4994a2fabf50887d009460cee0b06c}}. The README lists the team, exact commands, the tested system and data sources. No paid API is needed and the system calls no external AI service.
 
 \textbf{Setup and use.} From \texttt{app/}: \texttt{docker compose up -d} serves the app at \texttt{127.0.0.1:8080} in shadow mode; \texttt{uv sync --group dev}, \texttt{uv run pytest -q} and \texttt{uv run python run\_validate.py} run the tests and check the reported numbers. \texttt{uv run python run\_reproduce.py} reproduces the GAIA result on a committed 10-day real sample in under a minute; \texttt{--full} uses the 1.8~GB data fetched by \texttt{tools/fetch\_gaia.py}. Workflow: Alertmanager posts alerts, a job pulls memory from Prometheus and builds the day's queue with a reason for each item, the engineer marks items Real or Noise, and the marks train the next model. The \texttt{/evaluate} page runs the same engine on a team's own CSV files.
 
