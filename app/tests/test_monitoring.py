@@ -52,7 +52,7 @@ def test_monitoring_reports_every_check(client, monkeypatch):
     body = client.get("/monitoring").json()
     assert set(body["checks"]) == {"latency", "errors", "precision_from_marks", "alert_volume_drift",
                                    "metric_value_drift", "template_feature_drift", "input_drift", "monitoring_gaps",
-                                   "paging"}
+                                   "challenger_shadow", "paging"}
     assert body["checks"]["template_feature_drift"]["status"] == "n/a"
     assert body["checks"]["precision_from_marks"]["status"] == "n/a"  # no marks yet: not judged
     assert body["status"] in ("ok", "warn")
@@ -220,3 +220,20 @@ def test_a_real_job_stores_its_drift_report():
     assert result.drift["status"] == "warn"
     assert result.drift["text_auc"] > 0.9
     assert any("severity" in r for r in result.drift["reasons"])
+
+
+def test_challenger_shows_in_monitoring_without_ever_warning(tmp_path):
+    store = QueueStore(tmp_path / "q.db")
+    assert health(store)["checks"]["challenger_shadow"]["status"] == "n/a"
+    import pandas as pd
+
+    meta = {"alert_count": 1, "gap_items": 0,
+            "challenger": {"version": "v0002", "jobs": 4, "recommendation": "promote", "reason": "saves 30",
+                           "champion_cost": 50, "challenger_cost": 20}}
+    store.save_job(source="ingest", budget_k=20, escalate_threshold=1.0, review_threshold=1.0, shadow_mode=True,
+                   alerts=[Alert("a0", pd.Timestamp("2026-02-01T10:00:00Z"), "web", "log", "info", "m")],
+                   decisions=[Decision("a0", Action.SUPPRESS, 0.1, "")], spike_flags=[False], meta=meta)
+    check = health(store)["checks"]["challenger_shadow"]
+    assert check["status"] == "ok" and check["value"] == "promote" and check["version"] == "v0002"
+    text = monitoring.gauges(store)
+    assert "oncall_challenger_jobs 4" in text and "oncall_challenger_cost_saving 30" in text

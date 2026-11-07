@@ -375,6 +375,45 @@ def _make_active(path: Path, entry: dict, registry: dict) -> None:
     )
 
 
+def latest_challenger() -> tuple[dict, SavedModel] | None:
+    """The newest refused candidate whose file is still on disk, loaded through the
+    same hash and allowlist checks as the active model. None when there is none.
+
+    A candidate that was ever active is a rollback target, not a challenger, and a
+    promoted version is the champion itself."""
+    registry = load_registry()
+    ever_active = {h["version"] for h in registry.get("history", [])}
+    if registry.get("active"):
+        ever_active.add(registry["active"])
+    candidates = [
+        v for v in registry["versions"]
+        if v["version"] not in ever_active and not v.get("promoted") and not v.get("file_removed")
+    ]
+    for entry in sorted(candidates, key=lambda v: v["number"], reverse=True):
+        saved = load_model(models_dir() / entry["file"])
+        if saved is not None and saved.model is not None:
+            return entry, saved
+    return None
+
+
+def record_shadow(version: str, job_counts: dict, margin: float) -> dict:
+    """Add one job's champion-versus-challenger counts to a candidate's card and
+    return its running tally and recommendation. Never changes the active model."""
+    from src.challenger import accumulate, recommend
+
+    with _REGISTRY_LOCK:
+        registry = load_registry()
+        entry = next((v for v in registry["versions"] if v["version"] == version), None)
+        if entry is None:
+            raise KeyError(f"Unknown model version {version}")
+        tally = accumulate(entry.get("shadow"), job_counts)
+        status, reason = recommend(tally, margin)
+        entry["shadow"] = {**tally, "recommendation": status, "reason": reason,
+                           "champion": registry.get("active")}
+        _write_registry(registry)
+        return entry["shadow"]
+
+
 def activate_version(version: str) -> dict:
     """Roll back (or forward) to a kept version. Refuses a file whose hash changed."""
     with _REGISTRY_LOCK:

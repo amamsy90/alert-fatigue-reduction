@@ -19,6 +19,7 @@ from typing import Any
 import pandas as pd
 
 from src.baseline import baseline_decisions
+from src.challenger import compare
 from src.classifier import AlertClassifier
 from src.config import Config, day_of
 from src.drift import drift_report
@@ -41,7 +42,7 @@ from .inputs import (  # noqa: F401 — re-exported for callers of product.pipel
     load_metrics_csv,
 )
 from .labels import FEEDBACK_PREFIX, apply_feedback, label_source  # noqa: F401
-from .model_store import SavedModel, load_model, register_model
+from .model_store import SavedModel, latest_challenger, load_model, record_shadow, register_model
 from .monitoring import record_job
 from .paging import page_job
 from .promotion import no_log_alerts_cost, promotion_decision, promotion_margin  # noqa: F401 — re-exported
@@ -172,6 +173,9 @@ class ScoredQueue:
     # Input drift between the early window the model learns from and the later one it scores
     # (src/drift.py). Reports only; it never changes a decision.
     drift: dict | None = None
+    # Raw alert decisions before the daily budget, and what the challenger would have decided.
+    raw_decisions: list[Decision] | None = None
+    challenger_decisions: list[Decision] | None = None
 
 
 def batch_drift(alerts: list[Alert], config: Config) -> dict:
@@ -193,6 +197,7 @@ def score_alerts(
     faults: list[Fault] | None = None,
     use_saved_detector: bool = True,
     now: pd.Timestamp | None = None,
+    challenger: SavedModel | None = None,
 ) -> ScoredQueue:
     """Score EVERY alert in the batch and build the day-by-day causal queue.
 
@@ -383,6 +388,13 @@ def score_alerts(
         confirm_by_series=confirm_by_series,
         optional_models=ml_status,
         drift=batch_drift(alerts, config),
+        raw_decisions=decisions,
+        challenger_decisions=(
+            apply_model(challenger.model, alerts, jumps, flags, config,
+                        challenger.escalate_threshold, challenger.review_threshold)
+            if challenger is not None and challenger.model is not None and alerts and model_used == "saved"
+            else None
+        ),
     )
 
 
@@ -526,8 +538,30 @@ def _recent_series_medians(metrics: pd.DataFrame | None) -> dict[str, float]:
     return out
 
 
+def _labelled_flags(alerts: list[Alert], store: QueueStore) -> list[bool]:
+    """Which alerts have a known label. Labels that came with the data cover every alert;
+    otherwise an alert is known when it is inside a Real mark or was marked Noise. An unmarked
+    alert is unknown, not noise."""
+    if any(a.fault_id is not None and not str(a.fault_id).startswith(FEEDBACK_PREFIX) for a in alerts):
+        return [True] * len(alerts)
+    noise = store.feedback_noise_alerts()
+    return [a.fault_id is not None or (a.source, a.timestamp.value) in noise for a in alerts]
+
+
+def _shadow_challenger(store: QueueStore, pair: tuple[dict, SavedModel] | None, result: ScoredQueue) -> dict | None:
+    """Tally the newest refused model against the active one on this job's alerts."""
+    if pair is None or result.challenger_decisions is None or result.raw_decisions is None:
+        return None
+    config = result.config or Config()
+    counts = compare(result.raw_decisions, result.challenger_decisions, result.alerts,
+                     _labelled_flags(result.alerts, store),
+                     miss_cost=config.miss_cost, false_alarm_cost=config.false_alarm_cost)
+    shadow = record_shadow(pair[0]["version"], counts, promotion_margin(config))
+    return {"version": pair[0]["version"], "this_job": counts, **shadow}
+
+
 def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, real_marks: int,
-              page: dict, whp: dict, feedback_stats: dict) -> dict:
+              page: dict, whp: dict, feedback_stats: dict, challenger: dict | None = None) -> dict:
     decisions = result.decisions
     jumps = result.jumps
     metric_median = None
@@ -569,6 +603,8 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         meta["template_prior_mean"] = prior_mean
     if result.drift is not None:
         meta["drift"] = result.drift
+    if challenger is not None:
+        meta["challenger"] = challenger
     audit = (result.optional_models or {}).get("ranker_audit")
     if audit is not None:
         meta["ranker_audit"] = audit
@@ -595,6 +631,7 @@ def _run_job_locked(
                          alert_rows=alert_rows, faults_path=faults_path)
     feedback_stats = apply_feedback(inputs.alerts, store)
     loaded = load_model()
+    pair = latest_challenger() if loaded is not None and loaded.model is not None else None
     result = score_alerts(
         inputs.alerts,
         metrics=inputs.metrics,
@@ -605,7 +642,9 @@ def _run_job_locked(
         config=inputs.config,
         use_saved_detector=mode != "sample",
         now=pd.Timestamp.now(tz="UTC") if inputs.live_metrics else None,
+        challenger=pair[1] if pair else None,
     )
+    challenger_info = _shadow_challenger(store, pair, result)
     real_marks = store.feedback_summary()["real"]
     saved = _save_trained_model(result, real_marks, loaded)
     page, whp = page_job(
@@ -627,7 +666,7 @@ def _run_job_locked(
         spike_flags=result.spike_flags,
         jumps=result.jumps,
         day_offset_hours=result.config.day_offset_hours if result.config else 0.0,
-        meta=_job_meta(result, inputs, saved, real_marks, page, whp, feedback_stats),
+        meta=_job_meta(result, inputs, saved, real_marks, page, whp, feedback_stats, challenger_info),
     )
     try:
         keep = int(os.environ.get("JOB_RETENTION", DEFAULT_JOB_RETENTION))

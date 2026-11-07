@@ -255,6 +255,7 @@ def health(store) -> dict:
         "metric_value_drift": _check(metric_ratio, lambda v: m_low <= v <= m_high),
         "template_feature_drift": _template_feature_drift(jobs),
         "input_drift": _input_drift(last),
+        "challenger_shadow": _challenger(last),
         "monitoring_gaps": _check(last.get("gap_items") if last else None, lambda v: v <= TARGETS["gap_items_max"]),
         "paging": _check(pages_failed, lambda v: v == 0),
     }
@@ -270,7 +271,7 @@ def health(store) -> dict:
                  "metric_median_ratio": metric_ratio, "metric_drift_series": drifted,
                  "last_job_metric_median": last.get("metric_median"),
                  "last_job_gap_items": last.get("gap_items"), "last_job_has_metrics": last.get("has_metrics"),
-                 "input_drift": last.get("drift")},
+                 "input_drift": last.get("drift"), "challenger": last.get("challenger")},
         "targets": {**TARGETS, "alert_volume_band": list(ALERT_VOLUME_BAND),
                     "metric_value_band": list(METRIC_VALUE_BAND)},
         "accel": {"backend": _active_backend()},
@@ -349,6 +350,16 @@ def _input_drift(last: dict) -> dict:
     return {"status": status, "value": report.get("psi_max"), "reasons": report.get("reasons", [])}
 
 
+def _challenger(last: dict) -> dict:
+    """The refused model being tallied against the active one (src/challenger.py).
+    Never a warning: a promote recommendation asks a person to review, it is not a fault."""
+    info = last.get("challenger")
+    if not info:
+        return {"status": "n/a", "value": None}
+    return {"status": "ok", "value": info.get("recommendation"), "version": info.get("version"),
+            "jobs": info.get("jobs"), "reason": info.get("reason")}
+
+
 def _check(value, ok) -> dict:
     if value is None:
         return {"status": "n/a", "value": None}
@@ -373,6 +384,12 @@ def gauges(store) -> str:
         "oncall_input_drift_warn": (
             None if h["checks"]["input_drift"]["status"] == "n/a" else int(h["checks"]["input_drift"]["status"] == "warn"),
             "1 when the last job's input drift check warned"),
+        "oncall_challenger_jobs": (
+            (h["data"]["challenger"] or {}).get("jobs"), "Jobs the newest refused model has been tallied against the active one"),
+        "oncall_challenger_cost_saving": (
+            None if not h["data"]["challenger"] else
+            h["data"]["challenger"]["champion_cost"] - h["data"]["challenger"]["challenger_cost"],
+            "Labelled-alert cost the challenger would have saved over the active model (cost units)"),
         "oncall_health_ok": (1 if h["status"] == "ok" else 0, "1 when every /monitoring check passes"),
         "oncall_llm_timeout_rate": (h["llm"]["timeout_rate"], "Share of shadow-note attempts that timed out"),
         "oncall_llm_fallback_rate": (h["llm"]["fallback_rate"], "Share of shadow-note attempts that fell back"),

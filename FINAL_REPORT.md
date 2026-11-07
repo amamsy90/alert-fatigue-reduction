@@ -19,7 +19,7 @@ Each objective below is paired with the measurement this submission reports. The
 | Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector (`jumps_tuned`) wins 8 of 8 walk-forward weeks against the Prometheus rate rule |
 | Decide with no future data | No decision uses a later point, the end of a jump, or its peak | A jump is shown at the second confirming point. `tests/test_causality.py` checks that rule |
 | Ship with shadow paging and a versioned model | Record what would have been paged until Live is armed. Models are versioned and can be rolled back | Shadow is the default. Live needs `APP_PASSWORD`, a channel, and the typed word LIVE, and only an ingest job may page. Models load as skops |
-| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 481 passed, 10 skipped; line coverage 86%; `run_validate.py` matches the printed figures |
+| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 490 passed, 10 skipped; line coverage 86%; `run_validate.py` matches the printed figures |
 
 ## 2. Architecture and implementation
 
@@ -56,7 +56,7 @@ The jump detector is the row `jumps_tuned`: 888 of 1,223 faults (72.6%) and 1.0 
 
 About 22 faults are injected a day, more than 20 slots on 34 of the 55 test days, which is why the best possible result at this budget is 84.9% rather than 100%. When the full queue misses, Appendix D shows that the misses are mostly a monitoring gap or a day whose 20 slots were already full. The jump rule itself fails on only a small share of those misses.
 
-On this commit, `uv run pytest -q` in `app/` reported 481 passed and 10 skipped. Line coverage is 87%. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C). `uv run python run_validate.py` matched the printed figures (195 checked numbers).
+On this commit, `uv run pytest -q` in `app/` reported 490 passed and 10 skipped. Line coverage is 87%. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C). `uv run python run_validate.py` matched the printed figures (195 checked numbers).
 
 The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on RCAEval, NAB and SMD are in the appendices.
 
@@ -110,10 +110,10 @@ The budgeted jump queue beats the rules a team already runs, under a limit of K 
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 481 passed, 0 failed, 87% coverage, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 490 passed, 0 failed, 87% coverage, 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 443 automated tests (481 pass on CPU CI) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 443 automated tests (490 pass on CPU CI) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ### 4. Target users and use case
 
@@ -339,7 +339,7 @@ An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That fl
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% of tests that run | 481 passed, 10 skipped |
+| Tests passing | 100% of tests that run | 490 passed, 10 skipped |
 | Line coverage | ≥ 85% | 87% |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
@@ -355,7 +355,7 @@ CI runs lint, type checks, the tests on two Python versions with coverage, `run_
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 481 passed, 10 skipped | Yes |
+| At least 90% of predefined test cases pass | 490 passed, 10 skipped | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds +13.3 points over no log alerts, with an interval above zero (+2.2 over severity alerts), and the gate promotes it, at its margin, judged on the same 45 cases that are scored (§B5); decided on separate cases, the gate refuses it on all six applications, and the shipped queue gains 7.2 points over no log alerts pooled over RE2 by using severity alerts (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA or on independent RCAEval cases, where simple severity alerts do the work |

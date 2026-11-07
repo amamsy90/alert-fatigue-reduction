@@ -71,7 +71,7 @@ uv run python run_validate.py
 docker compose up -d --build
 ```
 
-Expect: **481 passed, 10 skipped**, line coverage 86%, **VALIDATION OK (195 numbers)**, and `docker compose ps` showing the container `healthy`.
+Expect: **490 passed, 10 skipped**, line coverage 86%, **VALIDATION OK (195 numbers)**, and `docker compose ps` showing the container `healthy`.
 
 Also, before the viva, click **Go back to the built-in rule** on the Evaluate page and delete `app/product/data/model.pkl` (if present). Otherwise the queue and any live alert are scored with the detector and classifier learned from the last data you evaluated (e.g. the online shop), and a "critical" sample alert can come out as *hide* — correct for that model, confusing in a demo.
 
