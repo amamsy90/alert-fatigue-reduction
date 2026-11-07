@@ -75,7 +75,7 @@ To check that a fresh clone works with nothing carried over from this machine (c
 python tools/check_fresh_clone.py          # or: --source https://github.com/amamsy90/alert-fatigue-reduction --ref <commit>
 ```
 
-**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `bb635c5`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (542 passed, 10 skipped), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
+**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `b8a3cf2`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (542 passed, 10 skipped), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
 
 Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `FINAL_REPORT.md` section B8.
 
