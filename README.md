@@ -2,11 +2,9 @@
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
-An on-call engineer can read only a few alerts a day, and most real faults never write a log line. This system shows each engineer **at most K items a day, in the order a live system learns about them**. It combines rule-based metric detectors (memory jumps, slow leaks, monitoring gaps) with a cost-sensitive classifier for log alerts, pages safely, learns from Real / Noise marks, and ships as one Docker container.
+**Version:** 1.2.0
 
-[![CI](https://github.com/amamsy90/alert-fatigue-reduction/actions/workflows/ci.yml/badge.svg)](https://github.com/amamsy90/alert-fatigue-reduction/actions/workflows/ci.yml)
-
-On the GAIA microservice benchmark at 20 items a day, the detector catches **72.6%** of 1,223 test faults (the best possible is 84.9%), against 68.9% for a Prometheus rate rule and 0% for log severity. It wins all 8 walk-forward weeks with fewer false items. Details and limits are in [`FINAL_REPORT.md`](FINAL_REPORT.md).
+An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Optional ranker, metric, trace and LLM paths stay off by default. Their measurements stay in the report appendices.
 
 ## Team and contributions
 
@@ -102,16 +100,21 @@ uv run python run_baseline_compare.py     # z-score, EWMA, isolation forest and 
 uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases that are never scored (RE2 and RE3; several GB of RAM, about 15 minutes)
 ```
 
+**Home lab (optional, shadow only).** Setup is in [`homelab/README.md`](homelab/README.md) and needs k3d, kubectl, Helm 3, curl and systemd. The day-12 snapshot is in the repository, and `./homelab/scripts/reproduce_day12.sh` reproduces its tables from the frozen data and diffs them against `docs/results/homelab_day12/`.
+
 ## Project structure
 
 | Path | What |
 |---|---|
-| [`FINAL_REPORT.md`](FINAL_REPORT.md) | The report: Part A follows the course brief's 13 sections (with a rubric map), Part B the results, Part C how to reproduce them |
-| [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
+| [`FINAL_REPORT.md`](FINAL_REPORT.md) | Main report (sections 1–5) and Appendices A–G |
+| [`docs/`](docs/README.md) | Requirements, architecture, ADRs, threat model, test plan, deployment, MLOps, monitoring, privacy |
+| [`docs/results/`](docs/results/homelab_day12/README.md) | Frozen GAIA ranker re-run and home-lab day-12 summaries |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
 | [`app/tests/`](app/tests) | 446 tests (436 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
 | [`app/examples/gaia_sample/`](app/examples/gaia_sample) | Real 10-day GAIA slice and the recorded counts used by `run_reproduce.py` |
+| [`homelab/`](homelab/README.md) | Single-machine multi-company lab (shadow only) |
+| [`tools/`](tools) | Data fetch scripts, the sample builder, the fresh-clone check and the Word report builder |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
 | [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |
 | [`app/deploy/`](app/deploy) | Settings for development, test and production |
@@ -126,4 +129,4 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 
 ## Safety defaults
 
-Shadow mode is on: every job records what it *would* have paged. Live paging needs a login password, at least one channel, and `LIVE` typed on the Connectors page, and only webhook-ingest jobs page. See [`docs/deployment.md`](docs/deployment.md) and [`docs/threat_model.md`](docs/threat_model.md).
+Shadow mode is on. See [`docs/deployment.md`](docs/deployment.md) and [`docs/threat_model.md`](docs/threat_model.md).

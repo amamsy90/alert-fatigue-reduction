@@ -554,6 +554,9 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
     prior_mean = template_prior_mean(result.alerts)
     if prior_mean is not None:
         meta["template_prior_mean"] = prior_mean
+    audit = (result.optional_models or {}).get("ranker_audit")
+    if audit is not None:
+        meta["ranker_audit"] = audit
     return meta
 
 

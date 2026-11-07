@@ -1,6 +1,6 @@
 # Test plan
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.1.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.2.0
 
 ## 1. Goals
 
@@ -54,7 +54,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
-## 5. Coverage by module (measured 21 October 2026, Python 3.12)
+## 5. Coverage by module (re-measured on this commit, CPython 3.12.3)
 
 `uv run pytest -q --cov` from `app/`: 436 passed, 10 skipped, total coverage 86.78%. Eleven modules are at 100% and the reporter omitted them. Other measured modules are 90–98%. Modules under 90%:
 
@@ -66,7 +66,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | `product/logging_config.py` | 55% | the JSON formatter is tested; switching handlers with `LOG_FORMAT=json` at start-up is not |
 | `src/accel.py`, `generic.py`, `weight_io.py`, `experiments/traces/trace_graph.py` | 87–89% | |
 | `src/torch_determinism.py` | 81% | CUDA branches |
-| `src/ranker.py` | 78% | XGBoost and torch rankers skip on CPU CI |
+| `src/ranker.py` | 80% | XGBoost and torch rankers skip on CPU CI |
 | `src/metrics.py` | 75% | GAIA-only paths |
 | `src/llm_lora.py` | 73% | training imports torch, which CPU CI does not install |
 | `src/eval_stats.py` | 69% | |

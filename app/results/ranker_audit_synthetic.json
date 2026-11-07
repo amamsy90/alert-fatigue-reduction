@@ -1,0 +1,1473 @@
+{
+  "dataset": "synthetic",
+  "gaia": "pending: this run did not score GAIA",
+  "pages": false,
+  "flags_changed": false,
+  "flags_default": "off",
+  "flags_reason": "This audit does not set LEARNED_RANKER, RANKER_EXPLAIN, RANKER_ABSTAIN or RANKER_DISAGREE. A keep interval on this file would still leave the flags off. GAIA is required before any claim about the published queue.",
+  "method": {
+    "explain": "Exact interventional SHAP against the training mean. The shap package is not installed. Stored trees have no booster, so XGBoost pred_contribs is not called. Contributions sum to the ranker score.",
+    "abstain": "Shipped preview: a candidate that was not shown and whose score is at least threshold minus the 25th percentile of |score - threshold|. Hypothetical curve: automated keep when the item is in the ranker queue and score >= threshold + delta; automated drop when it is not and score <= threshold - delta; otherwise review.",
+    "disagree": "Second opinion is the contrastive encoder median split for alerts when --encoder loads, otherwise the first-come queue. Strong means |score - threshold| is at least the 75th percentile. In-queue flags stay in the page set.",
+    "split": "first week train, later days test",
+    "bootstrap_seed": 42,
+    "n_draw": 4000
+  },
+  "encoder": "not requested",
+  "train_end": "2026-01-12T03:00:00+00:00",
+  "test_end": "2026-01-25T03:15:01+00:00",
+  "window_end": "last alert",
+  "test_faults": 6,
+  "seeds": [
+    42,
+    0,
+    1
+  ],
+  "by_seed": [
+    {
+      "seed": 42,
+      "status": "trained",
+      "backend": "pointwise",
+      "device": "cpu",
+      "fell_back": false,
+      "by_k": {
+        "20": {
+          "budget_k": 20,
+          "threshold": 1.9985752783662702,
+          "candidates": 7,
+          "slot_items": 6,
+          "baseline_slot_items": 6,
+          "ranker_queue": {
+            "faults_caught": 2,
+            "faults": 6,
+            "detection_rate": 0.3333,
+            "false_items_per_day": 0.29,
+            "precision": 0.3333
+          },
+          "baseline_queue": {
+            "faults_caught": 2,
+            "faults": 6,
+            "detection_rate": 0.3333,
+            "false_items_per_day": 0.29,
+            "precision": 0.3333
+          },
+          "per_fault_catch_delta_vs_baseline": {
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "n": 6,
+            "decision": "drop",
+            "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+          },
+          "shipped_abstain_preview": {
+            "note": "Items the RANKER_ABSTAIN flag would list: not shown, and not confidently below the gate. The flag does not remove anything from the K queue. This preview uses the 25th percentile of |score - threshold| unless RANKER_ABSTAIN_DELTA is set. The curve below is hypothetical.",
+            "delta": 1.013912,
+            "review_count": 0,
+            "review_faults": 0,
+            "review_faults_missed_by_queue": 0
+          },
+          "hypothetical_coverage_curve": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0003,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0072,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0139,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.4358,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5261,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5511,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5866,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            }
+          ],
+          "operating_points": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.5,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.7,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.9,
+              "target_reached": false
+            }
+          ],
+          "disagreement": {
+            "partner": "baseline",
+            "delta": 1.526134,
+            "count": 0,
+            "in_queue": 0,
+            "dropped": 0,
+            "item_catch_rate": {
+              "status": "no-contrast",
+              "reason": "one group is empty",
+              "n_flagged": 0,
+              "n_other": 7,
+              "rate_flagged": null,
+              "rate_other": 0.4286,
+              "difference": null
+            },
+            "faults": {
+              "missed": 4,
+              "missed_with_disagreement": 0,
+              "caught": 2,
+              "caught_with_disagreement": 0
+            },
+            "arrival_score_spearman_mean": 0.9999999999999999,
+            "note": "Strong disagreement is a slot-membership difference whose |score - threshold| is at least the 75th percentile of those gaps. Alerts use the contrastive encoder's median split when an encoder is loaded; other items, and every item when it is not, use the first-come queue. An in-queue flag is not removed from the page set."
+          },
+          "examples": [
+            {
+              "label": "highest score",
+              "kind": "alert",
+              "service": "db",
+              "shown_at": "2026-01-13T18:01:00+00:00",
+              "score": 0.986852,
+              "threshold": 1.9985752783662702,
+              "in_queue": true,
+              "catches_fault": true,
+              "catches_fault_note": "scoring label from the catch rule; not a ranker feature",
+              "reasons": [
+                {
+                  "feature": "hour_cos",
+                  "value": 0.004363,
+                  "contribution": -0.015493,
+                  "direction": "down"
+                },
+                {
+                  "feature": "rise_ratio",
+                  "value": 0.0,
+                  "contribution": 0.005371,
+                  "direction": "up"
+                },
+                {
+                  "feature": "log_rise",
+                  "value": 0.0,
+                  "contribution": 0.001993,
+                  "direction": "up"
+                }
+              ]
+            },
+            {
+              "label": "lowest score",
+              "kind": "jump",
+              "service": "db",
+              "shown_at": "2026-01-14T01:01:00+00:00",
+              "score": 0.412015,
+              "threshold": 1.9985752783662702,
+              "in_queue": true,
+              "catches_fault": false,
+              "catches_fault_note": "scoring label from the catch rule; not a ranker feature",
+              "reasons": [
+                {
+                  "feature": "hour_cos",
+                  "value": 0.964787,
+                  "contribution": -0.370833,
+                  "direction": "down"
+                },
+                {
+                  "feature": "rise_ratio",
+                  "value": 1.252008,
+                  "contribution": -0.106758,
+                  "direction": "down"
+                },
+                {
+                  "feature": "log_rise",
+                  "value": 9.300836,
+                  "contribution": -0.02671,
+                  "direction": "down"
+                }
+              ]
+            }
+          ],
+          "global_importance": [
+            {
+              "feature": "hour_cos",
+              "mean_abs_contribution": 0.218464
+            },
+            {
+              "feature": "rise_ratio",
+              "mean_abs_contribution": 0.064278
+            },
+            {
+              "feature": "log_rise",
+              "mean_abs_contribution": 0.017954
+            },
+            {
+              "feature": "kind_alert",
+              "mean_abs_contribution": 0.016498
+            },
+            {
+              "feature": "severity_rank",
+              "mean_abs_contribution": 0.016498
+            },
+            {
+              "feature": "kind_jump",
+              "mean_abs_contribution": 0.016498
+            },
+            {
+              "feature": "hour_sin",
+              "mean_abs_contribution": 0.001193
+            },
+            {
+              "feature": "metric_score",
+              "mean_abs_contribution": 0.0
+            },
+            {
+              "feature": "kind_rule",
+              "mean_abs_contribution": 0.0
+            },
+            {
+              "feature": "kind_leak",
+              "mean_abs_contribution": 0.0
+            },
+            {
+              "feature": "kind_gap",
+              "mean_abs_contribution": 0.0
+            }
+          ],
+          "contribution_sum_gap": 0.0,
+          "importance_rows": 6,
+          "pages": false
+        },
+        "1": {
+          "budget_k": 1,
+          "threshold": 0.8821849837176567,
+          "candidates": 7,
+          "slot_items": 1,
+          "baseline_slot_items": 2,
+          "ranker_queue": {
+            "faults_caught": 1,
+            "faults": 6,
+            "detection_rate": 0.1667,
+            "false_items_per_day": 0.0,
+            "precision": 1.0
+          },
+          "baseline_queue": {
+            "faults_caught": 0,
+            "faults": 6,
+            "detection_rate": 0.0,
+            "false_items_per_day": 0.14,
+            "precision": 0.0
+          },
+          "per_fault_catch_delta_vs_baseline": {
+            "mean": 0.1667,
+            "low": 0.0,
+            "high": 0.5,
+            "n": 6,
+            "decision": "drop",
+            "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+          },
+          "shipped_abstain_preview": {
+            "note": "Items the RANKER_ABSTAIN flag would list: not shown, and not confidently below the gate. The flag does not remove anything from the K queue. This preview uses the 25th percentile of |score - threshold| unless RANKER_ABSTAIN_DELTA is set. The curve below is hypothetical.",
+            "delta": 0.11037,
+            "review_count": 1,
+            "review_faults": 1,
+            "review_faults_missed_by_queue": 1
+          },
+          "hypothetical_coverage_curve": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0
+            },
+            {
+              "delta": 0.1003,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0
+            },
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.1104,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.3194,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4097,
+              "candidates": 6,
+              "automated": 2,
+              "review": 4,
+              "keeps": 0,
+              "drops": 2,
+              "coverage": 0.3333,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4347,
+              "candidates": 6,
+              "automated": 1,
+              "review": 5,
+              "keeps": 0,
+              "drops": 1,
+              "coverage": 0.1667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4702,
+              "candidates": 6,
+              "automated": 1,
+              "review": 5,
+              "keeps": 0,
+              "drops": 1,
+              "coverage": 0.1667,
+              "accuracy": 1.0,
+              "precision": null
+            }
+          ],
+          "operating_points": [
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null,
+              "target_coverage": 0.5,
+              "target_reached": false
+            },
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null,
+              "target_coverage": 0.7,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0,
+              "target_coverage": 0.9,
+              "target_reached": false
+            }
+          ],
+          "disagreement": {
+            "partner": "baseline",
+            "delta": 0.409744,
+            "count": 1,
+            "in_queue": 0,
+            "dropped": 1,
+            "item_catch_rate": {
+              "status": "scored",
+              "reason": "mean catch-rate of flagged items minus mean catch-rate of the others",
+              "n_flagged": 1,
+              "n_other": 6,
+              "rate_flagged": 0.0,
+              "rate_other": 0.5,
+              "difference": {
+                "mean": -0.5,
+                "low": -0.8333,
+                "high": 0.0,
+                "n": 7,
+                "draws": 2654
+              }
+            },
+            "faults": {
+              "missed": 5,
+              "missed_with_disagreement": 0,
+              "caught": 1,
+              "caught_with_disagreement": 0
+            },
+            "arrival_score_spearman_mean": 0.9999999999999999,
+            "note": "Strong disagreement is a slot-membership difference whose |score - threshold| is at least the 75th percentile of those gaps. Alerts use the contrastive encoder's median split when an encoder is loaded; other items, and every item when it is not, use the first-come queue. An in-queue flag is not removed from the page set."
+          },
+          "examples": [],
+          "global_importance": [],
+          "contribution_sum_gap": null,
+          "importance_rows": null,
+          "pages": false
+        }
+      }
+    },
+    {
+      "seed": 0,
+      "status": "trained",
+      "backend": "pointwise",
+      "device": "cpu",
+      "fell_back": false,
+      "by_k": {
+        "20": {
+          "budget_k": 20,
+          "threshold": 1.9985752783662702,
+          "candidates": 7,
+          "slot_items": 6,
+          "baseline_slot_items": 6,
+          "ranker_queue": {
+            "faults_caught": 2,
+            "faults": 6,
+            "detection_rate": 0.3333,
+            "false_items_per_day": 0.29,
+            "precision": 0.3333
+          },
+          "baseline_queue": {
+            "faults_caught": 2,
+            "faults": 6,
+            "detection_rate": 0.3333,
+            "false_items_per_day": 0.29,
+            "precision": 0.3333
+          },
+          "per_fault_catch_delta_vs_baseline": {
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "n": 6,
+            "decision": "drop",
+            "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+          },
+          "shipped_abstain_preview": {
+            "note": "Items the RANKER_ABSTAIN flag would list: not shown, and not confidently below the gate. The flag does not remove anything from the K queue. This preview uses the 25th percentile of |score - threshold| unless RANKER_ABSTAIN_DELTA is set. The curve below is hypothetical.",
+            "delta": 1.013912,
+            "review_count": 0,
+            "review_faults": 0,
+            "review_faults_missed_by_queue": 0
+          },
+          "hypothetical_coverage_curve": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0003,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0072,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0139,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.4358,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5261,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5511,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5866,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            }
+          ],
+          "operating_points": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.5,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.7,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.9,
+              "target_reached": false
+            }
+          ],
+          "disagreement": {
+            "partner": "baseline",
+            "delta": 1.526134,
+            "count": 0,
+            "in_queue": 0,
+            "dropped": 0,
+            "item_catch_rate": {
+              "status": "no-contrast",
+              "reason": "one group is empty",
+              "n_flagged": 0,
+              "n_other": 7,
+              "rate_flagged": null,
+              "rate_other": 0.4286,
+              "difference": null
+            },
+            "faults": {
+              "missed": 4,
+              "missed_with_disagreement": 0,
+              "caught": 2,
+              "caught_with_disagreement": 0
+            },
+            "arrival_score_spearman_mean": 0.9999999999999999,
+            "note": "Strong disagreement is a slot-membership difference whose |score - threshold| is at least the 75th percentile of those gaps. Alerts use the contrastive encoder's median split when an encoder is loaded; other items, and every item when it is not, use the first-come queue. An in-queue flag is not removed from the page set."
+          },
+          "examples": [],
+          "global_importance": [],
+          "contribution_sum_gap": null,
+          "importance_rows": null,
+          "pages": false
+        },
+        "1": {
+          "budget_k": 1,
+          "threshold": 0.8821849837176567,
+          "candidates": 7,
+          "slot_items": 1,
+          "baseline_slot_items": 2,
+          "ranker_queue": {
+            "faults_caught": 1,
+            "faults": 6,
+            "detection_rate": 0.1667,
+            "false_items_per_day": 0.0,
+            "precision": 1.0
+          },
+          "baseline_queue": {
+            "faults_caught": 0,
+            "faults": 6,
+            "detection_rate": 0.0,
+            "false_items_per_day": 0.14,
+            "precision": 0.0
+          },
+          "per_fault_catch_delta_vs_baseline": {
+            "mean": 0.1667,
+            "low": 0.0,
+            "high": 0.5,
+            "n": 6,
+            "decision": "drop",
+            "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+          },
+          "shipped_abstain_preview": {
+            "note": "Items the RANKER_ABSTAIN flag would list: not shown, and not confidently below the gate. The flag does not remove anything from the K queue. This preview uses the 25th percentile of |score - threshold| unless RANKER_ABSTAIN_DELTA is set. The curve below is hypothetical.",
+            "delta": 0.11037,
+            "review_count": 1,
+            "review_faults": 1,
+            "review_faults_missed_by_queue": 1
+          },
+          "hypothetical_coverage_curve": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0
+            },
+            {
+              "delta": 0.1003,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0
+            },
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.1104,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.3194,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4097,
+              "candidates": 6,
+              "automated": 2,
+              "review": 4,
+              "keeps": 0,
+              "drops": 2,
+              "coverage": 0.3333,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4347,
+              "candidates": 6,
+              "automated": 1,
+              "review": 5,
+              "keeps": 0,
+              "drops": 1,
+              "coverage": 0.1667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4702,
+              "candidates": 6,
+              "automated": 1,
+              "review": 5,
+              "keeps": 0,
+              "drops": 1,
+              "coverage": 0.1667,
+              "accuracy": 1.0,
+              "precision": null
+            }
+          ],
+          "operating_points": [
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null,
+              "target_coverage": 0.5,
+              "target_reached": false
+            },
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null,
+              "target_coverage": 0.7,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0,
+              "target_coverage": 0.9,
+              "target_reached": false
+            }
+          ],
+          "disagreement": {
+            "partner": "baseline",
+            "delta": 0.409744,
+            "count": 1,
+            "in_queue": 0,
+            "dropped": 1,
+            "item_catch_rate": {
+              "status": "scored",
+              "reason": "mean catch-rate of flagged items minus mean catch-rate of the others",
+              "n_flagged": 1,
+              "n_other": 6,
+              "rate_flagged": 0.0,
+              "rate_other": 0.5,
+              "difference": {
+                "mean": -0.5,
+                "low": -0.8333,
+                "high": 0.0,
+                "n": 7,
+                "draws": 2654
+              }
+            },
+            "faults": {
+              "missed": 5,
+              "missed_with_disagreement": 0,
+              "caught": 1,
+              "caught_with_disagreement": 0
+            },
+            "arrival_score_spearman_mean": 0.9999999999999999,
+            "note": "Strong disagreement is a slot-membership difference whose |score - threshold| is at least the 75th percentile of those gaps. Alerts use the contrastive encoder's median split when an encoder is loaded; other items, and every item when it is not, use the first-come queue. An in-queue flag is not removed from the page set."
+          },
+          "examples": [],
+          "global_importance": [],
+          "contribution_sum_gap": null,
+          "importance_rows": null,
+          "pages": false
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "status": "trained",
+      "backend": "pointwise",
+      "device": "cpu",
+      "fell_back": false,
+      "by_k": {
+        "20": {
+          "budget_k": 20,
+          "threshold": 1.9985752783662702,
+          "candidates": 7,
+          "slot_items": 6,
+          "baseline_slot_items": 6,
+          "ranker_queue": {
+            "faults_caught": 2,
+            "faults": 6,
+            "detection_rate": 0.3333,
+            "false_items_per_day": 0.29,
+            "precision": 0.3333
+          },
+          "baseline_queue": {
+            "faults_caught": 2,
+            "faults": 6,
+            "detection_rate": 0.3333,
+            "false_items_per_day": 0.29,
+            "precision": 0.3333
+          },
+          "per_fault_catch_delta_vs_baseline": {
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "n": 6,
+            "decision": "drop",
+            "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+          },
+          "shipped_abstain_preview": {
+            "note": "Items the RANKER_ABSTAIN flag would list: not shown, and not confidently below the gate. The flag does not remove anything from the K queue. This preview uses the 25th percentile of |score - threshold| unless RANKER_ABSTAIN_DELTA is set. The curve below is hypothetical.",
+            "delta": 1.013912,
+            "review_count": 0,
+            "review_faults": 0,
+            "review_faults_missed_by_queue": 0
+          },
+          "hypothetical_coverage_curve": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0003,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0072,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.0139,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.4358,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5261,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5511,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            },
+            {
+              "delta": 1.5866,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null
+            }
+          ],
+          "operating_points": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.5,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.7,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 0,
+              "review": 6,
+              "keeps": 0,
+              "drops": 0,
+              "coverage": 0.0,
+              "accuracy": null,
+              "precision": null,
+              "target_coverage": 0.9,
+              "target_reached": false
+            }
+          ],
+          "disagreement": {
+            "partner": "baseline",
+            "delta": 1.526134,
+            "count": 0,
+            "in_queue": 0,
+            "dropped": 0,
+            "item_catch_rate": {
+              "status": "no-contrast",
+              "reason": "one group is empty",
+              "n_flagged": 0,
+              "n_other": 7,
+              "rate_flagged": null,
+              "rate_other": 0.4286,
+              "difference": null
+            },
+            "faults": {
+              "missed": 4,
+              "missed_with_disagreement": 0,
+              "caught": 2,
+              "caught_with_disagreement": 0
+            },
+            "arrival_score_spearman_mean": 0.9999999999999999,
+            "note": "Strong disagreement is a slot-membership difference whose |score - threshold| is at least the 75th percentile of those gaps. Alerts use the contrastive encoder's median split when an encoder is loaded; other items, and every item when it is not, use the first-come queue. An in-queue flag is not removed from the page set."
+          },
+          "examples": [],
+          "global_importance": [],
+          "contribution_sum_gap": null,
+          "importance_rows": null,
+          "pages": false
+        },
+        "1": {
+          "budget_k": 1,
+          "threshold": 0.8821849837176567,
+          "candidates": 7,
+          "slot_items": 1,
+          "baseline_slot_items": 2,
+          "ranker_queue": {
+            "faults_caught": 1,
+            "faults": 6,
+            "detection_rate": 0.1667,
+            "false_items_per_day": 0.0,
+            "precision": 1.0
+          },
+          "baseline_queue": {
+            "faults_caught": 0,
+            "faults": 6,
+            "detection_rate": 0.0,
+            "false_items_per_day": 0.14,
+            "precision": 0.0
+          },
+          "per_fault_catch_delta_vs_baseline": {
+            "mean": 0.1667,
+            "low": 0.0,
+            "high": 0.5,
+            "n": 6,
+            "decision": "drop",
+            "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+          },
+          "shipped_abstain_preview": {
+            "note": "Items the RANKER_ABSTAIN flag would list: not shown, and not confidently below the gate. The flag does not remove anything from the K queue. This preview uses the 25th percentile of |score - threshold| unless RANKER_ABSTAIN_DELTA is set. The curve below is hypothetical.",
+            "delta": 0.11037,
+            "review_count": 1,
+            "review_faults": 1,
+            "review_faults_missed_by_queue": 1
+          },
+          "hypothetical_coverage_curve": [
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0
+            },
+            {
+              "delta": 0.1003,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0
+            },
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.1104,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.3194,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4097,
+              "candidates": 6,
+              "automated": 2,
+              "review": 4,
+              "keeps": 0,
+              "drops": 2,
+              "coverage": 0.3333,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4347,
+              "candidates": 6,
+              "automated": 1,
+              "review": 5,
+              "keeps": 0,
+              "drops": 1,
+              "coverage": 0.1667,
+              "accuracy": 1.0,
+              "precision": null
+            },
+            {
+              "delta": 0.4702,
+              "candidates": 6,
+              "automated": 1,
+              "review": 5,
+              "keeps": 0,
+              "drops": 1,
+              "coverage": 0.1667,
+              "accuracy": 1.0,
+              "precision": null
+            }
+          ],
+          "operating_points": [
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null,
+              "target_coverage": 0.5,
+              "target_reached": false
+            },
+            {
+              "delta": 0.1029,
+              "candidates": 6,
+              "automated": 4,
+              "review": 2,
+              "keeps": 0,
+              "drops": 4,
+              "coverage": 0.6667,
+              "accuracy": 1.0,
+              "precision": null,
+              "target_coverage": 0.7,
+              "target_reached": false
+            },
+            {
+              "delta": 0.0,
+              "candidates": 6,
+              "automated": 5,
+              "review": 1,
+              "keeps": 1,
+              "drops": 4,
+              "coverage": 0.8333,
+              "accuracy": 1.0,
+              "precision": 1.0,
+              "target_coverage": 0.9,
+              "target_reached": false
+            }
+          ],
+          "disagreement": {
+            "partner": "baseline",
+            "delta": 0.409744,
+            "count": 1,
+            "in_queue": 0,
+            "dropped": 1,
+            "item_catch_rate": {
+              "status": "scored",
+              "reason": "mean catch-rate of flagged items minus mean catch-rate of the others",
+              "n_flagged": 1,
+              "n_other": 6,
+              "rate_flagged": 0.0,
+              "rate_other": 0.5,
+              "difference": {
+                "mean": -0.5,
+                "low": -0.8333,
+                "high": 0.0,
+                "n": 7,
+                "draws": 2654
+              }
+            },
+            "faults": {
+              "missed": 5,
+              "missed_with_disagreement": 0,
+              "caught": 1,
+              "caught_with_disagreement": 0
+            },
+            "arrival_score_spearman_mean": 0.9999999999999999,
+            "note": "Strong disagreement is a slot-membership difference whose |score - threshold| is at least the 75th percentile of those gaps. Alerts use the contrastive encoder's median split when an encoder is loaded; other items, and every item when it is not, use the first-come queue. An in-queue flag is not removed from the page set."
+          },
+          "examples": [],
+          "global_importance": [],
+          "contribution_sum_gap": null,
+          "importance_rows": null,
+          "pages": false
+        }
+      }
+    }
+  ],
+  "walk_forward": {
+    "folds": [
+      {
+        "train_end": "2026-01-12T03:00:00+00:00",
+        "test_end": "2026-01-19T03:00:00+00:00",
+        "test_faults": 5,
+        "seeds": [
+          {
+            "seed": 42,
+            "status": "trained",
+            "faults_caught": 2,
+            "baseline_caught": 2,
+            "review_count": 0,
+            "disagreement_count": 0,
+            "per_fault_catch_delta_vs_baseline": {
+              "mean": 0.0,
+              "low": 0.0,
+              "high": 0.0,
+              "n": 5,
+              "decision": "drop",
+              "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+            }
+          },
+          {
+            "seed": 0,
+            "status": "trained",
+            "faults_caught": 2,
+            "baseline_caught": 2,
+            "review_count": 0,
+            "disagreement_count": 0,
+            "per_fault_catch_delta_vs_baseline": {
+              "mean": 0.0,
+              "low": 0.0,
+              "high": 0.0,
+              "n": 5,
+              "decision": "drop",
+              "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+            }
+          },
+          {
+            "seed": 1,
+            "status": "trained",
+            "faults_caught": 2,
+            "baseline_caught": 2,
+            "review_count": 0,
+            "disagreement_count": 0,
+            "per_fault_catch_delta_vs_baseline": {
+              "mean": 0.0,
+              "low": 0.0,
+              "high": 0.0,
+              "n": 5,
+              "decision": "drop",
+              "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+            }
+          }
+        ]
+      },
+      {
+        "train_end": "2026-01-19T03:00:00+00:00",
+        "test_end": "2026-01-25T03:15:01+00:00",
+        "test_faults": 1,
+        "seeds": [
+          {
+            "seed": 42,
+            "status": "trained",
+            "faults_caught": 1,
+            "baseline_caught": 1,
+            "review_count": 0,
+            "disagreement_count": 0,
+            "per_fault_catch_delta_vs_baseline": {
+              "mean": 0.0,
+              "low": 0.0,
+              "high": 0.0,
+              "n": 1,
+              "decision": "drop",
+              "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+            }
+          },
+          {
+            "seed": 0,
+            "status": "trained",
+            "faults_caught": 1,
+            "baseline_caught": 1,
+            "review_count": 0,
+            "disagreement_count": 0,
+            "per_fault_catch_delta_vs_baseline": {
+              "mean": 0.0,
+              "low": 0.0,
+              "high": 0.0,
+              "n": 1,
+              "decision": "drop",
+              "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+            }
+          },
+          {
+            "seed": 1,
+            "status": "trained",
+            "faults_caught": 1,
+            "baseline_caught": 1,
+            "review_count": 0,
+            "disagreement_count": 0,
+            "per_fault_catch_delta_vs_baseline": {
+              "mean": 0.0,
+              "low": 0.0,
+              "high": 0.0,
+              "n": 1,
+              "decision": "drop",
+              "reason": "95% interval of the per-fault catch difference vs the first-come queue is not above 0"
+            }
+          }
+        ]
+      }
+    ],
+    "flags_changed": false
+  },
+  "command": "run_ranker_audit.py --data synthetic --backend pointwise --seeds 42,0,1 --walk-forward --out results/ranker_audit_synthetic.json"
+}

@@ -1,10 +1,10 @@
 # Optional models
 
-**Status:** all off. **Version:** 1.1.0. Release 1.1.0 does not set any flag below. A keep in the measured section is not a default. Live paging is unchanged (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). LLM notes never page.
+**Status:** all off. **Version:** 1.2.0. Release 1.1.0 does not set any flag below. A keep in the measured section is not a default. Live paging is unchanged (`APP_PASSWORD`, a channel, the typed word `LIVE`, ingest jobs only). LLM notes never page. `RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` are also off. They do not page, and a review item is not a page.
 
 The decisions, using only the counts already in this file:
 
-- Learned ranker: kept on the PR #26 GAIA run. `LEARNED_RANKER` stays off. The synthetic ranker dropped (see the synthetic table).
+- Learned ranker: kept on the PR #26 GAIA run. The 3 November 2026 re-run is `docs/results/gaia_ranker_rerun/`: at K = 20, 887 against the baseline's 851 of 1,223, difference +0.0294, interval [0.0147, 0.0442], KEEP. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 [0.0131, 0.0401]. `LEARNED_RANKER` stays off. The synthetic ranker dropped (see the synthetic table). The homelab day-12 measurement, including the leave-one-company-out drop, is `FINAL_REPORT.md` §B7.
 - Contrastive log encoder: kept on GAIA (seed 42, 851 to 860 of 1223 faults, 5 of 6 seeds). `LOG_ENCODER` stays unset, and `LLM_TEMPLATE_FEATURES` stays off.
 - Trace model: kept only on the pooled RCAEval RE2+RE3 comparison (commit `fda695c`, 4 of 5 seeds). Each suite on its own drops. `TRACE_MODEL` stays off.
 - Metric TCN: dropped. The published GAIA extract is the memory channel only. `METRIC_MODEL` stays off.
@@ -138,7 +138,75 @@ The window ends at the last alert (`window_end` `last alert`): train end `2026-0
 
 Walk-forward, two folds, K = 20. Fold 1 (5 faults, false items/day 0.5): metric model and both keep, 5 caught against 2, interval 0.6 / 0.2 / 1.0; ranker drop, 2 caught, interval 0.0 / 0.0 / 0.0. Fold 2 (1 fault): every variant caught that fault; metric model, ranker and both drop with interval 0.0 / 0.0 / 0.0. Pooled across both folds (6 faults): metric model and both keep, mean 0.5, interval 0.1667 / 0.8333; ranker drop, interval 0.0 / 0.0 / 0.0. `flags_changed` is false.
 
-`record_run` stores torch, safetensors and XGBoost versions, the CUDA version string, and the optional-model flags under `ml` (`metric_model`, `learned_ranker`, `trace_model`, `llm_lora`, `log_encoder`). It appends one line to `app/results/experiments.jsonl`. Leave those lines in place. Checking the file out or replacing it with the last committed copy drops the run log. Commit the new lines, or leave the file dirty. `docs/mlops.md` is the longer note.
+`record_run` stores torch, safetensors and XGBoost versions, the CUDA version string, and the optional-model flags under `ml` (`metric_model`, `learned_ranker`, `trace_model`, `llm_lora`, `log_encoder`, and the three ranker-audit flags). It appends one line to `app/results/experiments.jsonl`. Leave those lines in place. Checking the file out or replacing it with the last committed copy drops the run log. Commit the new lines, or leave the file dirty. `docs/mlops.md` is the longer note.
+
+## Ranker audit — reasons, confidence, disagreement
+
+Three flags sit beside `LEARNED_RANKER`. Each defaults off. With all three off, `finish_queue` does not add `ranker_audit`, the job JSON is unchanged, and the queue page hides the review panel. With one on, the shown items are still `ranker.select()`. The audit is shadow output.
+
+- `RANKER_EXPLAIN` attaches the top three features for shown and attached items, and a global mean of absolute contributions. The method is exact interventional SHAP against the training mean (the zero vector after scaling). The `shap` package is not installed. Stored trees have no booster, so XGBoost `pred_contribs` is not called. Contributions are required to sum to the score the queue uses. A feature whose scaled value is the baseline contributes 0. At most 256 rows are explained (`RANKER_EXPLAIN_MAX`, clamped to 1–4096).
+- `RANKER_ABSTAIN` lists dropped, non-attached items whose score is at least `threshold - delta`. The default delta is the 25th percentile of `|score - threshold|`. `RANKER_ABSTAIN_DELTA` overrides it when the value is a finite number ≥ 0. A bad value falls back to the percentile. A score below `threshold - delta` stays silent. Shown items are not removed.
+- `RANKER_DISAGREE` flags a slot-membership disagreement whose `|score - threshold|` is at least the 75th percentile of those gaps (`RANKER_DISAGREE_DELTA` overrides it the same way). Alerts use the contrastive encoder's median split of embedding means when `LOG_ENCODER=contrastive` and the file loads (partner `contrastive+baseline`). Every other item, and every item when the encoder is absent, uses the first-come queue (partner `baseline`). An in-queue flag stays in the page set. A dropped disagreement joins the review list so it is not silent. `review_reason` is `low_confidence`, `disagreement`, or `low_confidence+disagreement`.
+
+The review list is not passed to `page_items` or `would_have_paged`. `pages` on the audit is false. A failure while building the audit records `audit-failed` and still returns the shown queue.
+
+The coverage curve is hypothetical and is not applied to the live queue. An automated keep is an in-queue item with `score >= threshold + delta`. An automated drop is an item outside the queue with `score <= threshold - delta`. Everything else is review. Coverage is automated / non-attached candidates. Accuracy is correct automated decisions / automated decisions. Precision is correct keeps / keeps. A keep is correct when the existing catch rule fires. The sweep uses delta 0 and the 0, 0.1, 0.25, 0.5, 0.75, 0.9 and 1 quantiles of `|score - threshold|`. Operating points target coverage 0.5, 0.7 and 0.9. `target_reached` is true only within 0.02 of the target.
+
+The script does not set `LEARNED_RANKER` or any audit flag. `flags_changed` stays false even if an interval is above zero. A synthetic run leaves `gaia` as `pending: this run did not score GAIA`.
+
+From `app/`, on the shipped generator:
+
+```bash
+uv run python run_ranker_audit.py --data synthetic --backend pointwise --seeds 42,0,1 --walk-forward \
+    --out results/ranker_audit_synthetic.json
+```
+
+On the GPU machine, with `data/gaia_raw` and `data/gaia_metrics` present (not run in this tree):
+
+```bash
+uv run --no-sync python run_ranker_audit.py --data gaia --backend xgboost --device cuda \
+    --seeds 42,0,1,2,3 --walk-forward --out results/ranker_audit_gaia.json
+```
+
+Add `--encoder results/log_encoder` when a hash-checked contrastive encoder already exists. Without it the second opinion is the first-come queue.
+
+### Synthetic audit (this tree)
+
+Command above, cwd `app/`. Pointwise backend, `fell_back` false, seeds 42, 0 and 1. Data: `generate_multivariate`, 21 days, generator seed 42. File: `app/results/ranker_audit_synthetic.json`. Encoder `not requested`. Train end `2026-01-12T03:00:00+00:00`, test end `2026-01-25T03:15:01+00:00`, `window_end` `last alert`, 6 held-out faults. SHAP ran on seed 42's K = 20 rows only. `contribution_sum_gap` is 0.0 on those 6 rows. `pages` is false. `flags_changed` is false. Bootstrap seed 42, 4000 draws.
+
+K = 20, all three seeds. Ranker and first-come both caught 2 of 6 (detection 0.3333, false items a day 0.29, precision 0.3333). Per-fault difference mean 0.0, low 0.0, high 0.0, n = 6, decision drop. Candidates 7, slot items 6, baseline slots 6, threshold 1.9985752783662702. That threshold sits above every probability, and the day fits in K, so the shipped gate is not applied. Shipped preview: delta 1.013912, review count 0, review faults 0. Disagreement count 0 (in queue 0, dropped 0). Item catch-rate status `no-contrast` (0 flagged, 7 other, other rate 0.4286). Missed faults 4 with 0 disagreements; caught faults 2 with 0 disagreements. Arrival-score Spearman mean stored as 0.9999999999999999. The hypothetical curve has 8 points, all coverage 0.0, accuracy null, precision null, review 6, keeps 0, drops 0, automated 0, candidates 6. Deltas: 0.0, 1.0003, 1.0072, 1.0139, 1.4358, 1.5261, 1.5511, 1.5866. Targets 0.5, 0.7 and 0.9 all pick delta 0.0 and `target_reached` false.
+
+Global importance, mean absolute SHAP, 6 non-attached rows: `hour_cos` 0.218464, `rise_ratio` 0.064278, `log_rise` 0.017954, `kind_alert` 0.016498, `severity_rank` 0.016498, `kind_jump` 0.016498, `hour_sin` 0.001193, `metric_score` 0.0, `kind_rule` 0.0, `kind_leak` 0.0, `kind_gap` 0.0.
+
+Worked examples, seed 42, K = 20:
+
+| Example | Kind | Service | shown_at | Score | In queue | Catches a fault |
+|---|---|---|---|---:|---|---|
+| highest score | alert | db | 2026-01-13T18:01:00+00:00 | 0.986852 | yes | yes |
+| lowest score | jump | db | 2026-01-14T01:01:00+00:00 | 0.412015 | yes | no |
+
+Highest-score reasons: `hour_cos` value 0.004363, contribution −0.015493; `rise_ratio` 0.0, +0.005371; `log_rise` 0.0, +0.001993. Lowest-score reasons: `hour_cos` 0.964787, −0.370833; `rise_ratio` 1.252008, −0.106758; `log_rise` 9.300836, −0.02671. `catches_fault` is the scoring label, not a feature.
+
+K = 1 is an extra budget so the cut binds. It is not the published headline. All three seeds: ranker caught 1 of 6 (detection 0.1667, false items a day 0.0, precision 1.0); first-come caught 0 of 6 (detection 0.0, false items a day 0.14, precision 0.0). Mean difference 0.1667, low 0.0, high 0.5, n = 6, decision drop. The lower bound is not above 0. Candidates 7, ranker slots 1, baseline slots 2, threshold 0.8821849837176567. Shipped preview delta 0.11037, review count 1, review faults 1, and that fault is one the queue missed. Disagreement count 1 (in queue 0, dropped 1), partner `baseline`, delta 0.409744. Flagged catch rate 0.0 (n = 1) against 0.5 on the other 6. Difference mean −0.5, low −0.8333, high 0.0, n = 7, 2654 draws. The interval includes 0. Misses 5, of which 0 carry a disagreement flag; the caught fault also has none. The confidence review bucket, not the disagreement flag, holds the fault the K = 1 queue missed.
+
+Hypothetical curve at K = 1 (delta, coverage, accuracy, precision, review, keeps, drops, automated; 6 candidates):
+
+| Delta | Coverage | Accuracy | Precision | Review | Keeps | Drops | Automated |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.0 | 0.8333 | 1.0 | 1.0 | 1 | 1 | 4 | 5 |
+| 0.1003 | 0.8333 | 1.0 | 1.0 | 1 | 1 | 4 | 5 |
+| 0.1029 | 0.6667 | 1.0 | | 2 | 0 | 4 | 4 |
+| 0.1104 | 0.6667 | 1.0 | | 2 | 0 | 4 | 4 |
+| 0.3194 | 0.6667 | 1.0 | | 2 | 0 | 4 | 4 |
+| 0.4097 | 0.3333 | 1.0 | | 4 | 0 | 2 | 2 |
+| 0.4347 | 0.1667 | 1.0 | | 5 | 0 | 1 | 1 |
+| 0.4702 | 0.1667 | 1.0 | | 5 | 0 | 1 | 1 |
+
+Operating points: target 0.5 not reached (closest delta 0.1029, coverage 0.6667, accuracy 1.0, precision null, review 2); target 0.7 the same point; target 0.9 not reached (closest delta 0.0, coverage 0.8333, accuracy 1.0, precision 1.0, review 1).
+
+Walk-forward, two folds, K = 20, seeds 42, 0 and 1. Every seed drops, review 0, disagreement 0. Fold 1 train end `2026-01-12T03:00:00+00:00`, test end `2026-01-19T03:00:00+00:00`, 5 faults: ranker 2, baseline 2, interval 0.0 / 0.0 / 0.0, n = 5. Fold 2 train end `2026-01-19T03:00:00+00:00`, test end `2026-01-25T03:15:01+00:00`, 1 fault: ranker 1, baseline 1, interval 0.0 / 0.0 / 0.0, n = 1. `flags_changed` is false.
+
+No gain is claimed. The K = 20 interval is 0. The K = 1 interval includes 0. Disagreement on this sample does not predict faults. GAIA counts for this audit are pending the command above.
 
 ## Model 3 — trace / service-graph root cause
 

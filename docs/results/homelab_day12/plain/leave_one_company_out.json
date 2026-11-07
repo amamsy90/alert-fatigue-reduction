@@ -1,0 +1,10 @@
+{
+  "status": "off",
+  "reason": "Pass --learned-ranker to train the slot ranker on the other companies and score the held-out company at K=20. LEARNED_RANKER is not set.",
+  "product_flags": {
+    "LEARNED_RANKER": "off",
+    "METRIC_MODEL": "off",
+    "LLM_EXPLAIN": "off",
+    "SHADOW_MODE": "unchanged"
+  }
+}

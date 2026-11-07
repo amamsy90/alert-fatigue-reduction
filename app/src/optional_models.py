@@ -7,6 +7,7 @@ existing gates, and only for items the queue actually showed.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import pandas as pd
 
@@ -19,6 +20,13 @@ from .metric_model import (
 )
 from .queue import QueueItem, build_queue
 from .ranker import learned_ranker_enabled, learned_ranker_path, load_ranker
+from .ranker_audit import (
+    audit_enabled,
+    build_ranker_audit,
+    ranker_abstain_enabled,
+    ranker_disagree_enabled,
+    ranker_explain_enabled,
+)
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +37,7 @@ def finish_queue(
     config: Config,
 ) -> tuple[list[QueueItem], dict[str, str]]:
     """The queue to show. With both flags off this is ``build_queue``."""
-    status = {"metric_model": "off", "learned_ranker": "off"}
+    status: dict[str, Any] = {"metric_model": "off", "learned_ranker": "off"}
     if not metric_model_enabled() and not learned_ranker_enabled():
         return build_queue(candidates, config), status
 
@@ -70,6 +78,22 @@ def finish_queue(
                     try:
                         shown = ranker.select(items, scores, config)
                         status["learned_ranker"] = "applied"
+                        if audit_enabled():
+                            try:
+                                audit = build_ranker_audit(ranker, items, shown, scores, config)
+                            except Exception:
+                                log.warning("ranker audit failed; the queue is unchanged", exc_info=True)
+                                audit = {
+                                    "pages": False,
+                                    "error": "audit-failed",
+                                    "explain": "on" if ranker_explain_enabled() else "off",
+                                    "abstain": "on" if ranker_abstain_enabled() else "off",
+                                    "disagree": "on" if ranker_disagree_enabled() else "off",
+                                    "needs_human_review": [],
+                                    "review_count": 0,
+                                }
+                            if audit is not None:
+                                status["ranker_audit"] = audit
                         return shown, status
                     except Exception:
                         log.warning("learned ranker did not score; keeping arrival order", exc_info=True)
