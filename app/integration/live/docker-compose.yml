@@ -1,0 +1,54 @@
+# Live soak: the real app, Prometheus and Alertmanager around a simulated fleet with real-time faults.
+#   uv run python run_live_soak.py --minutes 120
+# Nothing pages: SHADOW_MODE=1 and no channel keys.
+name: oncall-live
+
+services:
+  app:
+    build: ../..
+    environment:
+      SHADOW_MODE: "1"
+      APP_PASSWORD: live-soak-password
+      INGEST_TOKEN: live-soak-token
+      PROM_ALLOW_PRIVATE: "1"
+      PROM_URL: http://prometheus:9090
+      PROM_SERVICE_LABEL: container
+      QUEUE_DB: /app/product/data/queue.db
+    volumes:
+      - app-data:/app/product/data
+    ports:
+      - "127.0.0.1:18090:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  fleet:
+    image: python:3.12-slim
+    command: ["python", "/fleet/fleet.py", "--warmup", "${WARMUP:-1200}", "--fault-every", "${FAULT_EVERY:-300}"]
+    volumes:
+      - ./fleet.py:/fleet/fleet.py:ro
+    ports:
+      - "127.0.0.1:19100:9100"
+
+  prometheus:
+    image: prom/prometheus:v2.53.4
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./rules.yml:/etc/prometheus/rules.yml:ro
+    ports:
+      - "127.0.0.1:19091:9090"
+    depends_on: [fleet, alertmanager]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:19094:9093"
+
+volumes:
+  app-data:

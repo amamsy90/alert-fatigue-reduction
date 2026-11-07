@@ -1,0 +1,18 @@
+groups:
+  - name: live-soak
+    rules:
+      # Always firing, as in kube-prometheus: it makes Alertmanager post to the webhook regularly
+      # so ingest jobs always have rows, and it proves the whole alert path is alive.
+      - alert: Watchdog
+        expr: vector(1)
+        labels: {severity: info, service: watchdog}
+      # A log-style alert, but only for services with a high baseline: most faults do not raise one.
+      - alert: HighMemory
+        expr: container_memory_working_set_bytes > 3.2e9
+        for: 30s
+        labels: {severity: warning}
+      # Noise that is never a fault.
+      - alert: ErrorBurst
+        expr: fleet_error_ratio > 0.2
+        for: 20s
+        labels: {severity: warning}

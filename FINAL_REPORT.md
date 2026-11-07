@@ -19,7 +19,7 @@ Each objective below is paired with the measurement this submission reports. The
 | Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector (`jumps_tuned`) wins 8 of 8 walk-forward weeks against the Prometheus rate rule |
 | Decide with no future data | No decision uses a later point, the end of a jump, or its peak | A jump is shown at the second confirming point. `tests/test_causality.py` checks that rule |
 | Ship with shadow paging and a versioned model | Record what would have been paged until Live is armed. Models are versioned and can be rolled back | Shadow is the default. Live needs `APP_PASSWORD`, a channel, and the typed word LIVE, and only an ingest job may page. Models load as skops |
-| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 531 passed, 10 skipped; line coverage 86%; `run_validate.py` matches the printed figures |
+| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 542 passed, 10 skipped; line coverage 86%; `run_validate.py` matches the printed figures |
 
 ## 2. Architecture and implementation
 
@@ -56,7 +56,7 @@ The jump detector is the row `jumps_tuned`: 888 of 1,223 faults (72.6%) and 1.0 
 
 About 22 faults are injected a day, more than 20 slots on 34 of the 55 test days, which is why the best possible result at this budget is 84.9% rather than 100%. When the full queue misses, Appendix D shows that the misses are mostly a monitoring gap or a day whose 20 slots were already full. The jump rule itself fails on only a small share of those misses.
 
-On this commit, `uv run pytest -q` in `app/` reported 531 passed and 10 skipped. Line coverage is 87%. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C). `uv run python run_validate.py` matched the printed figures (195 checked numbers).
+On this commit, `uv run pytest -q` in `app/` reported 542 passed and 10 skipped. Line coverage is 87%. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C). `uv run python run_validate.py` matched the printed figures (195 checked numbers).
 
 The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on RCAEval, NAB and SMD are in the appendices.
 
@@ -110,10 +110,10 @@ The budgeted jump queue beats the rules a team already runs, under a limit of K 
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§7, §9, §10) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 531 passed, 0 failed, 87% coverage, 0.32 s (§8) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 542 passed, 0 failed, 87% coverage, 0.32 s (§8) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
-**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 443 automated tests (531 pass on CPU CI) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
+**Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 443 automated tests (542 pass on CPU CI) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
 ### 4. Target users and use case
 
@@ -339,12 +339,12 @@ An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That fl
 
 | Criterion | Target | Result |
 |---|---|---|
-| Tests passing | 100% of tests that run | 531 passed, 10 skipped |
+| Tests passing | 100% of tests that run | 542 passed, 10 skipped |
 | Line coverage | ≥ 85% | 87% |
 | Type errors | 0 | 0 |
 | p95 latency at 50 users | ≤ 1 s | 0.32 s |
 | Error rate under load | ≤ 1% | 0% |
-| Report numbers match results | every checked number | 278 / 278 |
+| Report numbers match results | every checked number | 300 / 300 |
 
 CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py`, a dependency audit (`pip-audit` on the hash-pinned lock) and a Docker build with a health check on every push. The audit step was added on 7 October with an option `pip-audit` does not have, so that job failed on that commit; it was corrected on 10 October (a hand run of the corrected command found no known vulnerabilities). Details: `docs/test_plan.md`.
 
@@ -355,7 +355,7 @@ CI runs lint, type checks, the tests on two Python versions with coverage, `run_
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 531 passed, 10 skipped | Yes |
+| At least 90% of predefined test cases pass | 542 passed, 10 skipped | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds +13.3 points over no log alerts, with an interval above zero (+2.2 over severity alerts), and the gate promotes it, at its margin, judged on the same 45 cases that are scored (§B5); decided on separate cases, the gate refuses it on all six applications, and the shipped queue gains 7.2 points over no log alerts pooled over RE2 by using severity alerts (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA or on independent RCAEval cases, where simple severity alerts do the work |
@@ -860,6 +860,26 @@ Two defects this replay exposed, both fixed and covered by tests: with no active
 
 Reproduce: `cd app && uv run python run_live_replay.py` (GAIA sample, no download) and `uv run python run_live_replay.py --dataset rcaeval:RE2:tt` (needs `tools/fetch_rcaeval_re23.py`).
 
+### B9. Live soak (real Prometheus, Alertmanager and app; simulated fleet)
+
+The replay in §B8 is accelerated. The soak runs in real time: `app/run_live_soak.py` starts the built app image, a real Prometheus and a real Alertmanager (`app/integration/live/`). A small program stands in for six services and exposes their memory; Prometheus scrapes it every 10 s, Alertmanager posts firing alerts to the app's webhook, and the app also exposes its own `/metrics`, which Prometheus scrapes. The fleet injects a +1 GB step for 10 minutes on one service about every 5 minutes (22 and 19 faults in two runs), smaller benign bumps and error bursts, and keeps the ground truth. Every 3 minutes the runner runs an ingest job, a simulated engineer (90% accurate against the truth) marks the items shown, and every 10 minutes it calls the retrain job. Shadow mode stays on and no channel is configured, so nothing can page. **This is a soak test, not production traffic and not a pilot:** the services, the faults and the engineer are simulated.
+
+| Run (2 hours each) | Faults judged | Caught | False jumps | Median delay | Jobs run / skipped / failed | Marks | Precision from marks |
+|---|---|---|---|---|---|---|---|
+| 1, before the fix below | 19 | 13 (68.4%) | 0 | 1.34 min | 20 / 20 / 0 | 157 | 86.6% |
+| 2, final | 18 | 18 (100.0%) | 0 | 1.58 min | 21 / 19 / 0 | 191 | 88.0% |
+
+What it shows:
+
+- **The live path works end to end.** Alerts reach the webhook from a real Alertmanager, each ingest job scores live Prometheus series, the monitoring check stayed ok in every cycle (100%), and Prometheus scraped the app's own metrics. No job failed. A job is skipped, not failed, when no new alert has arrived since the last one (Alertmanager repeats about every 2 minutes).
+- **Run 1 missed 6 of 19 faults, and the cause was the test rig, not the app.** The fleet sometimes started a new fault on a service right after its previous fault ended. The jump rule compares each point with the median of the previous 15 minutes, which was still high, so the second fault had no rise to see. An offline replay of the fleet schedule through the real detector reproduced it: 149 of 213 faults caught, and all 64 misses started within 15 minutes of an earlier fault on the same service. The fleet now waits 20 minutes between faults on one service (test: `test_faults_on_one_service_are_never_closer_than_the_jump_window`). This is also a real limit of the detector: **a second fault on a service that is already elevated is not seen as a new jump.**
+- **Retraining ran once and did not promote.** Of 10 scheduled calls, nine were correctly refused (too few new marks, too little labelled history, or the 6-hour minimum between models) and one trained a candidate that the gate refused. The queue stayed on severity rules and no model was active.
+- **The drift check does not run in a 2-hour soak.** It needs 30 alerts in a job and 100 earlier alerts, and the soak posts about one alert per job.
+
+Drift and retrain phase (`--drift-phase`, run on a fresh stack): to exercise the drift check the runner posts alert storms of 40 alerts to the webhook, made by the script and not by Prometheus. Three storms in the usual mix build the history; the first three jobs report `n/a` (history too small). A fourth storm changes the mix (new alert names, `critical` severity, new sources, new wording) and the job warns (largest PSI 18.09, wording classifier AUC 1.00). A fifth storm in the usual mix still warns, because the history now contains the shifted storm: the reference is every earlier job, not only normal ones, so it needs a reviewer to decide what is normal. The retrain that followed trained a candidate on 8 marks and the gate refused it.
+
+Reproduce (needs Docker, about 2 hours): `cd app && uv run python run_live_soak.py --minutes 120 --warmup 900 --fault-every 300 --job-every 180 --retrain-every 600`; the drift phase is `uv run python run_live_soak.py --minutes 0 --drift-phase --out results/live_drift_phase.json`. Results: `app/results/live_soak.json`, `live_soak_run1_before_cooldown.json`, `live_drift_phase.json`.
+
 ## Appendix G. Reproduction and checked numbers
 
 ### C1. How to reproduce
@@ -1213,6 +1233,28 @@ AI coding assistants were used while building this project: for code review, ref
 | `replay.tt.marks` | 194 | §B8 |
 | `replay.tt.real_marks` | 50 | §B8 |
 | `replay.tt.precision_from_marks` | 25.8% | §B8 |
+| `soak1.faults_injected` | 22 | §B9 |
+| `soak1.faults_judged` | 19 | §B9 |
+| `soak1.faults_caught` | 13 | §B9 |
+| `soak1.detection_rate` | 68.4% | §B9 |
+| `soak1.false_jumps` | 0 | §B9 |
+| `soak.faults_injected` | 19 | §B9 |
+| `soak.faults_judged` | 18 | §B9 |
+| `soak.faults_caught` | 18 | §B9 |
+| `soak.detection_rate` | 100.0% | §B9 |
+| `soak.false_jumps` | 0 | §B9 |
+| `soak.median_delay_minutes` | 1.58 | §B9 |
+| `soak.shown_jumps` | 191 | §B9 |
+| `soak.jobs_run` | 21 | §B9 |
+| `soak.jobs_skipped` | 19 | §B9 |
+| `soak.jobs_failed` | 0 | §B9 |
+| `soak.marks` | 191 | §B9 |
+| `soak.precision_from_marks` | 88.0% | §B9 |
+| `soak.retrains_run` | 1 | §B9 |
+| `soak.monitoring_ok_share` | 100.0% | §B9 |
+| `driftphase.shifted_psi_max` | 18.09 | §B9 |
+| `driftphase.shifted_text_auc` | 1.00 | §B9 |
+| `driftphase.usual_jobs_with_drift_n_a` | 3 | §B9 |
 
 ## Appendix H. Interfaces
 
