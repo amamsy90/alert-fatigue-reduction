@@ -6,6 +6,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
+from product import __version__
 from product import ops as ops_mod
 from product.monitoring import METRICS, gauges, liveness_fields
 from product.monitoring import health as service_health
@@ -98,6 +99,7 @@ def health():
         db_ok = False
     body = {
         "status": "ok" if db_ok else "degraded",
+        "version": __version__,
         "db_ok": db_ok,
         "shadow_mode": ops_mod.get_shadow_mode(),
         "login_required": bool(_accounts()),
