@@ -98,6 +98,7 @@ flowchart TB
 | `product/promotion.py`, `queue_check.py`, `training_report.py` | The promotion gate (pure rule over the held-out report), the three-way held-out queue score it reads, and the batch split and fit summaries; split out of `pipeline.py` | pipeline, model_store, src |
 | `src/drift.py` | Input drift between the training window and the scored window (PSI, KS, classifier two-sample test); stored in each job and read by `product/monitoring.py` | entities, features |
 | `src/challenger.py` | Champion-versus-challenger tally on labelled live alerts and the promote, keep or collecting recommendation; `product/model_store.py` stores it in the candidate's card | entities |
+| `product/retrain.py` | Scheduled retrain: due policy, history from stored jobs, the promotion gate, read-back verification and automatic rollback | pipeline, model_store, store, labels |
 | `product/inputs.py` | Read one batch for a mode (sample, GAIA, upload, ingest with Prometheus) | src, prometheus_adapter |
 | `product/paging.py` | Decide whether a job may page, send to each channel, move the page marks | ops, pagerduty, notifiers |
 | `product/store.py` | SQLite persistence; one transaction per call | — |

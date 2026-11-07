@@ -482,7 +482,22 @@ def run_job(*args, **kwargs) -> dict:
         record_job(kwargs.get("mode", "sample"), outcome, time.perf_counter() - start)
 
 
-def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel | None) -> SavedModel | None:
+def _environment() -> dict:
+    """Library versions a model card records, so a model can be traced to what built it."""
+    import platform
+    from importlib import metadata
+
+    out = {"python": platform.python_version()}
+    for name in ("scikit-learn", "numpy", "pandas", "skops"):
+        try:
+            out[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            out[name] = "unknown"
+    return out
+
+
+def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel | None,
+                        provenance: dict | None = None) -> SavedModel | None:
     """Register the model fitted on this batch as a new version; it becomes the
     active model only if it passes the promotion gate. Returns the active model."""
     if result.model is None:
@@ -502,7 +517,13 @@ def _save_trained_model(result: ScoredQueue, real_marks: int, loaded: SavedModel
     else:
         promote, reason = promotion_decision(result.training, loaded is not None, result.config or Config())
     training = result.training or {}
+    stamps = [a.timestamp for a in result.alerts]
     entry = register_model(saved, {
+        "environment": _environment(),
+        "batch_window": {"start": min(stamps).isoformat(), "end": max(stamps).isoformat(),
+                         "alerts": len(stamps)} if stamps else None,
+        "trigger": (provenance or {}).get("trigger", "job"),
+        "retrain": provenance,
         "data_fingerprint": result.data_fingerprint,
         "held_out": training.get("test"),
         "active_model_held_out": training.get("incumbent_test"),
