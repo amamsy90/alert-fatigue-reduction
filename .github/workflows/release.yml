@@ -56,7 +56,7 @@ jobs:
           PYTHON: python3
         run: |
           kind load docker-image "oncall-queue:${GITHUB_REF_NAME}" --name release-check
-          tools/deploy.sh release-check release-check             --set image.repository=oncall-queue --set image.pullPolicy=Never
+          bash tools/deploy.sh release-check release-check --set image.repository=oncall-queue --set image.pullPolicy=Never
       - name: Publish to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin

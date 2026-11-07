@@ -2,6 +2,11 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [1.2.4] - 2026-11-07
+
+### Fixed
+- Release 1.2.3 passed the build, the vulnerability scan, the SBOM and the cluster creation, then stopped at the deploy step: `tools/deploy.sh` was committed without the executable bit (permission denied on Linux). The file is now executable in git and the workflow calls it with `bash`. 1.2.4 has the same application code.
+
 ## [1.2.3] - 2026-11-07
 
 ### Fixed
