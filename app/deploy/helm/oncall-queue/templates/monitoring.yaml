@@ -1,0 +1,56 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "oncall.fullname" . }}
+  labels:
+    {{- include "oncall.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "oncall.selector" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      basicAuth:
+        username:
+          name: {{ include "oncall.secretName" . }}
+          key: APP_USER
+        password:
+          name: {{ include "oncall.secretName" . }}
+          key: APP_PASSWORD
+{{- end }}
+{{- if .Values.prometheusRule.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "oncall.fullname" . }}
+  labels:
+    {{- include "oncall.labels" . | nindent 4 }}
+spec:
+  # The rules from docs/monitoring.md section 2.
+  groups:
+    - name: oncall-queue
+      rules:
+        - alert: OncallQueueUnhealthy
+          expr: oncall_health_ok == 0
+          for: 15m
+        - alert: OncallQueueErrors
+          expr: sum(rate(oncall_http_requests_total{status="5xx"}[10m])) / sum(rate(oncall_http_requests_total[10m])) > 0.02
+          for: 10m
+        - alert: OncallQueuePageFailures
+          expr: increase(oncall_pages_total{outcome="failed"}[30m]) > 0
+        - alert: OncallQueueInputDrift
+          expr: oncall_input_drift_warn == 1
+          for: 1h
+        - alert: OncallModelStale
+          expr: oncall_model_retrain_due == 1 and oncall_model_age_days > 14
+          for: 1d
+        - alert: OncallRetrainRolledBack
+          expr: increase(oncall_retrain_total{outcome="rolled_back"}[1d]) > 0
+        - alert: OncallQueueLowPrecision
+          expr: oncall_precision_from_marks < 0.7 and oncall_feedback_marks >= 20
+          for: 1d
+{{- end }}
