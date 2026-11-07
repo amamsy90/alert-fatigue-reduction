@@ -119,6 +119,26 @@ jobs:
         if: always()
         run: docker compose -f integration/docker-compose.yml -p oncall-integration down -v
 
+  helm:
+    # The chart renders and lints, and the deploy script is valid shell. The tests in
+    # tests/test_helm_chart.py check the safety rules (shadow default, one replica, password).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v7
+      - name: helm lint
+        run: helm lint app/deploy/helm/oncall-queue --strict --set-string auth.password=ci
+      - name: helm template (default, retrain and monitoring on)
+        run: |
+          helm template ci app/deploy/helm/oncall-queue --set-string auth.password=ci > /dev/null
+          helm template ci app/deploy/helm/oncall-queue --set-string auth.password=ci             --set retrain.enabled=true --set prometheusRule.enabled=true --set serviceMonitor.enabled=true > /dev/null
+      - name: shellcheck the deploy script
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck -x tools/deploy.sh
+
   homelab:
     # Render, lint and unit-test the lab. This job does not start k3d or install a chart.
     runs-on: ubuntu-latest

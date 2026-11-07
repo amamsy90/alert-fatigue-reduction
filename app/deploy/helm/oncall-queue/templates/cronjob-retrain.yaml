@@ -1,0 +1,49 @@
+{{- if .Values.retrain.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "oncall.fullname" . }}-retrain
+  labels:
+    {{- include "oncall.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.retrain.schedule | quote }}
+  # A retrain that overlaps another would only be refused by the app's own job lock.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: retrain
+              image: {{ .Values.retrain.image | quote }}
+              env:
+                - name: APP_USER
+                  value: {{ .Values.auth.user | quote }}
+                - name: APP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "oncall.secretName" . }}
+                      key: APP_PASSWORD
+              # The app decides if a retrain is due; a "not due" answer is a normal 200.
+              command:
+                - sh
+                - -c
+                - >-
+                  curl -fsS -m 600 -u "$APP_USER:$APP_PASSWORD" -X POST
+                  -H 'Content-Type: application/json' -d '{}'
+                  http://{{ include "oncall.fullname" . }}:{{ .Values.service.port }}/models/retrain
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+{{- end }}
