@@ -1,0 +1,273 @@
+{
+  "settings": {
+    "accuracy": 0.9,
+    "marks_per_day": 20,
+    "seed": 0,
+    "budget_k": 20,
+    "dataset": "gaia"
+  },
+  "summary": {
+    "days": 11,
+    "alerts": 4852,
+    "marks": 4,
+    "real_marks": 0,
+    "precision_from_marks": 0.0,
+    "retrains_run": 0,
+    "retrains_promoted": 0,
+    "retrains_refused": 0,
+    "retrains_rolled_back": 0,
+    "drift_warn_days": 6,
+    "drift_ok_days": 5,
+    "model_versions": 0,
+    "active": null
+  },
+  "days": [
+    {
+      "day": "2021-07-01",
+      "alerts": 438,
+      "shown": 2,
+      "true_precision_shown": 0.0,
+      "marked": 2,
+      "marks_real": 0,
+      "marks_noise": 2,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "severity shifted (PSI 0.73 >= 0.25)",
+        "source shifted (PSI 0.36 >= 0.25)",
+        "alert_type shifted (PSI 0.73 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-02",
+      "alerts": 583,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 2,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "ok",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-03",
+      "alerts": 602,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 2,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "ok",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-04",
+      "alerts": 563,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 2,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "ok",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-05",
+      "alerts": 531,
+      "shown": 2,
+      "true_precision_shown": 0.0,
+      "marked": 2,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "ok",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-06",
+      "alerts": 439,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "alert arrival rate changed (KS p = 5.66e-05)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-07",
+      "alerts": 413,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "alert arrival rate changed (KS p = 0.000275)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-08",
+      "alerts": 386,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "alert arrival rate changed (KS p = 0.00135)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-09",
+      "alerts": 398,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "alert arrival rate changed (KS p = 0.0026)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-10",
+      "alerts": 445,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "ok",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "2021-07-11",
+      "alerts": 54,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 0,
+      "marks_noise": 4,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "severity shifted (PSI 0.42 >= 0.25)",
+        "alert_type shifted (PSI 0.42 >= 0.25)",
+        "message_length shifted (PSI 0.52 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    }
+  ]
+}

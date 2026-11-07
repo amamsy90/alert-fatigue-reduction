@@ -64,10 +64,15 @@ def retrain_decision(
     """Is a retrain due, and does anything block it? Pure, so the policy can be tested."""
     reasons: list[str] = []
     blockers: list[str] = []
-    new_marks = real_marks - (loaded.feedback_real if loaded is not None else 0)
+    # New evidence is counted from the last training attempt, refused or not. Counting from the
+    # active model alone made a day-after-day refusal retrain again on the same marks (seen in a
+    # real replay: 39 refused candidates in 40 days).
+    attempted = max([int(v.get("feedback_real", 0)) for v in registry.get("versions", [])]
+                    + [loaded.feedback_real if loaded is not None else 0])
+    new_marks = real_marks - attempted
     if loaded is None:
-        if real_marks >= MIN_NEW_REAL_MARKS:
-            reasons.append(f"no model yet and {real_marks} Real marks")
+        if new_marks >= MIN_NEW_REAL_MARKS:
+            reasons.append(f"no model yet and {new_marks} new Real marks since the last attempt")
     else:
         age_days = (now - pd.Timestamp(loaded.trained_at)).total_seconds() / 86400
         if new_marks >= MIN_NEW_REAL_MARKS:

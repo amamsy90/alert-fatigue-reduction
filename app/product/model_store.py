@@ -317,6 +317,7 @@ def register_model(saved: SavedModel, card: dict, promote: bool) -> dict:
             "trained_at": saved.trained_at,
             "label_source": saved.label_source,
             "train_alerts": saved.train_alerts,
+            "feedback_real": saved.feedback_real,
             "escalate_threshold": saved.escalate_threshold,
             "review_threshold": saved.review_threshold,
             "code_version": code_version(),
