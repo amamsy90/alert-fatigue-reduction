@@ -55,3 +55,7 @@ submission/archive/
 report/*.aux
 report/*.log
 report/*.out
+
+# Tool folders and local agent state: never committed
+.claude/
+.cursor/
