@@ -156,7 +156,7 @@ Shipped queue (log alerts by severity) & 71.0\% & 1.4 & 92\%\\
 
 
 \section{Deliverables, setup and use}
-\textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, release 1.1.0 plus the changes in \texttt{CHANGELOG.md}, submitted commit:\newline \mbox{\texttt{b9e7424fd6808f4027e5a2fcba28f37f66392809}}. The README lists the team, commands, tested system and data sources. No paid API is needed.
+\textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, release 1.1.0 plus the changes in \texttt{CHANGELOG.md}, submitted commit:\newline \mbox{\texttt{8d7b2bc4d8c89b9adedc050a6b114e202a88df3a}}. The README lists the team, commands, tested system and data sources. No paid API is needed.
 
 \textbf{Setup and use.} From \texttt{app/}: \texttt{docker compose up -d} serves the app at \texttt{127.0.0.1:8080} in shadow mode; \texttt{uv sync --group dev}, \texttt{uv run pytest -q} and \texttt{uv run python run\_validate.py} run the tests and check the reported numbers. \texttt{uv run python run\_reproduce.py} reproduces the GAIA result on a committed 10-day real sample in under a minute; \texttt{--full} uses the 1.8~GB data fetched by \texttt{tools/fetch\_gaia.py}. \texttt{tools/deploy.sh} installs the Helm chart, smoke-tests it and rolls back on failure. Workflow: Alertmanager posts alerts, a job builds the day's queue with a reason for each item, the engineer marks items Real or Noise, and a scheduled retrain learns from the marks. The \texttt{/evaluate} page runs the same engine on a team's own CSV files.
 
