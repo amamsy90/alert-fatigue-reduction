@@ -1,6 +1,6 @@
 # Monitoring and evaluation
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.2.1
 
 The running app exposes two endpoints (`product/monitoring.py`):
 

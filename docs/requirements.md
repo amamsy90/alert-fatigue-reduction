@@ -1,7 +1,7 @@
 # Requirements and traceability
 
 **System:** AI-Assisted On-Call Queue (`app/`)
-**Version:** 1.2.0 · **Status:** baselined after the Phase 0 review fixes
+**Version:** 1.2.1 · **Status:** baselined after the Phase 0 review fixes
 
 This document states what the system must do (functional requirements, FR), how well it must do it (non-functional requirements, NFR), who it is for (user stories with acceptance criteria), and where each requirement is verified (traceability matrix). Test names refer to functions in `app/tests/`; "results" refers to files in `app/results/` checked by `run_validate.py`.
 
