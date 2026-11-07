@@ -9,6 +9,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 - `run_baseline_compare.py` and `src/baselines_anomaly.py`: z-score, EWMA and isolation-forest baselines through the same causal queue, with 95% bootstrap intervals over the 1,223 GAIA test faults and a paired difference to the rate rule. Re-run from the raw GAIA files, it reproduces 72.6% and 68.9% exactly. At K = 50 the detector and the rate rule are tied.
 - `run_rcaeval_gate_split.py`: RCAEval RE2/RE3 with train, validation and test cases kept apart, so the promotion gate decides on cases that are never scored. It refuses the classifier on all six applications; the earlier "promoted on RE2 Train Ticket" was decided on its own test cases.
 - `report/`: the four-page final report (LaTeX source and PDF) for the course brief.
+- `run_reproduce.py`: one command that reproduces the GAIA result on a committed real 10-day sample (`app/examples/gaia_sample/`, 1.7 MB) in about 10 seconds, or the full tables with `--full`. `tools/make_gaia_sample.py` builds the sample and `tools/check_fresh_clone.py` checks a clean clone.
 - A Windows job in CI.
 - `README.md`: team and contributions, tested environment, and sections in the brief's order.
 
@@ -19,7 +20,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ### Changed
 
 - The viva, demo and speaker notes moved to `presentation/`, the proposal drafts to `docs/history/`, and the generated Word and PDF copies are no longer tracked.
-- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (443 tests: 433 pass, 10 skip).
+- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (445 tests: 435 pass, 10 skip).
 
 ## [1.1.0] - 2026-10-21
 
