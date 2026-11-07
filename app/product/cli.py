@@ -48,7 +48,34 @@ def _queue_rows(result) -> list[dict]:
             "alerts_inside": "", "reason": decision.reason,
         })
     rows.sort(key=lambda r: r["shown_at"])
+    audit = (getattr(result, "optional_models", None) or {}).get("ranker_audit")
+    if audit:
+        _attach_ranker_notes(rows, audit)
     return rows
+
+
+def _attach_ranker_notes(rows: list[dict], audit: dict) -> None:
+    """Extra columns only when a ranker audit was produced. Absent otherwise."""
+    notes: dict[tuple[str, str, str], str] = {}
+    for bucket in ("queue_reasons", "needs_human_review", "queue_disagreements"):
+        for item in audit.get(bucket) or []:
+            text = item.get("review_reason") or ""
+            reasons = item.get("reasons") or []
+            parts = [f"{reason['feature']} {reason['contribution']:+.3f}" for reason in reasons[:3]]
+            if parts:
+                text = (text + "; " if text else "") + ", ".join(parts)
+            if not text:
+                continue
+            key = (str(item.get("shown_at", ""))[:19], str(item.get("kind")), str(item.get("service")))
+            notes.setdefault(key, text)
+    for row in rows:
+        kind = str(row["kind"])
+        plain = kind.split(":", 1)[0]
+        key = (str(row["shown_at"])[:19], plain, str(row["service"]))
+        note = notes.get(key)
+        if note:
+            row["ranker_note"] = note
+            row["ranker_pages"] = False
 
 
 def score(args: argparse.Namespace) -> int:

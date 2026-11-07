@@ -1,40 +1,85 @@
 # AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices
 
-*(Alert Fatigue Reduction in Cloud Microservice Operations)*
+Aishah Mohamed Alyammahi
 
-**Final report**
+## Abstract
 
-**Author:** Aishah Mohamed Alyammahi
+On-call engineers can read only a few alerts a day, and 82% of GAIA faults never write a log line. The system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day.
 
-**Course:** Software Engineering and Programming
+## 1. Motivation and objectives
 
-**Date:** 21 October 2026
+A platform of many small services raises more alerts than one person can read. Real faults are missed because attention runs out, not because the metrics were silent. The users are the on-call engineer, who needs a short list that still contains the real faults, and the operator who turns Live on, who needs nothing paged by accident and a way to put a model back. The practical value is the daily budget. The queue shows at most K items, in the order a live system learns about them, so the team is not left choosing between a flood of pages and a pager that stays quiet.
 
-**Version:** 1.1.0
+Teams already cut repetition. Alertmanager groups alerts that share labels. PagerDuty and Opsgenie merge alerts that look alike or share an alias. None of those tools chooses which incidents fit into K readings a day, and none treats a rise in memory as an incident before a log alert has fired. The engineer reads the day's queue and marks an item Real or Noise. The operator installs the service, leaves shadow mode on until a pilot agrees, and is the only person who can turn Live on.
 
-Numbers come from scripts under `app/` and are checked by `python run_validate.py` against the *Checked numbers* table at the end. Part A follows the thirteen sections of the course brief; Part B holds the measured results; Part C says how to reproduce them.
+Each objective below is paired with the measurement this submission reports. The comparison that decides success is the budgeted jump queue against the rules a team already runs.
 
-| Rubric criterion (weight) | Where it is answered |
-|---|---|
-| Problem definition and significance (10%) | §2; evidence in Part B §B6 |
-| Requirements, users and use cases (10%) | §3, §4; `docs/requirements.md` (26 FR, 11 NFR, 8 user stories, traceability to tests) |
-| AI justification and technical approach (10%) | §5, §6 |
-| High-level production design (15%) | §6; `docs/architecture.md` (5 diagrams), `docs/adr/` (7 decisions), `docs/threat_model.md` |
-| Deployment and scalability (10%) | §7; `docs/deployment.md` |
-| Testing strategy (10%) | §8; `docs/test_plan.md`, `.github/workflows/ci.yml` |
-| MLOps and lifecycle (20%) | §9; `docs/mlops.md` |
-| Monitoring and evaluation (10%) | §10; `docs/monitoring.md` |
-| Privacy and responsible AI (5%) | §11; `docs/privacy_responsible_ai.md` |
+| Objective | Target | Measured result |
+|---|---|---|
+| Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector (`jumps_tuned`) wins 8 of 8 walk-forward weeks against the Prometheus rate rule |
+| Decide with no future data | No decision uses a later point, the end of a jump, or its peak | A jump is shown at the second confirming point. `tests/test_causality.py` checks that rule |
+| Ship with shadow paging and a versioned model | Record what would have been paged until Live is armed. Models are versioned and can be rolled back | Shadow is the default. Live needs `APP_PASSWORD`, a channel, and the typed word LIVE, and only an ingest job may page. Models load as skops |
+| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 450 passed, 10 skipped; line coverage 86%; `run_validate.py` matches the printed figures |
 
----
+## 2. Architecture and implementation
 
-# Part A — The system
+### 2.1 Architecture
 
-## 1. Project title and team
+![Figure 1. Alertmanager and Prometheus feed app/product. Detection is in app/src. The queue is stored in SQLite. Pages leave only from ingest jobs](figures/architecture.png)
 
-**AI-Assisted On-Call Queue: Budgeted Incident Detection for Cloud Microservices.** Solo project by Aishah Mohamed Alyammahi.
+Alertmanager posts firing alerts into `app/product`. Prometheus supplies the memory series, and the same series can be uploaded as CSV. The product is a FastAPI service. It checks the caller, drops duplicate webhook rows, runs one scoring job, and writes the queue to SQLite. Detection lives in `app/src`: the jump rule, the slow-leak rule, the monitoring-gap rule, and the daily budget. A page is sent only from an ingest job, and only after Live is armed. Appendix H lists the HTTP routes.
 
-## 2. Problem definition
+The stack is Python, FastAPI, scikit-learn, pandas, SQLite, Docker and GitHub Actions. Dependencies are locked with uv. Each job stores the queue it built and the model version that scored the alerts. A Real or Noise mark is kept as a label. It does not itself send a page.
+
+### 2.2 How the queue decides
+
+The queue is first come, first served, and the day stops at K. A memory reading more than 0.5 GB above the previous 15-minute median is hot. The jump is shown at the second hot point within two minutes, and only when the rise known at that moment meets the threshold learned on the first week (0.62 GB on GAIA). A slow leak uses a three-hour median. A monitoring gap is ten minutes with no point. Log alerts may use at most a quarter of K. An alert that arrives while a jump on the same service is still open rides on that jump and takes no extra slot. No decision uses a later reading, the time the jump eventually ends, or the height it eventually reaches. A saved model is loaded as skops. A pickle file is refused even when its name still ends in `.pkl`. Shadow stays on until the operator sets `APP_PASSWORD`, names a channel, and types the word LIVE.
+
+### 2.3 Change from the proposal
+
+The significant change from the proposal is that the submitted system is the **budgeted jump queue**. An early hope of catching 95% of faults does not fit this data. GAIA injects about 22 faults a day, so 84.9% is the best that K = 20 can reach, and 82% of the faults never write a log line. The log classifier is trained and gated. On GAIA it is not what catches the faults. An LLM summary of an incident stayed out of scope, as the proposal said.
+
+## 3. Testing, evaluation and results
+
+Training uses the first 7 days only. The test period is the next 55 days and holds 1,223 faults. Days are not shuffled. A fault label scores a queue that has already been built. It is not an input to the decision. A fault counts as caught when a shown jump or leak on its service overlaps the injection, or a shown alert carries its id. A monitoring-gap item does not count as a catch.
+
+Table 1. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in `app/results/queue_eval_gaia.csv`.
+
+| Method at K = 20 | Faults caught | False items a day |
+|---|---|---|
+| Log severity | 0% | — |
+| Prometheus rate rule | 68.9% | 2.1 |
+| Jump detector | 72.6% | 1.0 |
+| Best possible on this data | 84.9% | — |
+
+The jump detector is the row `jumps_tuned`: 888 of 1,223 faults (72.6%) and 1.0 false item a day. The Prometheus rate rule is `delta_5m`: 843 of 1,223 (68.9%) and 2.1 false items a day. Log severity catches 0 of 1,223. The jump detector (`jumps_tuned`) wins all 8 walk-forward weeks against the Prometheus rate rule (`delta_5m`), and on the 55-day test it shows 1.0 false item a day against the rate rule's 2.1. Walk-forward learns every threshold again from the past only, then scores the next week once. Appendix D plots that detector and, separately, the full queue on the same weeks. The full queue is a different comparison, and it does not win every week. Median time from the start of a fault to the confirming point is 0.72 minutes.
+
+About 22 faults are injected a day, more than 20 slots on 34 of the 55 test days, which is why the best possible result at this budget is 84.9% rather than 100%. When the full queue misses, Appendix D shows that the misses are mostly a monitoring gap or a day whose 20 slots were already full. The jump rule itself fails on only a small share of those misses.
+
+On this commit, `uv run pytest -q` in `app/` reported 450 passed and 10 skipped. Line coverage is 86%. A load test of 50 concurrent users recorded p95 0.32 s and no errors (Appendix C). `uv run python run_validate.py` matched the printed figures (195 checked numbers).
+
+The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on RCAEval, NAB and SMD are in the appendices.
+
+## 4. Deliverables, setup and use
+
+The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Submitted commit: `c179440316d98cee4082eaf7ffc4bc4a7e5b5980`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
+
+```bash
+cd app
+uv sync --group dev
+uv run pytest -q
+uv run python run_validate.py
+```
+
+## 5. Conclusion
+
+The budgeted jump queue beats the rules a team already runs, under a limit of K items a day, without using later data. The main finding is that log severity catches none of these faults, because most of them never log.
+
+<!-- pagebreak -->
+
+## Appendix A. Requirements, users and design detail
+
+### 2. Problem definition
 
 **What the problem is.** A cloud platform made of many small services raises thousands of alerts a day, but the engineer on call can read only a few. Real faults are missed because attention runs out, not because monitoring was silent.
 
@@ -42,7 +87,7 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 
 **Why it matters.** A fault that is noticed late lasts longer. Engineers who are paged for noise stop trusting the pager and start ignoring it ("alert fatigue").
 
-**How it is handled today.** Alerts are escalated by log severity, and exact duplicates are deleted (Alertmanager grouping and routing, PagerDuty rules). Metric alerts are fixed thresholds or rate rules, such as `delta(memory[5m]) > 0.5 GB`.
+**How it is handled today.** In a typical team, alerts come from two places. Log-based alerts are escalated when their severity label is high enough, for example "critical" or "error". Metric-based alerts are fixed rules written in Prometheus, such as "memory above a set level" or "memory rose by more than 0.5 GB in five minutes" (`delta(memory[5m]) > 0.5 GB`). Alertmanager then reduces repetition. It groups alerts that share chosen labels into one notification, mutes some alerts while related ones are firing, and routes each group to a receiver. Paging services add their own merging: Opsgenie merges alerts with the same alias, and PagerDuty's Intelligent Alert Grouping uses machine learning to merge similar alerts into one incident. All of these tools decide which alerts belong together. None of them decides which alerts are worth a person's limited time. Section B7 measures that difference on the homelab.
 
 **Limits of the current approach.** Severity rules read only logs. On the public GAIA microservice benchmark, **82% of injected faults never write a log line**; they show up only as a jump in a metric such as memory, so a log-severity rule catches **0%** of them at 20 items a day (§B1). Fixed metric thresholds either miss faults or flood the queue, and none of these rules knows that a person can read only K items a day.
 
@@ -54,7 +99,7 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 
 > **Problem statement.** On-call engineers can read only a few alerts a day, but the rules that choose those alerts read log severity, which most real faults never trigger, so faults are missed while noise still reaches the pager.
 
-## 3. Objectives and expected outcomes
+### 3. Objectives and expected outcomes
 
 **Main objective.** Design, build and evaluate an AI-assisted on-call queue that shows each engineer at most K items a day, in real time, and catches more real faults with fewer false items than the rules teams already run.
 
@@ -70,7 +115,7 @@ Numbers come from scripts under `app/` and are checked by `python run_validate.p
 
 **Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 443 automated tests (436 pass on CPU CI) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.
 
-## 4. Target users and use case
+### 4. Target users and use case
 
 **Primary users.** On-call engineers (site reliability or operations) on a team running microservices.
 
@@ -108,7 +153,7 @@ flowchart TD
 
 ![UML use-case diagram of the on-call queue](figures/use_cases.svg)
 
-## 5. Why use AI?
+### 5. Why use AI?
 
 **What needs AI.** Deciding which *log alerts* are worth a slot. Their text, source, severity and timing interact in ways fixed rules do not capture, and the right answer differs per team. A classifier trained on the team's own labels (and later its own Real / Noise marks) learns that, with a miss weighted ten times a false alarm.
 
@@ -116,7 +161,7 @@ flowchart TD
 
 **Why a rule-based approach alone is insufficient for alerts.** Severity is noisy: "high" alerts are often benign and "info" lines appear during real faults. A fixed severity rule cannot use message text or the fact that an alert arrived during a memory jump, and it cannot adapt when engineers mark items as noise.
 
-**AI technology.** Supervised classification: logistic regression on TF-IDF text features, source, severity, recent alert counts and an inside-a-jump flag (scikit-learn). A second learned piece, the confirmation threshold, is a cost-minimising cut on the training window. An experimental jump ranker (logistic regression) was tried and gave no gain (§B4).
+**AI technology.** Supervised classification: logistic regression on TF-IDF text features, source, severity, recent alert counts and an inside-a-jump flag (scikit-learn). A second learned piece, the confirmation threshold, is a cost-minimising cut on the training window. Two different rankers need to be kept apart. The experimental jump ranker in §B4 replaces the rise threshold with a logistic regression on jump features. On GAIA at K = 20 it catches 69.7% against the full queue's 69.6%, which is no gain, and it stays an experiment. The later learned ranker (PR #26, commit `2b78bbb`, flag `LEARNED_RANKER`) chooses among the day's candidates. A re-run on 3 November 2026, `run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8` (seed 42, 4,000 bootstrap draws), on master `20d5664`, is in `docs/results/gaia_ranker_rerun/`. At K = 20 it caught 887 of 1,223 faults against that run's baseline of 851. The baseline is the current causal queue and matches the `proposed` row of `app/results/queue_eval_gaia.csv` (851 of 1,223, precision 0.895, 1.82 false items a day). The per-fault catch difference is +0.0294, interval [0.0147, 0.0442], KEEP. Precision is 0.9416 against 0.895, and false items a day are 1.0 against 1.82. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 with interval [0.0131, 0.0401] (`walk_forward_pooled.json`). GAIA has no companies, so this is a time split, not leave-one-company-out. The 887 on the `delta_5m_carryover` row of `queue_eval_gaia.csv` is a different queue. `LEARNED_RANKER` stays off. The homelab measurement is §B7.
 
 **Existing model or API.** An existing, well-understood model family (scikit-learn logistic regression) trained locally; no external AI API or LLM, so no data leaves the server and there is no per-call cost.
 
@@ -124,7 +169,7 @@ flowchart TD
 
 **Limitations of AI here.** It needs labels of both classes, so a new team starts in rules-only mode; learned thresholds do not transfer between datasets (one learned on GAIA's 1 GB faults rejects 0.5 GB faults, §B3); and 82% of GAIA faults leave no log, which caps a log-only model near 18% (§B6).
 
-## 6. AI component and technical approach
+### 6. AI component and technical approach
 
 | Question | Answer |
 |---|---|
@@ -139,12 +184,12 @@ flowchart TD
 
 **How the queue decides** (details in §B1 and `design_specification.md`). One queue, at most K items a day, first come, first served:
 
-1. **Metric jumps.** A point is hot when it is more than **0.5 GB** above the median of the previous **15 minutes** on the same service. Two hot points no more than two minutes apart **confirm** a jump. A jump is shown at its confirmation point, and only if its rise at that point is at least a threshold learned on the training window (0.62 GB on week 1).
+1. **Metric jumps.** For every new memory reading, the system compares the value with the median of the same service's readings over the previous **15 minutes**. If the reading is more than **0.5 GB** above that median, it is marked as hot. One hot reading could be noise, so a jump is confirmed only when a second hot reading follows within two minutes. At that moment the jump becomes a candidate for the queue. It is shown only if the rise measured at confirmation is at least as large as a threshold learned from the first week. On GAIA that threshold is **0.62 GB**: the size that, on week-1 data, gave the lowest combined cost of missed faults and false items.
 2. **Slow leaks.** The same rule with a **3-hour** median and 10 minutes of hot points catches memory that climbs over hours. A leak is dropped only when a fast jump on the same series was already shown when the leak was confirmed.
 3. **Monitoring gaps.** A service with no metric point for **10 minutes** is shown as a gap item ("we are blind here"), also while the feed is still dead.
 4. **Log alerts** may use at most **a quarter** of the slots (5 of 20), first come. An alert on a service whose shown jump is still open rides on that jump and uses no slot.
 
-Nothing uses a later point, the end of a jump, or its peak (ADR 0001). For metrics that are not bytes, a relative mode (a share of the median) and a unit-free robust mode exist.
+Every decision uses only information that existed at the moment the decision was made. In particular, the queue never uses a reading from later in the day, never waits to see when a jump ends, and never uses how high a jump eventually peaks. All three would make the results look better than a live system could achieve. This rule is recorded as design decision ADR 0001 and checked by `tests/test_causality.py`. For metrics that are not bytes, a relative mode (a share of the median) and a unit-free robust mode exist.
 
 **Training on GAIA.** GAIA MicroSS (CloudWise), July–August 2021: 34,863 log lines, 1,367 injected faults, each holding **1 GB of extra memory for 600 s** on one service. Train on the first 7 days; test on the next 55 days (**1,223 faults**); days are never shuffled.
 
@@ -157,7 +202,27 @@ Nothing uses a later point, the end of a jump, or its peak (ADR 0001). For metri
 
 **Production design.** Two layers: a library that knows nothing about HTTP (`app/src/`) and a product layer (`app/product/`) with the web app (`product/web/`: security middleware, three route modules), the job pipeline (inputs, labels, paging), storage, connectors, the model registry and monitoring. Diagrams (context, components, ingest-to-page sequence, deployment, data model): `docs/architecture.md`. Decisions: `docs/adr/`. Threats and mitigations: `docs/threat_model.md`.
 
-## 7. Deployment strategy
+### 12. Project scope and limitations
+
+**In scope (built):** the causal budgeted queue (jumps, leaks, gaps, alerts); the alert classifier with a model registry, promotion gate and rollback; the web app, API and CLI; Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie connectors; *Evaluate my data*; shadow mode and marks; security hardening; monitoring endpoints; Docker and per-environment settings; CI; the GAIA, NAB, SMD and RCAEval evaluations.
+
+**Out of scope (not built):** automatic remediation; multi-tenant hosting and user roles; LLM summaries of incidents; dedicated CPU, disk or network fault detectors inside microservices (the unit-free jump rule is measured on such faults on SMD servers and RCAEval RE2, §B5); a managed cloud deployment; browser UI tests; a live pilot with a real team (the next step).
+
+**Limitations** (say these if asked):
+
+1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (§B3) tests other sizes and shapes. §B5 tests other domains (NAB, a shop, SMD servers) and, on three other microservice applications, the same memory injection and CPU, disk, network and code faults with logs (RCAEval), with small test sets and a chance line.
+2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
+3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
+4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels; the per-series confirm levels (§B4) are measured but not in the headline.
+5. **The alert classifier adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The later learned ranker is a separate model and is reported in §B7. The classifier is kept for teams whose faults log and who mark items: on RCAEval RE2 Train Ticket, where faults log on the broken service, it adds 13.3 points over no log alerts (95% interval +4.4 to +24.4) and 2.2 over severity alerts (one case), and the gate promotes it, by exactly its one-fault margin over severity alerts, judged on the same 45 cases that are scored (§B5); on the other five RCAEval application suites it adds at most one case, and the gate keeps it out (§B5). The promotion gate now checks this on every batch, and on GAIA it keeps the classifier out (§9, §B4).
+6. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
+7. **The homelab ranker does not transfer to a held-out company.** On the day-12 snapshot the pooled ranker is a KEEP against `proposed` and `static_p99` at K = 5, 10 and 20, and against tuned jumps at K = 10 and 20. K = 5 against tuned jumps is a DROP, because the interval includes zero. At K = 50 it is a DROP against the proposed queue, which catches more. Leave-one-company-out is a DROP for acme, borealis and cassini, with the same catches as the baseline (§B7). `LEARNED_RANKER` stays off.
+
+**Future work.** Linking the homelab's Tempo spans to the trace-graph model, so network faults whose symptoms land on another service can be tied to a call graph rather than to co-firing alone (§B7.3). A larger RCAEval study (the independent gate test in §B5 leaves 23 test cases per RE2 application and 8 per RE3 application), and a live, continuous log stream (RCAEval recordings are 24–30 minutes, replayed one a day) to confirm the RE2 result for the classifier; a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out (behind a trusted proxy the client is read from the right of `X-Forwarded-For`, across every header line; a code review on 10 October found the leftmost, client-written value was used, which let a client dodge the lock, and that only the first header line was read; both are fixed with regression tests), paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
+
+## Appendix B. Deployment, MLOps, monitoring and privacy
+
+### 7. Deployment strategy
 
 One Docker container per team, on the team's own server or VM, behind a TLS reverse proxy; SQLite and the model registry on a Docker volume; the model runs in-process; alerts arrive from Alertmanager and metrics are pulled from Prometheus; pages go to PagerDuty, Slack or Opsgenie. The image is built from a hash-pinned lock file.
 
@@ -195,33 +260,7 @@ Not priced: data transfer (pages are a few KB), backups (a copy of a 13 MB datab
 
 **AI governance.** The operator is responsible for the AI. It may only order and select items in the queue (escalate, ask a person, hide with a reason); it never acts on infrastructure. Humans review everything in shadow mode, answer "ask a person" items, and mark Real / Noise. Every decision records its reason, score and the model version. New models pass a promotion gate and can be rolled back; the change is audited. No data is sent to an external AI service. Full answers: `docs/deployment.md`.
 
-## 8. Testing strategy
-
-| Level | What | Examples |
-|---|---|---|
-| Unit | Detectors, queue, policy, scoring, settings | first come beats biggest first; a jump is confirmed at its second point |
-| Integration | Frontend routes ↔ backend ↔ database, with outbound calls mocked | webhook → buffer → job → queue; Live fans out to every channel; model rollback through the API |
-| System | The whole pipeline on GAIA, NAB, SMD and RCAEval; `experiment.py` on a synthetic run | walk-forward over 8 weeks; later data changes nothing |
-| AI-specific | Wrong or poor outputs, unexpected input, edge cases | a malformed webhook row is rejected instead of blocking every later job; one-class labels fall back to rules; a worse model is not activated; hidden alerts stay visible |
-| Security | Login, SSRF, CSRF, DNS rebinding, secrets, body limits | loopback tricks refused; forwarded requests need a password |
-| Performance | Latency, concurrent users, throughput | `perf/load_test.py`: 20 and 50 users |
-
-An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That flag is off. The note is written after the page decision and is not sent to a channel. Prompt-injection cases for the note are tested (`test_llm.py`, `test_llm_lora.py`). With the flag off, untrusted webhook content cannot break or steer the queue, and wrong model outputs are bounded by the budget and the promotion gate.
-
-| Criterion | Target | Result |
-|---|---|---|
-| Tests passing | 100% of tests that run | 436 passed, 0 failed, 10 skipped on Python 3.12 (7 November 2026). Nine skips need torch, xgboost or CUDA, which CPU CI does not install. One skip is the Compose integration job |
-| Line coverage | ≥ 85% | 87% (86.78% on that run) |
-| Type errors | 0 | 0 |
-| p95 latency at 50 users | ≤ 1 s | 0.32 s |
-| Error rate under load | ≤ 1% | 0% |
-| Report numbers match results | every checked number | 259 / 259 |
-
-CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py`, a dependency audit (`pip-audit` on the hash-pinned lock) and a Docker build with a health check on every push. The audit step was added on 7 October with an option `pip-audit` does not have, so that job failed on that commit; it was corrected on 10 October (a hand run of the corrected command found no known vulnerabilities). Details: `docs/test_plan.md`.
-
-**A bug only a real-service test found (version 1.0.2).** Live Prometheus data could never confirm a jump. The ingest job fetched 14 days of memory in one query; to stay under Prometheus' point limit, that query used a 121 s step, and the jump rule links hot points at most 2 minutes apart, so no live jump was ever confirmed. The unit tests fed the detector data directly and missed it. A new integration test (`app/integration/docker-compose.yml`, `tests/integration/test_compose.py`) runs the app beside a real Prometheus and Alertmanager and checks webhook → ingest job with Prometheus series → nothing paged in shadow mode; it found the bug. The fetch now reads the window at 60 s in several non-overlapping queries (`test_a_14_day_fetch_keeps_one_minute_points_so_live_jumps_are_confirmed`), and CI runs the integration test in its own job. The GAIA, NAB, SMD and RCAEval results do not use the Prometheus fetch, so no published number changed.
-
-## 9. MLOps
+### 9. MLOps
 
 - **Versioning.** Code in Git through pull requests; dependencies in `uv.lock` and a hash-pinned `requirements.lock`; configuration in `src/config.py` and per-environment files; data by fingerprint in the experiment log; **models as numbered versions with model cards** in `models/registry.json` (training time, data fingerprint, code version, held-out results, gate decision). No prompts (no LLM).
 - **Reproducibility.** `uv sync --group dev`, `uv run pytest`, `uv run python run_validate.py`, `docker compose up`; every environment variable is documented; the public datasets are fetched by scripts (`tools/fetch_gaia.py`, `fetch_nab.py`, `fetch_smd.py`, `fetch_rcaeval_mem.py`, `fetch_rcaeval_re23.py`), and `fetch_gaia.py` and `fetch_rcaeval_re23.py` check the SHA-256 of every file used.
@@ -244,7 +283,7 @@ CI runs lint, type checks, the tests on two Python versions with coverage, `run_
 
 Details: `docs/mlops.md`.
 
-## 10. Monitoring and evaluation
+### 10. Monitoring and evaluation
 
 `GET /metrics` (Prometheus) and `GET /monitoring` (checked summary) cover:
 
@@ -257,7 +296,7 @@ Details: `docs/mlops.md`.
 
 Evaluation criteria with measured values, justification for each target and example alert rules: `docs/monitoring.md`. Offline evaluation is Part B.
 
-## 11. Privacy and responsible AI
+### 11. Privacy and responsible AI
 
 **Privacy.** Alert messages may contain host names or user IDs. All data stays on the team's server (SQLite and a volume), behind the login. Messages are cut to 300 characters, and IDs and numbers are normalised before learning. Jobs and evaluations are pruned; marks keep only service and time (retention table below). No data is sent to an external AI service; only paging summaries go to the team's own paging tools, in Live mode.
 
@@ -283,29 +322,40 @@ Evaluation criteria with measured values, justification for each target and exam
 
 **Responsible AI.** Fairness between services: metric rules treat every service the same, and alerts are capped at a quarter of the budget, so services that log a lot cannot crowd out the rest. Every item carries a reason. Humans oversee through shadow mode, "ask a person" and marks. Hidden alerts stay visible. The system never acts on infrastructure. Queue data should not be used to rate engineers. Details: `docs/privacy_responsible_ai.md`.
 
-## 12. Project scope and limitations
+## Appendix C. Testing detail and success criteria
 
-**In scope (built):** the causal budgeted queue (jumps, leaks, gaps, alerts); the alert classifier with a model registry, promotion gate and rollback; the web app, API and CLI; Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie connectors; *Evaluate my data*; shadow mode and marks; security hardening; monitoring endpoints; Docker and per-environment settings; CI; the GAIA, NAB, SMD and RCAEval evaluations.
+### 8. Testing strategy
 
-**Out of scope (not built):** automatic remediation; multi-tenant hosting and user roles; LLM summaries of incidents; dedicated CPU, disk or network fault detectors inside microservices (the unit-free jump rule is measured on such faults on SMD servers and RCAEval RE2, §B5); a managed cloud deployment; browser UI tests; a live pilot with a real team (the next step).
+| Level | What | Examples |
+|---|---|---|
+| Unit | Detectors, queue, policy, scoring, settings | first come beats biggest first; a jump is confirmed at its second point |
+| Integration | Frontend routes ↔ backend ↔ database, with outbound calls mocked | webhook → buffer → job → queue; Live fans out to every channel; model rollback through the API |
+| System | The whole pipeline on GAIA, NAB, SMD and RCAEval; `experiment.py` on a synthetic run | walk-forward over 8 weeks; later data changes nothing |
+| AI-specific | Wrong or poor outputs, unexpected input, edge cases | a malformed webhook row is rejected instead of blocking every later job; one-class labels fall back to rules; a worse model is not activated; hidden alerts stay visible |
+| Security | Login, SSRF, CSRF, DNS rebinding, secrets, body limits | loopback tricks refused; forwarded requests need a password |
+| Performance | Latency, concurrent users, throughput | `perf/load_test.py`: 20 and 50 users |
 
-**Limitations** (say these if asked):
+An optional local LLM can write a shadow note when `LLM_EXPLAIN` is set. That flag is off. The note is written after the page decision and is not sent to a channel. Prompt-injection cases for the note are tested (`test_llm.py`, `test_llm_lora.py`). With the flag off, untrusted webhook content cannot break or steer the queue, and wrong model outputs are bounded by the budget and the promotion gate.
 
-1. **Every GAIA fault is the same 1 GB, 600 s memory program.** The robustness replay (§B3) tests other sizes and shapes. §B5 tests other domains (NAB, a shop, SMD servers) and, on three other microservice applications, the same memory injection and CPU, disk, network and code faults with logs (RCAEval), with small test sets and a chance line.
-2. **The win over a plain Prometheus rate rule is modest** (+3.7 points for the detector, 8/8 weeks; +0.7 for the full queue, which ties it week by week). The larger gains are fewer false items, a real-time queue, and leak and gap coverage. Carry-over lifts both rules about equally.
-3. **K = 20 is below the fault rate** (22 a day), so no method can exceed 84.9%.
-4. **Learned thresholds do not transfer.** One learned on GAIA's 1 GB faults rejects 0.5 GB faults. Rules-only mode works without labels; the per-series confirm levels (§B4) are measured but not in the headline.
-5. **The AI component adds no catches on GAIA.** With log alerts chosen by severity, or left out, the queue catches slightly more (71.0% and 71.2% vs 69.6% at K = 20) with fewer false items (§5, §B4). The classifier is kept for teams whose faults log and who mark items: on RCAEval RE2 Train Ticket, where faults log on the broken service, it adds 13.3 points over no log alerts (95% interval +4.4 to +24.4) and 2.2 over severity alerts (one case), and the gate promotes it, by exactly its one-fault margin over severity alerts, judged on the same 45 cases that are scored (§B5), and refused on all six applications when the gate is decided on separate cases (§B5, independent gate test); on the other five RCAEval application suites it adds at most one case, and the gate keeps it out (§B5). The promotion gate now checks this on every batch, and on GAIA it keeps the classifier out (§9, §B4).
-6. The scripts in `app/experiments/legacy_alerts_only/` are alerts-only milestone experiments. Do not quote them as the system result.
+| Criterion | Target | Result |
+|---|---|---|
+| Tests passing | 100% of tests that run | 450 passed, 10 skipped |
+| Line coverage | ≥ 85% | 86% |
+| Type errors | 0 | 0 |
+| p95 latency at 50 users | ≤ 1 s | 0.32 s |
+| Error rate under load | ≤ 1% | 0% |
+| Report numbers match results | every checked number | 195 / 195 |
 
-**Future work.** A larger RCAEval study (the independent gate test in §B5 leaves 23 test cases per RE2 application and 8 per RE3 application), and a live, continuous log stream (RCAEval recordings are 24–30 minutes, replayed one a day) to confirm the RE2 result for the classifier; a pilot with one team in shadow mode, measuring precision from marks. R1 through R8 in `docs/threat_model.md` are closed and tested: the Prometheus fetch uses the address it checked, login locks out (behind a trusted proxy the client is read from the right of `X-Forwarded-For`, across every header line; a code review on 10 October found the leftmost, client-written value was used, which let a client dodge the lock, and that only the first header line was read; both are fixed with regression tests), paging is by item key, models load through skops, sign-in sets a session cookie, a viewer password cannot change settings, the audit log is also a file, and paging secrets stay out of `ops.json`.
+CI runs lint, type checks, the tests on two Python versions with coverage, `run_validate.py`, a dependency audit (`pip-audit` on the hash-pinned lock) and a Docker build with a health check on every push. The audit step was added on 7 October with an option `pip-audit` does not have, so that job failed on that commit; it was corrected on 10 October (a hand run of the corrected command found no known vulnerabilities). Details: `docs/test_plan.md`.
 
-## 13. Success criteria
+**A bug only a real-service test found (version 1.0.2).** Live Prometheus data could never confirm a jump. The ingest job fetched 14 days of memory in one query; to stay under Prometheus' point limit, that query used a 121 s step, and the jump rule links hot points at most 2 minutes apart, so no live jump was ever confirmed. The unit tests fed the detector data directly and missed it. A new integration test (`app/integration/docker-compose.yml`, `tests/integration/test_compose.py`) runs the app beside a real Prometheus and Alertmanager and checks webhook → ingest job with Prometheus series → nothing paged in shadow mode; it found the bug. The fetch now reads the window at 60 s in several non-overlapping queries (`test_a_14_day_fetch_keeps_one_minute_points_so_live_jumps_are_confirmed`), and CI runs the integration test in its own job. The GAIA, NAB, SMD and RCAEval results do not use the Prometheus fetch, so no published number changed.
+
+### 13. Success criteria
 
 | Criterion | Measured | Met? |
 |---|---|---|
 | The main workflow (webhook → queue → page → mark → retrain) completes | Integration tests and the demo | Yes |
-| At least 90% of predefined test cases pass | 436 passed, 0 failed (10 skipped) | Yes |
+| At least 90% of predefined test cases pass | 450 passed, 10 skipped | Yes |
 | The system handles the agreed concurrent users | 50 users, 0 errors | Yes |
 | Average response time below the threshold | p50 0.21 s, p95 0.32 s (target 1 s) | Yes |
 | AI output meets the predefined quality criteria | Detector beats the rate rule in 8/8 weeks with fewer false items; the full queue ties it; the alert classifier adds no catches on GAIA (§B4 ablation), and the promotion gate keeps it out there; on RCAEval RE2 Train Ticket it adds +13.3 points over no log alerts, with an interval above zero (+2.2 over severity alerts), and the gate promotes it, at its margin, judged on the same 45 cases that are scored (§B5); decided on separate cases, the gate refuses it on all six applications, and the shipped queue gains 7.2 points over no log alerts pooled over RE2 by using severity alerts (§B5) | Partly: the detector, yes; the full queue, a tie; the classifier, not shown on GAIA or on independent RCAEval cases, where simple severity alerts do the work |
@@ -316,11 +366,11 @@ Evaluation criteria with measured values, justification for each target and exam
 
 ---
 
-# Part B — Results
+## Appendix D. GAIA detailed results
 
-## B1. Test-period results (K items a day, 55 days, 1,223 faults)
+### B1. Test-period results (K items a day, 55 days, 1,223 faults)
 
-**Caught** = a shown jump or leak on the fault's service overlaps the injection window, or a shown alert carries the fault's id. Gap items never count as catches.
+A fault counts as **caught** when the engineer would have seen evidence of it in the queue. There are two ways this can happen. A jump or leak item shown in the queue may be on the same service as the fault and overlap the time the fault was injected. Or a log alert shown in the queue may have been matched to that fault, meaning it came from the faulty service during the fault. Monitoring-gap items never count as catches, even when a fault happens during the gap. They tell the engineer that the system is blind, not that something is broken, and counting them would reward the queue for missing data.
 
 **Baselines are the rules a team would already have**, all scored with the same causal queue:
 
@@ -355,7 +405,7 @@ The old ranking needed the whole day in advance. Replacing it with a learned con
 
 ![Faults caught versus daily budget K](figures/detection_vs_k.svg)
 
-### Where the misses come from
+#### Where the misses come from
 
 The full queue misses 372 of the 1,223 test faults at K = 20 (`results/miss_causes_gaia.csv`):
 
@@ -366,11 +416,11 @@ The full queue misses 372 of the 1,223 test faults at K = 20 (`results/miss_caus
 | Metric data, but no jump overlapped | 4 | 1% |
 | A jump overlapped, but below the confirmation threshold | 4 | 1% |
 
-**Only 2% of misses are the detector's fault.** The rest are data outages (which the queue flags as gap items) and a budget smaller than the fault rate.
+When a fault is missed, the table above shows why. In only 8 of 372 missed faults (2%) did the detector itself fail, either because no jump occurred or because the jump was too small to pass the threshold. The other misses had two causes outside the detector's control. In 166 cases, the service sent no metric data during the fault, and the queue reports such periods as monitoring-gap items. In 198 cases, a valid jump existed but the day's 20 places were already full. GAIA injects about 22 faults a day, so even a perfect detector would have to leave some out at K = 20.
 
 ---
 
-## B2. Validation (walk-forward)
+### B2. Validation (walk-forward)
 
 Before each later week, **everything learned is re-learned from the past only** — the classifier, its threshold, the jump ranker and the jump confirmation threshold (0.62–0.75 GB across folds). That week is then scored once. `run_walkforward.py`, K = 20.
 
@@ -396,7 +446,7 @@ Before each later week, **everything learned is re-learned from the past only** 
 
 ---
 
-## B3. Robustness: does it only work because every fault is 1 GB?
+### B3. Robustness: does it only work because every fault is 1 GB?
 
 `run_robustness.py` adds synthetic faults of other shapes to the **real** GAIA memory series (120 per shape, at least an hour from any real fault) and asks whether each detector fires, with no budget:
 
@@ -419,12 +469,12 @@ What this shows:
 
 ---
 
-## B4. Queue options
+### B4. Queue options
 
 | Option (K = 20) | Caught | Items / day | Walk-forward mean | Verdict |
 |---|---|---|---|---|
 | Full queue (reference) | 69.6% | 17.7 | 71.3% | — |
-| **Learned jump ranker** instead of the rise threshold | 69.7% | 17.7 | 71.8% | No gain: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs |
+| **Learned jump ranker** instead of the rise threshold | 69.7% | 17.7 | 71.8% | No gain on this experiment: the rise threshold already gives 94% precision, so there is little left to learn from service, time of day or nearby logs. This row is `p3_ranker` in `queue_eval_gaia.csv`. It is not the later learned ranker (`LEARNED_RANKER`). That ranker, re-run in `docs/results/gaia_ranker_rerun/`, caught 887 against a baseline of 851 of 1,223 at K = 20, KEEP (§B7.2). The flag stays off |
 | **Group** metric items within 2 min on other services into one slot | 70.7% | 17.6 | 72.6% | Small gain; one item may then name two services |
 | **Confirm level per series** (learned on week 1; off in the headline) | 69.3% | 17.6 | 70.5% | Mixed: the detector alone keeps 72.6% with fewer false items (0.8 vs 1.0 a day), but the levels reject real faults — 26 misses below threshold instead of 4, and 84.1% vs 85.8% at K = 50. The web app uses it; the published tables use the single gate |
 | **Carry over** up to 10 unused slots to the next day | **72.6%** | 18.6 | **74.8%** | Largest gain; the average stays under K. But the same carry-over lifts the rate rule to 72.5% (walk-forward 74.3%), and the full queue then wins only 3 of 6 decided weeks (p = 0.66). Before the look-ahead fixes this row read 74.4% and 8/8 weeks; that margin did not survive |
@@ -439,7 +489,9 @@ What this shows:
 
 On GAIA the classifier does not earn its slots: on net, the alerts it escalates catch fewer faults than the metric items they push out of a full day. At K = 50, where slots are not scarce, all three catch 85.8%. This is why the detector alone is the first claim (§B1) and why the classifier is described as an option for teams whose faults log (§5).
 
-Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice.
+Grouping lets two metric items that are confirmed within two minutes of each other, on different services, share one place in the queue. The idea is that one fault often disturbs a service and its neighbours at almost the same moment. On GAIA this lifts detection slightly, from 69.6% to 70.7% at K = 20, because the freed places go to other faults. The cost is that one queue item may now point to two services, so the engineer has to check both. Grouping is off by default, because it changes what "20 items a day" means for the team.
+
+Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): they change what "20 a day" means for the on-call team, so it is their choice. The learned ranker flag (`LEARNED_RANKER`) is also off. Its GAIA keep and the homelab measurement are in §B7, and turning the flag on is not part of this report.
 
 ---
 **Why the severity row attaches no alerts.** An alert rides on a jump (no slot of its own) only if it arrives while a shown metric item on *its own service* is still open (`build_queue`). The classifier row attaches 280 alerts that way. The severity row attaches none, and the data explains why (`results/classifier_ablation_gaia.json`). The 507 test alerts that carry a fault are all `warning` (471) or `info` (36); no test alert is `critical` or `high`. So the severity rule never escalates a fault's alert. It escalates 44 `error` lines, with 14 more cut by its own 20-a-day limit. All 44 fall on 4 days, none carries a fault, and they are nightly jobs reporting that a log upload failed. None arrives while a shown metric item on its service is open: the nearest one on the same service is at least 199 minutes away (median 617). So 11 of them take a slot of their own, the rest find the day's alert share or budget used, and the row ends up close to "no log alerts".
@@ -447,7 +499,270 @@ Carry-over and grouping are off by default (`CARRY_OVER_MAX`, `GROUP_MINUTES`): 
 **What the shipped gate does with this.** The tool trains the classifier on the first 7 days of a batch and tests it on the rest (§9). A model must cost less than showing no log alerts on the held-out alerts, and the whole held-out queue with its alerts must cost less than both the same queue without log alerts and the queue that runs if the model is refused (here rules only, log alerts by severity), by at least one missed fault (10). The first model is not promoted just because no model is active. On GAIA the classifier passes the first test: it finds 339 of the 507 fault-bearing held-out alerts. It fails the second: with its alerts the queue catches 848 of 1,223 held-out faults with 95 false items, against 871 with 70 false items with severity alerts and 872 with 58 false items without log alerts. So it is registered as a candidate, and GAIA is scored by rules only (log alerts by severity, as in the second row). The gate's queue is the tool's, not this table's (it uses the tool's own confirm settings), so its counts differ a little from the rows above; the direction is the same. `run_classifier_ablation.py` records the decision in the same JSON file.
 
 
-## B5. Beyond microservices: any metric, any team
+### B6. What "success" means on this data
+
+`run_stats.py` splits the 1,223 test faults by the signal they left:
+
+| Signal | Count | Share | What can catch it |
+|---|---|---|---|
+| Jump, no log | 868 | **71.0%** | Metric rule only |
+| Log and jump | 185 | 15.1% | Either path |
+| Log, no jump | 34 | 2.8% | Alerts only |
+| No log, no metric data (monitoring gap) | 132 | 10.8% | Nothing — shown as a gap item |
+| No log, data but no jump | 4 | 0.3% | Nothing |
+
+- **Where metric data exists, the jump rule overlaps 99.6% of faults** (1,053 / 1,057).
+- 170 test faults start inside a monitoring gap. At K = 20 the gap items shown cover 159 of them (all 170 at K = 50).
+- **False jumps are not mislabelled faults.** 24.6% of the 256 false jumps start within 10 minutes of a fault on another service; random times do so 27.2% of the time. There is no sign that GAIA logged faults under the wrong service.
+- A log-only classifier is capped near **17.9%** (the faults that leave any log). That is why the early 95% target was wrong.
+
+| Early target | Measured | Verdict |
+|---|---|---|
+| 95% detection at K=20 | 69.6–72.6% (ceiling 84.9%) | Not possible at K=20: more faults per day than slots. 82–86% of the ceiling |
+| Beat the usual rule | Detector +3.7 points over a rate rule, 8/8 weeks; full queue +0.7 points, 4 of 8 weeks; log severity 0% | Met by the detector, against a fair rule; the full queue ties it |
+| Fewer false items | 1.0–1.8 vs 2.1 a day (rate rule) | Met |
+| Works on every service | Jump overlap 81–91% on all ten | Met |
+| Walk-forward not lucky | Means 71.3–74.8%, CI 64.5–76.7% | Met |
+| Real-time | Confirmed in 0.72 min; no look-ahead, checked by `tests/test_causality.py` | Met |
+| Works beyond 1 GB faults | 0.5–2 GB steps and spikes ≥ 98%; leaks 73–99% with the leak rule; 0.25 GB not | Partly — stated |
+
+Per service (test period):
+
+| Service | Faults | With a log | With a jump |
+|---|---|---|---|
+| dbservice1 | 129 | 0.8% | 91.5% |
+| dbservice2 | 148 | 2.0% | 81.1% |
+| logservice1 | 126 | 2.4% | 87.3% |
+| logservice2 | 108 | 1.8% | 87.0% |
+| mobservice1 | 124 | 84.7% | 83.9% |
+| mobservice2 | 116 | 87.1% | 87.1% |
+| redisservice1 | 111 | 2.7% | 82.0% |
+| redisservice2 | 114 | 0.0% | 86.0% |
+| webservice1 | 122 | 0.8% | 85.2% |
+| webservice2 | 125 | 0.0% | 90.4% |
+
+---
+
+## Appendix E. Home-lab day-12 detail
+
+### B7. Homelab: proposal feedback and the day-12 run
+
+This section answers the four points raised on the proposal, using the frozen day-12 snapshot `day12-rebuilt-20261103T150116Z`. The files are in `docs/results/homelab_day12/`. The snapshot holds 1,184 rebuilt alert episodes (`rebuild_summary.json`), of which 1,182 fall inside the metric window and are evaluated (`topology_stats.json`), plus 1,205 closed faults. The model trains on the first 7 days. `summary.json` records `train_end` `2026-10-28T19:15:11Z` and `test_end` `2026-11-02T19:15:03Z`: 6 on-call days and 559 test faults. A comparison is a KEEP only when the 95% paired bootstrap interval on the per-fault catch difference, 4,000 draws and seed 42, has a lower bound above zero. That is the same rule as the rest of this report. Intervals below are rounded to four decimal places from the CSV. Product flags stay off: `summary.json` records `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN` as off, and `flags_changed` false. Nothing in this evaluation pages. Three clocks are not the same instant. `summary.json` records `test_end` 2026-11-02T19:15:03Z. The snapshot cutoff described with the run is 2026-11-02T19:15:11Z. `rebuild_summary.json` records `end` 2026-11-02T19:15:00Z.
+
+#### B7.1 What this adds over existing tools
+
+Prometheus Alertmanager, PagerDuty and Opsgenie reduce noise by merging alerts that look alike. None of them decides which alerts a person should read when there are more alerts than that person can handle.
+
+Alertmanager "takes care of deduplicating, grouping, and routing" alerts. Grouping "categorizes alerts of similar nature into a single notification". Inhibition mutes some alerts while another alert is firing, and silences mute alerts for a set time ([Alertmanager concepts](https://prometheus.io/docs/alerting/latest/alertmanager/)). How often it sends is set by `group_wait`, `group_interval` and `repeat_interval`. Alerts that miss the first `group_wait` are "sent at the next group_interval instead" ([Alertmanager configuration](https://prometheus.io/docs/alerting/latest/configuration/)).
+
+PagerDuty Intelligent Alert Grouping "automatically consolidates related alerts into a single, actionable incident, using machine learning". It groups an alert into an open incident when the alert arrives within a time window, the incident is under 24 hours old, and the algorithm finds the alerts similar. It learns from responders merging and moving alerts by hand. By default it looks at one service at a time, and it is part of a paid AIOps add-on ([PagerDuty docs](https://support.pagerduty.com/main/docs/intelligent-alert-grouping)).
+
+Opsgenie deduplicates on a user-defined alias: "There can be at most one open alert with the same alias at any time", and a repeat raises the open alert's count instead of creating a new alert ([Opsgenie de-duplication](https://support.atlassian.com/opsgenie/docs/what-is-alert-de-duplication/)).
+
+| Capability | Alertmanager (homelab config) | PagerDuty Intelligent Alert Grouping | Opsgenie alias dedup | This system |
+|---|---|---|---|---|
+| Merge repeats of one alert | Yes, by group labels | Yes, similarity plus a time window | Yes, the same alias while the alert is open | Yes: an episode ends after a gap of more than 120 seconds, and an alert can ride on an open jump |
+| Learn which signals matter from past incidents | No | Learns how to group, from manual merges | No | Learns how to rank: the classifier and the ranker are trained on labelled past faults |
+| Respect a daily reading budget K | No: every group flush is sent | No | No | Yes: at most K items a day, and log alerts use at most a quarter of K |
+| Use metric behaviour, not only fired alerts | No: it only receives alerts | No: it only receives alerts and events | No | Yes: memory jumps, leaks and monitoring gaps are queue items |
+| Confidence and abstention | No | No | No | Yes: each alert gets a probability; uncertain ones go to a person; a model that does not beat the fallback on held-out data is not promoted |
+| Shadow mode: decide and record, and do not page | No | No | No | Yes, and it is the default. Live paging needs a password, a channel and the typed word LIVE |
+
+The homelab's Alertmanager route is in `homelab/config/kps-values.yaml`: group by `alertname`, `company` and `service`; `group_wait` 10 seconds; `group_interval` 2 minutes; `repeat_interval` 1 hour; Watchdog and InfoInhibitor go to the null receiver.
+
+The published queues did not include an Alertmanager baseline. `feedback_analysis.py` replays that route on the rebuilt episodes. Watchdog and InfoInhibitor are dropped. The remaining episodes are grouped by alert name, company and service. A group's first notification goes out 10 seconds after its first episode. Later episodes join a notification that has not been sent yet, or they trigger the next notification at least 2 minutes after the previous one. Each notification is one queue item. It counts as a catch if any episode in it is aligned to a fault by the evaluator's own rule: the same service, and a start inside the fault window. To give Alertmanager the same daily budget K, notifications are cut in two ways. Severity-first sorts each day by the severity label, critical before warning, and then by time. That sort needs the whole day in advance, so it is generous to the baseline. First-come takes them in time order, which is what a live system could do.
+
+The rebuilt episodes record only start times, so `repeat_interval` (re-sending a group every hour while it still fires) cannot be replayed. The notification counts below are therefore a lower bound on what Alertmanager would send.
+
+Volume on the pooled test window, from `feedback_bootstrap.json` key `alertmanager_unbounded`:
+
+| | Count |
+|---|---|
+| Alert episodes in the test window | 547 |
+| After the null route | 362 |
+| Alertmanager groups | 31 |
+| Notifications (lower bound) | 362, which is 60.33 a day (331 warning, 31 critical) |
+| Faults with any aligned routed episode | 90 of 559 |
+| Notifications that caught a fault, with no budget | precision 0.2486; 45.33 false notifications a day |
+| This system's ranker queue (`p3_ranker`) at K = 20 | 17.3 items a day, precision 0.673, 5.67 false a day, 68 faults caught |
+
+Grouping merged nothing here: the 362 notifications equal the 362 routed episodes. Every episode already ends after a gap of more than 120 seconds, and `group_interval` is 2 minutes, so no two episodes of one group land in the same flush. Even on the most favourable reading, an alert-only tool can catch at most 90 of 559 test faults (16.1%), because only those faults have an aligned alert at all.
+
+Paired bootstrap of the ranker against the Alertmanager-style queues (`feedback_bootstrap.csv`). AM is the baseline. Column heads are kept short so they stay on one line: Set is the population, CI is the 95% interval, Keep is the decision, and the two AM columns are severity-first and first-come.
+
+| Set | K | Ranker | AM severity | CI | Keep | AM time order | CI | Keep |
+|---|---|---|---|---|---|---|---|---|
+| Pooled | 5 | 18 | 0 | [0.0179, 0.0483] | KEEP | 4 | [0.0107, 0.0411] | KEEP |
+| Pooled | 10 | 38 | 2 | [0.0447, 0.0859] | KEEP | 13 | [0.0233, 0.0662] | KEEP |
+| Pooled | 20 | 68 | 21 | [0.0555, 0.1127] | KEEP | 28 | [0.0429, 0.1002] | KEEP |
+| Pooled | 50 | 75 | 69 | [−0.0197, 0.0411] | DROP | 73 | [−0.0268, 0.0340] | DROP |
+| acme | 5 | 19 | 3 | [0.0364, 0.1136] | KEEP | 13 | [−0.0136, 0.0636] | DROP |
+| acme | 10 | 28 | 16 | [0.0045, 0.1045] | KEEP | 23 | [−0.0273, 0.0773] | DROP |
+| acme | 20 | 29 | 36 | [−0.0864, 0.0227] | DROP | 38 | [−0.0955, 0.0136] | DROP |
+| acme | 50 | 29 | 49 | [−0.1500, −0.0318] | DROP (AM better) | 49 | [−0.1500, −0.0318] | DROP (AM better) |
+| cassini | 5 | 19 | 2 | [0.0556, 0.1444] | KEEP | 2 | [0.0556, 0.1444] | KEEP |
+| cassini | 10 | 24 | 8 | [0.0389, 0.1444] | KEEP | 8 | [0.0389, 0.1444] | KEEP |
+| cassini | 20 | 24 | 26 | [−0.0611, 0.0444] | DROP | 26 | [−0.0611, 0.0444] | DROP |
+| cassini | 50 | 24 | 39 | [−0.1389, −0.0333] | DROP (AM better) | 39 | [−0.1389, −0.0333] | DROP (AM better) |
+
+Borealis could not be scored on its own. Its training week has no alert that overlaps a fault (`summary.json`: "Training data needs both fault and noise alerts").
+
+When the budget is tight, the learned queue is clearly better than Alertmanager grouping. With all three companies sharing 20 slots a day, it catches 68 faults against 21 or 28, at roughly three to four times the precision (0.6731 against 0.175 and 0.2333) and about a third of the false items (5.67 against 16.5 for severity-first and 15.33 for first-come). The advantage disappears once the budget is about as large as the alert stream. A single company sends 23.0 (acme) or 35.33 (cassini) notifications a day. At K = 20 to 50, Alertmanager can therefore show almost all of them, and at K = 50 the interval lies entirely below zero for both companies, so grouping catches more faults than the ranker. The ranker does not fill its budget: acme uses 6.5 items a day out of 20 (1.5 false a day), against Alertmanager severity-first at 17.33 items a day (11.33 false a day). The ranker gives up some catches to keep the queue short. The claim that the files support is this: the system wins when attention is scarce, which is the alert-fatigue setting. When a team can read every alert, plain grouping catches more.
+
+#### B7.2 Beating severity ranking
+
+The examiner asked whether the trained model beats simply ranking log alerts by severity. The project's severity baseline, `logs_severity`, escalates `critical`, `error` or `high` alerts, suppresses exact repeats, and fills the day first come. It is run inside the same queue and scored the same way.
+
+Paired bootstrap of `p3_ranker` against `logs_severity` (`feedback_bootstrap.csv`; 559 pooled test faults, 220 acme, 180 cassini). Set is the population, CI is the 95% interval, Keep is the decision, and P / false is precision and false items a day.
+
+| Set | K | Ranker | Severity | CI | Keep | Ranker P / false | Severity P / false |
+|---|---|---|---|---|---|---|---|
+| Pooled | 5 | 18 | 0 | [0.0179, 0.0483] | KEEP | 0.600 / 2.00 | 0.000 / 0.33 |
+| Pooled | 10 | 38 | 0 | [0.0465, 0.0894] | KEEP | 0.672 / 3.17 | 0.000 / 0.33 |
+| Pooled | 20 | 68 | 0 | [0.0948, 0.1485] | KEEP | 0.673 / 5.67 | 0.000 / 0.33 |
+| Pooled | 50 | 75 | 0 | [0.1055, 0.1610] | KEEP | 0.675 / 6.17 | 0.000 / 0.33 |
+| acme | 5 | 19 | 0 | [0.0500, 0.1228] | KEEP | 0.704 / 1.33 | 0.000 / 0.17 |
+| acme | 10 | 28 | 0 | [0.0864, 0.1773] | KEEP | 0.763 / 1.50 | 0.000 / 0.17 |
+| acme | 20 | 29 | 0 | [0.0909, 0.1818] | KEEP | 0.769 / 1.50 | 0.000 / 0.17 |
+| acme | 50 | 29 | 0 | [0.0909, 0.1818] | KEEP | 0.769 / 1.50 | 0.000 / 0.17 |
+| cassini | 5 | 19 | 0 | [0.0611, 0.1556] | KEEP | 0.679 / 1.50 | none shown |
+| cassini | 10 | 24 | 0 | [0.0833, 0.1833] | KEEP | 0.615 / 2.50 | none shown |
+| cassini | 20 | 24 | 0 | [0.0833, 0.1833] | KEEP | 0.615 / 2.50 | none shown |
+| cassini | 50 | 24 | 0 | [0.0833, 0.1833] | KEEP | 0.615 / 2.50 | none shown |
+
+The ranker is a KEEP over severity in all 12 comparisons. Severity catches nothing here because of what the lab actually emits (`topology_stats.json`). The only critical alert is `HomelabErrorRateHigh` (75 episodes), and none of those episodes is aligned to a fault. All 215 alert episodes that are aligned to a fault are warnings (214 `HomelabCpuHigh`, 1 `HomelabMemoryHigh`). Cassini (Sock Shop) emits no traces, so its trace-based error-rate rule never fires and it has no critical alerts at all. A severity rule therefore never escalates an alert that belongs to a fault. This repeats the GAIA finding, where log severity also caught 0% at K = 20 (§B1).
+
+Beating a rule that shows almost nothing is a weak test, so the Alertmanager severity-first queue in §B7.1 was also run. It ranks every routed alert by severity and then by time, and it fills the whole budget. Pooled, the ranker still wins at K = 20 (68 against 21, interval [0.0555, 0.1127]). Within a single company it loses at generous budgets, as §B7.1 says.
+
+On GAIA, the learned ranker added in PR #26 was re-run on 3 November 2026 (`docs/results/gaia_ranker_rerun/summary_by_k.csv`, time split, seed 42, 4,000 draws). At K = 20 it caught 887 of 1,223 faults (72.5%) against the baseline variant's 851, a difference of +0.0294 with interval [0.0147, 0.0442], KEEP. That 72.5% is not the jump detector's 72.6% in §3. Precision is 0.9416 against 0.895, and false items a day are 1.0 against 1.82. That baseline equals the `proposed` row in `app/results/queue_eval_gaia.csv`. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 with interval [0.0131, 0.0401]. GAIA has no companies, so this is not leave-one-company-out. `queue_eval_gaia.csv` also has 887 catches at K = 20 on the row `delta_5m_carryover`. That is a different queue, the rate rule with unused slots carried over, and it is not this ranker. `LEARNED_RANKER` stays off.
+
+#### B7.3 Fault topology and deduplication
+
+Prometheus re-evaluates a firing alert every scrape, and the original collector wrote a new row on every pass while an alert stayed firing. By 31 October the live `alerts.csv` held 87,501 rows and only 979 distinct firing episodes. That pair was reported with the collector fix. The text file named in the analysis notes was not in the day-12 archive, so it is not among the files in `docs/results/homelab_day12/`. The fix, and the rebuild from Prometheus `ALERTS{alertstate="firing"}` history, apply one rule. An episode is one continuous firing of one alert series. A gap of more than 120 seconds with no firing sample ends it, and the next firing sample starts a new episode with a new id. An episode that is still firing keeps its id across collector passes, because it is tracked in `.alerts.episodes.json`. The day-12 snapshot rebuilt this way holds 1,184 episodes from 44 alert series (`rebuild_summary.json`).
+
+The 1,182 evaluated episodes, from `topology_stats.json`, break down as follows.
+
+| Category | Alert name(s) | Episodes | Severity |
+|---|---|---|---|
+| CPU | HomelabCpuHigh | 444 | warning |
+| Meta, routed to null | InfoInhibitor | 420 | none |
+| Memory | HomelabMemoryHigh | 159 | warning |
+| Latency | HomelabLatencyP95High | 76 | warning |
+| Error rate | HomelabErrorRateHigh | 75 | critical |
+| Pod restart | HomelabRestarted (2), KubePodCrashLooping (1) | 3 | warning |
+| Cluster or node | NodeMemoryMajorPagesFaults (3), KubePodNotReady (1), KubeDeploymentRolloutStuck (1) | 5 | warning |
+
+| Company (application, rule profile) | Episodes | Mix |
+|---|---|---|
+| cassini (Sock Shop, noisy) | 619 | CPU 285, meta 202, memory 132 |
+| acme (Online Boutique, noisy) | 523 | meta 218, CPU 159, latency 76, error rate 42, memory 27, restart 1 |
+| borealis (OpenTelemetry Demo, strict) | 34 | error rate 33, restart 1 |
+| cluster | 6 | node 3, Kubernetes 2, restart 1 |
+
+The alert stream is shaped by the rule profile, not only by the faults. The strict profile (borealis) has no CPU or memory rules and needs a longer breach before it fires. It produced 34 episodes for 308 injected faults. The noisy profiles fire on smaller moves. The busiest sources are `acme/unknown` (218) and `cassini/unknown` (202), which are InfoInhibitor, followed by `acme/otel-collector` (118), `cassini/front-end` (107) and `cassini/loadgenerator` (91). None of these five is a service that faults were injected into.
+
+The evaluator's strict rule, same service and episode start inside the fault window, links only 215 of 1,182 episodes to a fault, covering 214 of 1,205 faults. To study topology, a looser window was used: any routed episode in the same company that starts between the fault's start and 10 minutes after its end (`fault_fanout.csv`). Because faults are frequent, a chance line was also computed by shifting every fault window by a random 1 to 6 hours, 20 repeats, seed 42 (`fanout_chance.json`).
+
+| | Real windows | Shifted windows (mean, min–max) |
+|---|---|---|
+| Faults with at least one episode in the window | 512 | 239.2 (220–256) |
+| Faults with an episode on the faulted service itself | 369 | 17.4 (10–21) |
+| Faults with episodes on two or more services | 26 | 9.7 (5–16) |
+| Faults with episodes only on other services | 143 | — |
+
+| Fault type | Faults | Any episode | On the faulted service | Only elsewhere | Two or more services |
+|---|---|---|---|---|---|
+| cpu-stress | 284 | 284 | 284 | 0 | 17 |
+| pod-kill | 292 | 102 | 84 | 18 | 8 |
+| network-delay | 321 | 117 | 1 | 116 | 1 |
+| memory-stress (borealis only) | 128 | 3 | 0 | 3 | 0 |
+| network-loss (borealis only) | 125 | 5 | 0 | 5 | 0 |
+| http-abort (borealis only) | 55 | 1 | 0 | 1 | 0 |
+
+Alerts land on the faulted service far above chance (369 against a shifted mean of 17.4). Every CPU-stress fault (284 of 284) produced an episode on its own service. Network faults appear somewhere else. A network-delay fault fires an alert on its own service only once in 321 faults, while 116 alert on other services. The most common pairs are infrastructure, not business call edges: `acme/cartservice` to `acme/otel-collector` (27) and `acme/frontend` to `acme/otel-collector` (21), and cassini services to `cassini/loadgenerator` or `cassini/front-end`. In acme, the shared OpenTelemetry collector is a hub that many faults show up on. Real multi-service fan-out is rare. Only 26 faults, all in cassini, light up two or more services, against a shifted mean of 9.7. Most faults that alert at all produce one episode (1.14 on average when any episode is present).
+
+No dependency graph is available to the evaluation. Neither the homelab manifests nor `companies.yaml` encode service dependencies. The three applications have public call graphs, but those graphs are not in this repository. The trace-graph model (`src/trace_graph.py`) builds call graphs from spans, and it was evaluated on RCAEval, not on the homelab. The pairs above are observed co-firing only. They are not proven dependencies.
+
+How the same episodes fold down (`topology_stats.json`, `fold_down`; all 1,182 evaluated episodes):
+
+| Step | Items | Reduction |
+|---|---|---|
+| Live collector rows before the fix (to 31 October) | 87,501 | — |
+| Firing episodes (120-second gap rule) | 1,182 | the main deduplication step |
+| After Alertmanager's null route | 762 | 420 InfoInhibitor episodes removed |
+| Alertmanager groups (alert name, company, service) | 41 groups | — |
+| Alertmanager notifications (lower bound, no repeats) | 762 | none: `group_interval` merges nothing once episodes exist |
+| Same-company bursts (episodes chained within 2 minutes, any service) | 713 | 49 fewer (6.4%) |
+
+Inside the queue, `p3_grouped` attaches a metric item that is confirmed within 2 minutes of a shown metric item on another service, so the two share one slot. Pooled at K = 20, `topology_stats.json` records 11 attached alerts for `p3_grouped` against 5 for `proposed`, 53 faults caught against 51, and 9.83 against 9.67 false items a day. `p3_carryover` catches 54. Neither change is tested for significance here. Both stay off by default, as on GAIA (§B4).
+
+In this lab, deduplication is mostly a matter of time, one episode per continuous firing, not of topology. Cross-service grouping saves about 6% of episodes. The faults that most need topology are the network faults, because their symptoms appear on a different service from the cause. Those symptoms land on shared infrastructure, the telemetry collector and the load generator, rather than along a call graph. Linking the homelab's Tempo spans to the trace-graph model is the clear next step. That link is not built here.
+
+#### B7.4 Homelab final evaluation (day 12)
+
+Three simulated companies run in one k3d cluster in shadow mode, with Chaos Mesh injecting faults. Acme runs Online Boutique, with steady load and noisy rules. Borealis runs the OpenTelemetry demo, with a daily load and strict rules. Cassini runs Sock Shop, with bursty load and noisy rules. Nothing is paged. The learned ranker is trained on the first 7 days and scored on the next 6. Alerts are the 1,184 episodes rebuilt from Prometheus, which is why this run is called rebuilt.
+
+Two data bugs were found and fixed before the final run, in draft PR #30, with tests. The evaluator could read `metrics.csv` while the collector was still writing it, and then saw metrics that stopped before the alerts, so two runs on the same data disagreed. Tables are now written to a temporary file and renamed into place, and the evaluator refuses to run if the metrics end more than 30 minutes before the alerts. Evaluations run on a frozen snapshot. Separately, the collector wrote one row per pass for each alert that was still firing. It now tracks open episodes, and the day-12 alerts were rebuilt from Prometheus history with the same 120-second rule.
+
+Pooled result, all three companies in one queue (`pooled_bootstrap.csv`). The ranker is the candidate. Each block is caught faults, the 95% interval, and the keep decision, against proposed, tuned jumps, and static p99.
+
+| K | Ranker | Proposed | CI | Keep | Tuned jumps | CI | Keep | Static p99 | CI | Keep |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 5 | 18 | 12 | [0.0036, 0.0197] | KEEP | 14 | [−0.0018, 0.0179] | DROP | 2 | [0.0143, 0.0447] | KEEP |
+| 10 | 38 | 31 | [0.0018, 0.0250] | KEEP | 28 | [0.0054, 0.0322] | KEEP | 12 | [0.0233, 0.0698] | KEEP |
+| 20 | 68 | 51 | [0.0161, 0.0465] | KEEP | 54 | [0.0107, 0.0411] | KEEP | 15 | [0.0644, 0.1234] | KEEP |
+| 50 | 75 | 81 | [−0.0215, −0.0018] | DROP (proposed better) | 70 | [−0.0054, 0.0250] | DROP | 27 | [0.0555, 0.1181] | KEEP |
+
+At K = 20 the ranker shows 17.3 items a day with precision 0.6731 and 5.67 false items a day. The proposed queue has precision 0.4775 and 9.67 false items a day (`pooled_bootstrap.csv`). At K = 50 the proposed queue catches 6 more faults, and the interval excludes zero. The ranker stops near 19 items a day, so it gives up catches for precision. Against `logs_severity` the same ranker is a KEEP at K = 5, 10, 20 and 50 (§B7.2). The K = 5 comparison with tuned jumps is the exception inside the tight budgets: 18 against 14, with an interval that includes zero, so that one cell is a DROP.
+
+Within each company, trained and tested on its own data (`pooled_bootstrap.csv`), the ranker ties or slightly trails `proposed` at acme at every K. At K = 20 it catches 29 against 31, and the decision is DROP. At cassini it is a KEEP against `proposed` at K = 5 and 10, and at K = 20 and 50 both catch 24, so the decision is DROP. Against tuned jumps, cassini is a KEEP at every listed K, including K = 20 (24 against 20).
+
+The strict test is leave-one-company-out: train the ranker on the other two companies and test it on the held-out company, at K = 20 (`ranker/leave_one_company_out.json`).
+
+| Company | Baseline | Ranker | CI | Keep |
+|---|---|---|---|---|
+| acme | 32 of 220 | 32 | [0.0, 0.0] | DROP |
+| borealis | 25 of 159 | 25 | [0.0, 0.0] | DROP |
+| cassini | 21 of 180 | 21 | [0.0, 0.0] | DROP |
+
+What this run shows, and what it does not show, follows from those files.
+
+The pooled KEEP is in distribution. The ranker was trained on the same three companies, in an earlier week. At K = 5, 10 and 20 it catches more than `proposed` and `static_p99`, and at K = 10 and 20 it also catches more than tuned jumps, with the K = 5 tuned-jump cell a DROP as above. It also beats severity ranking at every listed K. It shows that the learned queue is cleaner, and catches more, than those rule queues at a scarce budget on a platform it has already seen.
+
+It does not transfer to a company it has never seen. Leave-one-company-out is a DROP for all three companies, with exactly the same catches as the baseline.
+
+When the budget is generous (K = 50), the simpler `proposed` queue catches more, and Alertmanager-style grouping wins inside a single company (§B7.1).
+
+Detection is low overall: 68 of 559 test faults at K = 20, about 12%. Many faults leave no alert, and the strict profile hides most of borealis.
+
+On GAIA the same ranker caught 887 against 851 of 1,223 at K = 20 and was a KEEP (§B7.2, `docs/results/gaia_ranker_rerun/`). The homelab therefore supports that keep inside one platform it has already seen. It does not yet show that the ranker generalises to a company that was held out of training. GAIA itself has no companies, so its split is by time, not leave-one-company-out.
+
+#### B7.5 One alert through the pipeline
+
+This example is taken from `worked_example.json` (pooled run, K = 20). Times are UTC.
+
+At 23:32:49 on 28 October, Chaos Mesh starts a CPU-stress experiment on the `catalogue` service of cassini. It ends at 23:36:49. The fault id is `cassini-20261028T233249Z-cpu-stress-catalogue`. It falls in the test window, so no model has seen it.
+
+The collector reads `catalogue`'s memory working set. The jump rule, relative mode at 30% above the recent median, marks a jump starting at 23:32:53, four seconds after the fault began. The jump is shown in the queue at 23:33:15. Its rise at confirmation is 3,436,544 bytes. The learned ranker keeps it, so it takes one of the day's 20 places. `worked_example.json` records `ranker_metric_items_catching` as 62. This jump's fault list contains this fault.
+
+Prometheus's `HomelabCpuHigh` rule starts firing at 23:36:00. The collector turns that firing into one episode, id `96e96f9c0538ee2a`, source `cassini/catalogue`, severity warning. Later samples of the same firing extend this episode rather than adding rows, because a new episode starts only after a gap of more than 120 seconds.
+
+For evaluation only, the alert started on the faulted service inside the fault window, so the evaluator links it to the fault. The model does not see that label for test alerts.
+
+The alert classifier, trained on the first 7 days, gives this alert a probability of 0.9890 (file value 0.988979). The file's `alert_threshold` is 0.6658. The decision is escalate, with reason "policy top-k". One input is that the alert arrived while a memory jump on the same service was open (`during_memory_spike` is 1).
+
+The jump on `cassini/catalogue` is still open at 23:36:00, and `attached_to_jump` is true. The alert is attached to the jump rather than given its own place. The engineer sees one incident, and it uses one place out of 20.
+
+The severity rule suppresses the same alert, with the reason "severity 'warning' below threshold". An Alertmanager-style group for this alert name, company and service would send its first notification 10 seconds after the episode start, at 23:36:10, because `group_wait` is 10 seconds. That is later than the jump the queue had already shown. Across the test window that grouping sends 60.33 notifications a day, so this one would compete with the rest of them.
+
+The learned queue surfaced the fault from a metric, before this alert had fired. When the alert arrived, the queue merged it into the same incident. The severity rule ignored the alert. Plain grouping would have delivered it later, as one notification among many.
+
+---
+
+
+## Appendix F. Generality beyond GAIA
+
+### B5. Beyond microservices: any metric, any team
 
 The engine is not tied to GAIA. `src/generic.py` takes any **metrics** table (time, value, optional series; long or wide; column names detected), optional **events** (alerts, tickets, notifications) and optional **past problems** (start, end, series). For each series it tunes on the first part and scores the rest once, and every system — static threshold, rate rule, a unit-free robust jump rule, the user's own alerts — is tuned with the same cost and scored through the same causal queue. The detector with the lowest training cost becomes the user's queue. A **chance line** (the same items at random times) is reported so wide labels cannot flatter the result.
 
@@ -525,89 +840,47 @@ Caveats: small test sets (the 95% intervals are 20–30 points wide); one train/
 
 ---
 
-## B6. What "success" means on this data
+## Appendix G. Reproduction and checked numbers
 
-`run_stats.py` splits the 1,223 test faults by the signal they left:
+### C1. How to reproduce
 
-| Signal | Count | Share | What can catch it |
-|---|---|---|---|
-| Jump, no log | 868 | **71.0%** | Metric rule only |
-| Log and jump | 185 | 15.1% | Either path |
-| Log, no jump | 34 | 2.8% | Alerts only |
-| No log, no metric data (monitoring gap) | 132 | 10.8% | Nothing — shown as a gap item |
-| No log, data but no jump | 4 | 0.3% | Nothing |
-
-- **Where metric data exists, the jump rule overlaps 99.6% of faults** (1,053 / 1,057).
-- 170 test faults start inside a monitoring gap. At K = 20 the gap items shown cover 159 of them (all 170 at K = 50).
-- **False jumps are not mislabelled faults.** 24.6% of the 256 false jumps start within 10 minutes of a fault on another service; random times do so 27.2% of the time. There is no sign that GAIA logged faults under the wrong service.
-- A log-only classifier is capped near **17.9%** (the faults that leave any log). That is why the early 95% target was wrong.
-
-| Early target | Measured | Verdict |
-|---|---|---|
-| 95% detection at K=20 | 69.6–72.6% (ceiling 84.9%) | Not possible at K=20: more faults per day than slots. 82–86% of the ceiling |
-| Beat the usual rule | Detector +3.7 points over a rate rule, 8/8 weeks; full queue +0.7 points, 4 of 8 weeks; log severity 0% | Met by the detector, against a fair rule; the full queue ties it |
-| Fewer false items | 1.0–1.8 vs 2.1 a day (rate rule) | Met |
-| Works on every service | Jump overlap 81–91% on all ten | Met |
-| Walk-forward not lucky | Means 71.3–74.8%, CI 64.5–76.7% | Met |
-| Real-time | Confirmed in 0.72 min; no look-ahead, checked by `tests/test_causality.py` | Met |
-| Works beyond 1 GB faults | 0.5–2 GB steps and spikes ≥ 98%; leaks 73–99% with the leak rule; 0.25 GB not | Partly — stated |
-
-Per service (test period):
-
-| Service | Faults | With a log | With a jump |
-|---|---|---|---|
-| dbservice1 | 129 | 0.8% | 91.5% |
-| dbservice2 | 148 | 2.0% | 81.1% |
-| logservice1 | 126 | 2.4% | 87.3% |
-| logservice2 | 108 | 1.8% | 87.0% |
-| mobservice1 | 124 | 84.7% | 83.9% |
-| mobservice2 | 116 | 87.1% | 87.1% |
-| redisservice1 | 111 | 2.7% | 82.0% |
-| redisservice2 | 114 | 0.0% | 86.0% |
-| webservice1 | 122 | 0.8% | 85.2% |
-| webservice2 | 125 | 0.0% | 90.4% |
-
----
-
-# Part C — Reproduce and deliverables
-
-## C1. How to reproduce
-
-```powershell
-python tools/fetch_gaia.py        # needs internet, ~1.8 GB download; checks SHA-256
+```bash
+python tools/fetch_gaia.py
 cd app
-$env:PYTHONPATH = (Get-Location).Path
-python -m pytest -q
-python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --sweep
-python run_queue_eval.py
-python run_classifier_ablation.py
-python run_walkforward.py
-python run_stats.py
-python run_robustness.py
-python ../tools/fetch_nab.py      # needs internet, ~15 MB
-python run_nab.py
-python ../tools/fetch_smd.py      # needs internet, ~240 MB
-python run_smd.py                # 28 machines, about 15 min; resumes if interrupted
-python ../tools/fetch_rcaeval_mem.py   # needs internet; RE1 memory cases only
-python run_rcaeval.py            # three applications, a few minutes
-python ../tools/fetch_rcaeval_re23.py  # needs internet, ~570 MB; RE2/RE3 logs + metrics, SHA-256 checked
-python run_rcaeval_logs.py       # RE2 and RE3, about 10 minutes on an 8-core Linux box (9.7 on 11 October); Train Ticket RE2 needs several GB of RAM
-python perf/resources.py         # time, peak memory and disk of one GAIA job (§7)
-python make_figures.py
-python run_validate.py
+uv sync --group dev
+uv run pytest -q
+uv run python run_memory.py --metrics data/gaia_metrics --gaia-run data/gaia_raw/run/run --sweep
+uv run python run_queue_eval.py
+uv run python run_classifier_ablation.py
+uv run python run_walkforward.py
+uv run python run_stats.py
+uv run python run_robustness.py
+uv run python ../tools/fetch_nab.py
+uv run python run_nab.py
+uv run python ../tools/fetch_smd.py
+uv run python run_smd.py
+uv run python ../tools/fetch_rcaeval_mem.py
+uv run python run_rcaeval.py
+uv run python ../tools/fetch_rcaeval_re23.py
+uv run python run_rcaeval_logs.py
+uv run python perf/resources.py
+uv run python make_figures.py
+uv run python run_validate.py
 ```
+
+On PowerShell, set `$env:PYTHONPATH` to the `app` directory and call `python` instead of `uv run python`. The GAIA ranker re-run is `docs/results/gaia_ranker_rerun/commands.sh`. The day-12 snapshot is `homelab/snapshots/day12/day12-rebuilt-20261103T150116Z.tar.xz` (xz SHA-256 `378dc71f3ef4143662acc1d0a3dda8c5e32f7752f3ceb77efe9b88bf0985c56e`; the original gzip SHA-256 is `968940267defb49a6f92c93824369560c417fa8df4546d85c3009938cf9da782`). Reproduce Table 2 with `./homelab/scripts/reproduce_day12.sh`.
 
 Needs the GAIA files at `app/data/gaia_raw/run/run` and `app/data/gaia_metrics` (not in git; they are large). `python tools/fetch_gaia.py` (from the repository root) downloads them from the GAIA MicroSS dataset (https://github.com/CloudWise-OpenSource/GAIA-DataSet, `MicroSS/run/run.zip` and the split archive `MicroSS/metric/metric_split.*`, about 1.8 GB), extracts the two run tables and the 37 `docker_memory_usage_total` series into that layout, and checks each file's SHA-256 against the copy used for these results (`--check` verifies files already in place). Without GAIA: `python examples/make_example.py`, then `python -m product.cli score --alerts examples/alerts.csv --metrics examples/metrics.csv`.
 
 A faster check without GAIA: `cd app && uv sync --group dev && uv run pytest -q && uv run python run_validate.py` (the result files are in git). Every experiment run is logged in `app/results/experiments.jsonl` (`docs/mlops.md`).
 
-## C1a. Use of AI tools
+### C1a. Use of AI tools
 
 AI coding assistants were used while building this project: for code review, refactoring, test writing and drafting documentation (visible in the repository history as the `claude/*` branches merged through pull requests #2 to #5, and in `AGENTS.md`). The runtime system uses no generative AI or external AI service. Every number in this report comes from the scripts in `app/` and is checked against `app/results/` by `run_validate.py`; the test suite, lint, type checks and the dependency audit run in CI. Design decisions, the evaluation method and the claims made here are the author's responsibility.
 
 ---
 
-## C2. Deliverables
+### C2. Deliverables
 
 | Item | Where |
 |---|---|
@@ -901,3 +1174,104 @@ AI coding assistants were used while building this project: for code review, ref
 | `gatesplit.RE3.tt.shipped` | 100.0% | §B5 independent gate test |
 | `gatesplit.RE3.tt.test_cases` | 8 | §B5 independent gate test |
 | `gatesplit.margin` | 10 | §B5 independent gate test |
+
+## Appendix H. Interfaces
+
+Taken from `app/product/web/` and `app/src/experiment.py`. When `APP_PASSWORD` is unset, routes other than `/health` accept only a private or loopback client. When it is set, those routes need a session or HTTP basic login. Ingest accepts `Authorization: Bearer` matching `INGEST_TOKEN` when that variable is set.
+
+Table H1. Main HTTP endpoints
+
+| Method | Path | Auth | Input | Output |
+|---|---|---|---|---|
+| GET | /health | open | none | JSON status |
+| POST | /login | none | password | session cookie |
+| POST | /logout | session | none | cookie cleared |
+| POST | /ingest/alertmanager | ingest token or private client | Alertmanager webhook | firing alerts buffered |
+| POST | /ingest/alerts | ingest token or private client | `{alerts:[{timestamp,source,severity,message}]}` | same |
+| POST | /jobs/run | session or private client | `{mode,budget_k,shadow_mode}` | queue result; pages only if Live rules hold |
+| GET | /queue | session or private client | none | current queue |
+| POST | /feedback | operator if a password is set | Real or Noise mark | label stored |
+| GET | /metrics | session or private client | none | Prometheus text |
+| GET | /monitoring | session or private client | none | monitoring JSON |
+| POST | /evaluate | session or private client | alerts, metrics, faults CSV | evaluation report |
+
+Table H2. Library interfaces
+
+| Caller | Callee | Role |
+|---|---|---|
+| `product.pipeline` | `src.classifier.AlertClassifier` | fit and score log alerts |
+| `product.pipeline` | `src.queue.build_queue` | causal queue for the product gate |
+| `src.experiment.run_window` | `src.queue.build_queue` | each named queue, including `proposed` and `p3_ranker` |
+| `src.experiment.run_window` | `src.classifier.AlertClassifier` | log alerts inside the window |
+| `homelab.evaluate` | `src.experiment.run_window` | day-12 plain and learned-ranker scores |
+| `homelab.evaluate` | `src.ranker.fit_ranker` | only when `--learned-ranker` is passed; does not set `LEARNED_RANKER` |
+
+## Appendix I. Optional queue checks
+
+The four checks live in `src/enhancements.py`. Each stays off unless its flag is `1`, `true`, `yes` or `on`. This run set the three flags in the scoring process only. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN` stayed unset, and nothing was paged. The keep rule is the same paired bootstrap as Table 2: 4,000 draws, seed 42, KEEP only when the interval's lower bound is above 0. The home-lab input is the committed day-12 snapshot. The GAIA rows use the published alert window: 1,223 test faults, and at K = 20 proposed catches 851 and the learned ranker 887, the same baseline as Table 1. E1 is not scored because GAIA is one tenant. Flags stayed off in the product. The run is `docs/results/enhancements/gaia-20261104T194507Z/`.
+
+When M equals K, a hybrid queue is the ranker it starts from, so those rows repeat a ranker-versus-proposed result. The new question is a smaller M filled out by proposed.
+
+Table I1. Catch comparisons on the home lab. Counts are faults caught. The interval is the per-fault difference.
+
+| Check | Comparison | Caught | 95% CI | Decision |
+|---|---|---|---|---|
+| E1 acme, N = 3, threshold retune, K = 10 | vs unadapted ranker | 44 vs 38 of 397 | [0.0025, 0.0302] | KEEP |
+| E1 acme, N = 3, threshold retune, K = 10 | vs proposed | 44 vs 47 of 397 | [−0.0202, 0.0050] | DROP |
+| E1, every company, N = 1, 2, 3, K = 20 | vs unadapted and vs proposed | see the CSV | includes 0, or no calibration items for acme N = 1 | DROP |
+| E2 learned hybrid, pooled, M = 20, K = 20 | vs proposed | 63 vs 51 of 559 | [0.0107, 0.0340] | KEEP |
+| E2 jump hybrid, pooled, M = 20, K = 20 | vs proposed | 68 vs 51 of 559 | [0.0161, 0.0465] | KEEP |
+| E2 jump hybrid, pooled, M = 20, K = 50 | vs proposed | 82 vs 81 of 559 | [0.0000, 0.0054] | DROP |
+| E2 jump hybrid, pooled, M = 10, K = 50 | vs p3 ranker | 81 vs 75 of 559 | [0.0018, 0.0215] | KEEP |
+| E2 jump hybrid, pooled, M = 10, K = 50 | vs proposed | 81 vs 81 of 559 | [0.0000, 0.0000] | DROP |
+| E3 topology, pooled, K = 20 | vs proposed | 60 vs 51 of 559 | [0.0072, 0.0268] | KEEP |
+| E3 topology, pooled, K = 20 | vs learned ranker | 60 vs 63 of 559 | [−0.0125, 0.0000] | DROP |
+| E3 topology, leave-one-company-out, K = 20 | vs unadapted | acme 32/220, borealis 25/159, cassini 21/180 | [0.0000, 0.0000] | DROP |
+
+E1 uses only the held-out company's labels before origin plus N days, then scores faults that start after that boundary, so the fault count is not the day-7 test count. Acme's first day produced no calibration items, so N = 1 is not scored. The K = 10 KEEP does not hold at K = 20 (54 vs 57 unadapted, DROP). Borealis and cassini match the unadapted ranker at every N and K. The M = 20 jump hybrid at K = 20 is the published ranker (68 vs 51). Training data chose M = 10 for the learned hybrid at K = 50; that queue ties proposed at 81. Topology features are the public demo call graph (neighbour alerts in 15 minutes, an open jump on the same service, fan-out). They do not move leave-one-company-out.
+
+Table I2. Minutes from fault start to the first catching item, pooled. The interval is the median difference versus proposed on faults both caught.
+
+| Queue | K | Caught | Median | p90 | Median minus proposed | 95% CI |
+|---|---|---|---|---|---|---|
+| proposed | 20 | 51 | 0.78 | 2.92 | 0.00 | [0.00, 0.00] |
+| p3 ranker | 20 | 68 | 0.78 | 2.82 | 0.00 | [0.00, 0.00] |
+| learned ranker | 20 | 63 | 0.78 | 2.89 | 0.00 | [0.00, 0.00] |
+| topology | 20 | 60 | 0.80 | 2.95 | 0.00 | [0.00, 0.00] |
+| jumps tuned | 20 | 54 | 0.78 | 1.14 | 0.00 | [0.00, 0.00] |
+| static p99 | 20 | 15 | −351.93 | 0.75 | −40.73 | [−81.47, 0.00] |
+| severity | 20 | 0 | none | none | none | none |
+| Alertmanager, first-come | 20 | 28 | 3.53 | 4.08 | 2.57 | [0.17, 2.92] |
+| Alertmanager, severity-first | 20 | 21 | 3.58 | 4.13 | 2.60 | [0.17, 3.10] |
+| proposed | 50 | 81 | 0.80 | 3.25 | 0.00 | [0.00, 0.00] |
+| jump hybrid, M = 20 | 50 | 82 | 0.80 | 3.24 | 0.00 | [0.00, 0.00] |
+
+On faults both queues caught, the ranker and proposed have the same median delay. Alertmanager is slower by about two and a half minutes. The static p99 median is negative because the credited spike was shown before the fault start. Severity caught nothing, so it has no delay. Full rows are in `docs/results/enhancements/homelab-20261104T192524Z/`.
+
+Table I3. GAIA catch comparisons, 1,223 faults. Counts and intervals are from `summary.csv`, rounded to four decimals. When M is capped by K, the M = 10, M = 20 and min(K, 20) rows are the same queue.
+
+| Check | Comparison | Caught | 95% CI | Decision |
+|---|---|---|---|---|
+| E2 learned hybrid, M = 20 and min(K, 20), K = 20 | vs proposed | 893 vs 851 | [0.0213, 0.0491] | KEEP |
+| E2 learned hybrid, M = 20 and min(K, 20), K = 20 | vs learned ranker | 893 vs 887 | [0.0016, 0.0090] | KEEP |
+| E2 learned hybrid, M = 10, K = 20 | vs proposed | 848 vs 851 | [−0.0057, 0.0000] | DROP |
+| E2 learned hybrid, M = 10, K = 20 | vs learned ranker | 848 vs 887 | [−0.0466, −0.0172] | DROP |
+| E2 learned hybrid, K = 5 | vs learned ranker | 250 vs 242 | [0.0025, 0.0114] | KEEP |
+| E2 learned hybrid, K = 5 | vs proposed | 250 vs 239 | [−0.0090, 0.0270] | DROP |
+| E2 learned hybrid, K = 50 | vs proposed and vs learned ranker | 1049 vs 1049 | [0.0000, 0.0000] | DROP |
+| E2 jump hybrid, K = 5 | vs proposed | 238 vs 239 | [−0.0025, 0.0000] | DROP |
+| E2 jump hybrid, K = 5 | vs p3 ranker | 238 vs 238 | [0.0000, 0.0000] | DROP |
+| E2 jump hybrid, K = 10 | vs proposed | 476 vs 475 | [0.0000, 0.0025] | DROP |
+| E2 jump hybrid, K = 10 | vs p3 ranker | 476 vs 474 | [0.0000, 0.0041] | DROP |
+| E2 jump hybrid, M = 10, K = 20 | vs proposed | 848 vs 851 | [−0.0057, 0.0000] | DROP |
+| E2 jump hybrid, M = 10, K = 20 | vs p3 ranker | 848 vs 852 | [−0.0090, 0.0016] | DROP |
+| E2 jump hybrid, M = 20, K = 20 | vs proposed | 853 vs 851 | [−0.0033, 0.0065] | DROP |
+| E2 jump hybrid, M = 20, K = 20 | vs p3 ranker | 853 vs 852 | [0.0000, 0.0025] | DROP |
+| E2 jump hybrid, K = 50 | vs proposed | 1049 vs 1049 | [0.0000, 0.0000] | DROP |
+| E2 jump hybrid, K = 50 | vs p3 ranker | 1049 vs 1047 | [0.0000, 0.0041] | DROP |
+| E3 topology, K = 20 | vs proposed | 886 vs 851 | [0.0139, 0.0433] | KEEP |
+| E3 topology, K = 20 | vs learned ranker | 886 vs 887 | [−0.0065, 0.0049] | DROP |
+| E3 topology, K = 50 | vs proposed and vs learned ranker | 1049 vs 1049 | [0.0000, 0.0000] | DROP |
+| E1 company calibration |  |  |  | not scored |
+
+At K = 50 the learned hybrid, the jump hybrid and topology each catch 1049, the same as proposed. The jump hybrid does not beat p3 (1,047): the interval includes 0. M = 10 at K = 20 is worse than both proposed and the learned ranker. The K = 5 KEEP is against the learned ranker only.
