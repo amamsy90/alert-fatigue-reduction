@@ -180,3 +180,14 @@ def test_deactivating_leaves_live_jobs_on_rules_and_keeps_every_version(env):
     registry = load_registry()
     assert registry["active"] is None and [v["version"] for v in registry["versions"]] == ["v0001"]
     assert registry["history"][-1]["note"] == "deactivated"
+
+
+def test_a_refused_retrain_waits_for_new_marks_instead_of_repeating():
+    """Real replay: with no active model, daily retrains kept refusing on the same marks."""
+    registry = {"active": None, "versions": [
+        {"trained_at": (NOW - pd.Timedelta(days=2)).isoformat(), "feedback_real": 12, "promoted": False}]}
+    assert not retrain_decision(None, 12, registry, now=NOW)["due"]                      # same marks as the refused attempt
+    assert not retrain_decision(None, 12 + MIN_NEW_REAL_MARKS - 1, registry, now=NOW)["due"]
+    assert retrain_decision(None, 12 + MIN_NEW_REAL_MARKS, registry, now=NOW)["due"]     # enough new evidence
+    # An active model changes nothing: marks are still counted from the newest attempt.
+    assert not retrain_decision(_saved(1, real_marks=3), 12, registry, now=NOW)["due"]

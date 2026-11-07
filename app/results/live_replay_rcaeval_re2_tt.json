@@ -1,0 +1,904 @@
+{
+  "settings": {
+    "accuracy": 0.9,
+    "marks_per_day": 20,
+    "seed": 0,
+    "budget_k": 20,
+    "dataset": "rcaeval:RE2:tt"
+  },
+  "summary": {
+    "days": 40,
+    "alerts": 1050,
+    "marks": 194,
+    "real_marks": 50,
+    "precision_from_marks": 0.2577,
+    "retrains_run": 8,
+    "retrains_promoted": 0,
+    "retrains_refused": 8,
+    "retrains_rolled_back": 0,
+    "drift_warn_days": 12,
+    "drift_ok_days": 0,
+    "model_versions": 8,
+    "active": null
+  },
+  "days": [
+    {
+      "day": "re2tt_ts-auth-service_delay_1",
+      "alerts": 20,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 0,
+      "marks_noise": 5,
+      "precision_from_marks": 0.0,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_cpu_1",
+      "alerts": 31,
+      "shown": 5,
+      "true_precision_shown": 1.0,
+      "marked": 5,
+      "marks_real": 5,
+      "marks_noise": 5,
+      "precision_from_marks": 0.5,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0001",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_delay_1",
+      "alerts": 20,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 6,
+      "marks_noise": 9,
+      "precision_from_marks": 0.4,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_cpu_1",
+      "alerts": 36,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 9,
+      "marks_noise": 11,
+      "precision_from_marks": 0.45,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_delay_1",
+      "alerts": 11,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 9,
+      "marks_noise": 16,
+      "precision_from_marks": 0.36,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-auth-service_disk_1",
+      "alerts": 9,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 11,
+      "marks_noise": 19,
+      "precision_from_marks": 0.3667,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0002",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-auth-service_loss_1",
+      "alerts": 34,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 11,
+      "marks_noise": 24,
+      "precision_from_marks": 0.3143,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 3.41 >= 0.25)",
+        "alert_type shifted (PSI 18.18 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-order-service_disk_1",
+      "alerts": 22,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 11,
+      "marks_noise": 29,
+      "precision_from_marks": 0.275,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-order-service_socket_1",
+      "alerts": 15,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 11,
+      "marks_noise": 34,
+      "precision_from_marks": 0.2444,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-order-service_loss_1",
+      "alerts": 26,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 12,
+      "marks_noise": 38,
+      "precision_from_marks": 0.24,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_disk_1",
+      "alerts": 42,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 12,
+      "marks_noise": 43,
+      "precision_from_marks": 0.2182,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 6.16 >= 0.25)",
+        "alert_type shifted (PSI 18.18 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_socket_1",
+      "alerts": 20,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 13,
+      "marks_noise": 47,
+      "precision_from_marks": 0.2167,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_loss_1",
+      "alerts": 11,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 14,
+      "marks_noise": 51,
+      "precision_from_marks": 0.2154,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_disk_1",
+      "alerts": 12,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 14,
+      "marks_noise": 56,
+      "precision_from_marks": 0.2,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_delay_1",
+      "alerts": 26,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 14,
+      "marks_noise": 61,
+      "precision_from_marks": 0.1867,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-auth-service_cpu_2",
+      "alerts": 33,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 15,
+      "marks_noise": 65,
+      "precision_from_marks": 0.1875,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 3.88 >= 0.25)",
+        "alert_type shifted (PSI 18.19 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-auth-service_cpu_3",
+      "alerts": 1,
+      "shown": 0,
+      "true_precision_shown": null,
+      "marked": 0,
+      "marks_real": 15,
+      "marks_noise": 65,
+      "precision_from_marks": 0.1875,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-auth-service_mem_2",
+      "alerts": 73,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 16,
+      "marks_noise": 69,
+      "precision_from_marks": 0.1882,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 2.10 >= 0.25)",
+        "alert_type shifted (PSI 18.18 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0003",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-auth-service_socket_3",
+      "alerts": 11,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 16,
+      "marks_noise": 74,
+      "precision_from_marks": 0.1778,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-order-service_cpu_3",
+      "alerts": 16,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 18,
+      "marks_noise": 77,
+      "precision_from_marks": 0.1895,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_cpu_3",
+      "alerts": 10,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 19,
+      "marks_noise": 81,
+      "precision_from_marks": 0.19,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_cpu_2",
+      "alerts": 53,
+      "shown": 5,
+      "true_precision_shown": 0.8,
+      "marked": 5,
+      "marks_real": 23,
+      "marks_noise": 82,
+      "precision_from_marks": 0.219,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 3.30 >= 0.25)",
+        "alert_type shifted (PSI 18.18 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0004",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_cpu_3",
+      "alerts": 22,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 23,
+      "marks_noise": 87,
+      "precision_from_marks": 0.2091,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_disk_3",
+      "alerts": 11,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 24,
+      "marks_noise": 91,
+      "precision_from_marks": 0.2087,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_socket_2",
+      "alerts": 41,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 24,
+      "marks_noise": 96,
+      "precision_from_marks": 0.2,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 3.53 >= 0.25)",
+        "alert_type shifted (PSI 18.17 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_loss_2",
+      "alerts": 29,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 25,
+      "marks_noise": 100,
+      "precision_from_marks": 0.2,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_loss_3",
+      "alerts": 11,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 26,
+      "marks_noise": 104,
+      "precision_from_marks": 0.2,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_cpu_2",
+      "alerts": 29,
+      "shown": 5,
+      "true_precision_shown": 0.8,
+      "marked": 5,
+      "marks_real": 29,
+      "marks_noise": 106,
+      "precision_from_marks": 0.2148,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0005",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_disk_3",
+      "alerts": 7,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 29,
+      "marks_noise": 111,
+      "precision_from_marks": 0.2071,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_socket_1",
+      "alerts": 21,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 30,
+      "marks_noise": 115,
+      "precision_from_marks": 0.2069,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_delay_2",
+      "alerts": 11,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 31,
+      "marks_noise": 119,
+      "precision_from_marks": 0.2067,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_delay_3",
+      "alerts": 31,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 32,
+      "marks_noise": 123,
+      "precision_from_marks": 0.2065,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 3.92 >= 0.25)",
+        "alert_type shifted (PSI 18.16 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_loss_2",
+      "alerts": 15,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 32,
+      "marks_noise": 128,
+      "precision_from_marks": 0.2,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-route-service_mem_1",
+      "alerts": 70,
+      "shown": 5,
+      "true_precision_shown": 1.0,
+      "marked": 5,
+      "marks_real": 37,
+      "marks_noise": 128,
+      "precision_from_marks": 0.2242,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 1.83 >= 0.25)",
+        "alert_type shifted (PSI 18.16 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0006",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_mem_1",
+      "alerts": 13,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 37,
+      "marks_noise": 133,
+      "precision_from_marks": 0.2176,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_mem_2",
+      "alerts": 64,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 37,
+      "marks_noise": 138,
+      "precision_from_marks": 0.2114,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 1.57 >= 0.25)",
+        "alert_type shifted (PSI 18.15 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-train-service_loss_1",
+      "alerts": 42,
+      "shown": 5,
+      "true_precision_shown": 0.8,
+      "marked": 5,
+      "marks_real": 41,
+      "marks_noise": 139,
+      "precision_from_marks": 0.2278,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 4.93 >= 0.25)",
+        "alert_type shifted (PSI 18.15 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_loss_1",
+      "alerts": 4,
+      "shown": 4,
+      "true_precision_shown": 1.0,
+      "marked": 4,
+      "marks_real": 45,
+      "marks_noise": 139,
+      "precision_from_marks": 0.2446,
+      "model_used": "rules_only",
+      "drift_status": "n/a",
+      "drift_reasons": [],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0007",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-travel-service_loss_3",
+      "alerts": 41,
+      "shown": 5,
+      "true_precision_shown": 1.0,
+      "marked": 5,
+      "marks_real": 50,
+      "marks_noise": 139,
+      "precision_from_marks": 0.2646,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "severity shifted (PSI 0.49 >= 0.25)",
+        "source shifted (PSI 5.45 >= 0.25)",
+        "alert_type shifted (PSI 18.16 >= 0.25)",
+        "message_length shifted (PSI 0.84 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": true,
+        "reason": null,
+        "version": "v0008",
+        "promoted": false,
+        "rolled_back": false
+      }
+    },
+    {
+      "day": "re2tt_ts-order-service_socket_3",
+      "alerts": 56,
+      "shown": 5,
+      "true_precision_shown": 0.0,
+      "marked": 5,
+      "marks_real": 50,
+      "marks_noise": 144,
+      "precision_from_marks": 0.2577,
+      "model_used": "rules_only",
+      "drift_status": "warn",
+      "drift_reasons": [
+        "source shifted (PSI 4.03 >= 0.25)",
+        "alert_type shifted (PSI 18.16 >= 0.25)"
+      ],
+      "challenger": null,
+      "retrain": {
+        "ran": false,
+        "reason": "not due: not enough new marks",
+        "version": null,
+        "promoted": null,
+        "rolled_back": null
+      }
+    }
+  ]
+}
