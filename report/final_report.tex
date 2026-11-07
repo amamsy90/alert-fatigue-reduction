@@ -169,14 +169,14 @@ O5 other teams & \texttt{/evaluate}, NAB, SMD, RCAEval & \texttt{generic}, \text
 
 
 \section{Deliverables, setup and use}
-\textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, release 1.1.0 plus the changes in \texttt{CHANGELOG.md}, submitted commit \texttt{COMMIT\_HASH}. The README lists the team, structure, prerequisites, exact commands, the tested system and the data sources. No paid API is needed and the system calls no external AI service.
+\textbf{Repository.} \url{https://github.com/amamsy90/alert-fatigue-reduction}, release 1.1.0 plus the changes in \texttt{CHANGELOG.md}, submitted commit:\newline \mbox{\texttt{1a024ebc9c42e3def2d95afe5d340580118f10bc}}. The README lists the team, exact commands, the tested system and data sources. No paid API is needed and the system calls no external AI service.
 
 \textbf{Setup and use.} From \texttt{app/}: \texttt{docker compose up -d} serves the app at \texttt{127.0.0.1:8080} in shadow mode; \texttt{uv sync --group dev}, \texttt{uv run pytest -q} and \texttt{uv run python run\_validate.py} run the tests and check the reported numbers. \texttt{uv run python run\_reproduce.py} reproduces the GAIA result on a committed 10-day real sample in under a minute; \texttt{--full} uses the 1.8~GB data fetched by \texttt{tools/fetch\_gaia.py}. Workflow: Alertmanager posts alerts, a job pulls memory from Prometheus and builds the day's queue with a reason for each item, the engineer marks items Real or Noise, and the marks train the next model. The \texttt{/evaluate} page runs the same engine on a team's own CSV files.
 
 \section{Conclusion}
 The project delivers a tested, deployable, causal on-call queue. Its measured contribution is a metric detector that catches 72.6\% of GAIA faults at 20 items a day with 1.0 false item, against 68.9\% and 2.1 for a Prometheus rate rule. Its main findings are negative or limited: the log-alert classifier earns its slots only where faults write logs, the full queue ties the rate rule, and all GAIA faults are one injected shape. The next step is a shadow-mode pilot with a real team.
 
-\textbf{Limitations and honest use of tools.} The work is a solo project. AI coding assistants helped with code review, refactoring, tests and documentation (see \texttt{AGENTS.md}); the running system uses no generative AI. The claims made here are the author's responsibility. Timings come from one Windows laptop.
+\textbf{Limitations and honest use of tools.} The work is a solo project. AI coding assistants helped with code review, refactoring, tests and documentation (see \texttt{AGENTS.md}); the running system uses no generative AI. Timings come from one Windows laptop.
 
 \newpage
 \appendix
