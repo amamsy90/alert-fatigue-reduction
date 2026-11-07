@@ -26,6 +26,10 @@ class FeedbackRequest(BaseModel):
     verdict: str | None = Field(None, description="real | noise | null to clear")
 
 
+class RetrainRequest(BaseModel):
+    force: bool = Field(False, description="retrain even if not due (the cooldown and the gate still apply)")
+
+
 class ShadowModeRequest(BaseModel):
     shadow_mode: bool = Field(..., description="true = Shadow (safe); false = Live")
     confirm: str | None = Field(

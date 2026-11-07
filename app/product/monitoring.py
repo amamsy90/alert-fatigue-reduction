@@ -266,7 +266,8 @@ def health(store) -> dict:
         "service": {"requests": requests, "errors_5xx": errors, "error_rate": error_rate, "p95_latency_seconds": p95},
         "model": {"marks": marked, "real": marks["real"], "noise": marks["noise"], "precision_from_marks": precision,
                   "alert_precision": marks["alert"]["precision"], "jump_precision": marks["jump"]["precision"],
-                  "last_model_used": last.get("model_used"), "last_label_source": last.get("label_source")},
+                  "last_model_used": last.get("model_used"), "last_label_source": last.get("label_source"),
+                  **_model_freshness(marks["real"])},
         "data": {"last_job_alerts": last.get("alert_count"), "alert_volume_ratio": volume_ratio,
                  "metric_median_ratio": metric_ratio, "metric_drift_series": drifted,
                  "last_job_metric_median": last.get("metric_median"),
@@ -350,6 +351,17 @@ def _input_drift(last: dict) -> dict:
     return {"status": status, "value": report.get("psi_max"), "reasons": report.get("reasons", [])}
 
 
+def _model_freshness(real_marks: int) -> dict:
+    """Age of the active model and whether a retrain is due (product/model_store.SavedModel.status)."""
+    from product.model_store import load_model
+
+    saved = load_model()
+    if saved is None:
+        return {"age_days": None, "retrain_due": None}
+    status = saved.status(real_marks)
+    return {"age_days": status["age_days"], "retrain_due": status["retrain_due"]}
+
+
 def _challenger(last: dict) -> dict:
     """The refused model being tallied against the active one (src/challenger.py).
     Never a warning: a promote recommendation asks a person to review, it is not a fault."""
@@ -390,6 +402,10 @@ def gauges(store) -> str:
             None if not h["data"]["challenger"] else
             h["data"]["challenger"]["champion_cost"] - h["data"]["challenger"]["challenger_cost"],
             "Labelled-alert cost the challenger would have saved over the active model (cost units)"),
+        "oncall_model_age_days": (h["model"].get("age_days"), "Days since the active model was trained"),
+        "oncall_model_retrain_due": (
+            None if h["model"].get("retrain_due") is None else int(h["model"]["retrain_due"]),
+            "1 when the active model is older than the retrain age or has new Real marks"),
         "oncall_health_ok": (1 if h["status"] == "ok" else 0, "1 when every /monitoring check passes"),
         "oncall_llm_timeout_rate": (h["llm"]["timeout_rate"], "Share of shadow-note attempts that timed out"),
         "oncall_llm_fallback_rate": (h["llm"]["fallback_rate"], "Share of shadow-note attempts that fell back"),

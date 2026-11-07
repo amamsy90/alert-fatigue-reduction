@@ -414,6 +414,35 @@ def record_shadow(version: str, job_counts: dict, margin: float) -> dict:
         return entry["shadow"]
 
 
+def annotate_version(version: str, **fields) -> dict:
+    """Add fields (for example a verification result) to a version's model card."""
+    with _REGISTRY_LOCK:
+        registry = load_registry()
+        entry = next((v for v in registry["versions"] if v["version"] == version), None)
+        if entry is None:
+            raise KeyError(f"Unknown model version {version}")
+        entry.update(fields)
+        _write_registry(registry)
+        return entry
+
+
+def deactivate_active() -> None:
+    """Stop using any model, so live jobs fall back to rules only. The kept versions stay.
+
+    Used when the first model ever trained fails verification and there is nothing to
+    roll back to."""
+    with _REGISTRY_LOCK:
+        registry = load_registry()
+        active = model_path()
+        active.unlink(missing_ok=True)
+        _digest_path(active).unlink(missing_ok=True)
+        registry["active"] = None
+        registry.setdefault("history", []).append(
+            {"version": None, "activated_at": pd.Timestamp.now("UTC").isoformat(), "note": "deactivated"}
+        )
+        _write_registry(registry)
+
+
 def activate_version(version: str) -> dict:
     """Roll back (or forward) to a kept version. Refuses a file whose hash changed."""
     with _REGISTRY_LOCK:
