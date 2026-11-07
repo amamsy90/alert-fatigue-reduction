@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from experiments.model_ablation.model_eval import published_scoring_window
 from src.config import Config
 from src.enhancements import (
     FEATURES,
@@ -31,7 +32,6 @@ from src.enhancements import (
 )
 from src.entities import Alert, Fault
 from src.memory_spikes import Spike
-from src.model_eval import published_scoring_window
 from src.queue import QueueItem, build_queue
 from src.ranker import candidate_frame, fit_ranker, learned_ranker_enabled, select_by_score
 
