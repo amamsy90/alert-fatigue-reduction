@@ -256,6 +256,23 @@ def computed_numbers() -> dict[str, float]:
             out["replay.tt.marks"] = float(summary["marks"])
             out["replay.tt.real_marks"] = float(summary["real_marks"])
             out["replay.tt.precision_from_marks"] = float(summary["precision_from_marks"])
+    for name, short in (("live_soak_run1_before_cooldown.json", "soak1"), ("live_soak.json", "soak")):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        soak = json.loads(path.read_text(encoding="utf-8"))
+        for field in ("faults_injected", "faults_judged", "faults_caught", "detection_rate", "false_jumps"):
+            out[f"{short}.{field}"] = float(soak[field])
+        if short == "soak":
+            for field in ("median_delay_minutes", "shown_jumps", "jobs_run", "jobs_skipped", "jobs_failed", "marks",
+                          "precision_from_marks", "retrains_run", "monitoring_ok_share"):
+                out[f"soak.{field}"] = float(soak[field])
+    path = ROOT / "live_drift_phase.json"
+    if path.exists():
+        steps = json.loads(path.read_text(encoding="utf-8"))["drift_phase"]["steps"]
+        out["driftphase.shifted_psi_max"] = float(steps[3]["psi_max"])
+        out["driftphase.shifted_text_auc"] = float(steps[3]["text_auc"])
+        out["driftphase.usual_jobs_with_drift_n_a"] = float(sum(1 for st in steps[:3] if st["drift"] == "n/a"))
     return out
 
 
@@ -355,6 +372,21 @@ def claims_still_hold() -> None:
                 _fail(f"the replay ({name}) now promotes a model; rewrite the replay section (§B8)")
             if replay["retrains_rolled_back"]:
                 _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§B8)")
+
+    soak_path = ROOT / "live_soak.json"
+    if soak_path.exists():
+        soak = json.loads(soak_path.read_text(encoding="utf-8"))
+        if soak["jobs_failed"] or not soak["shadow_mode"] or not soak["prometheus_scraped_app_metrics"]:
+            _fail("the live soak failed a job, left shadow mode or was not scraped; rewrite the soak section (§B9)")
+        if soak["false_jumps"] or soak["detection_rate"] < 1.0:
+            _fail("the live soak now has false jumps or missed faults; rewrite the soak section (§B9)")
+        if soak["retrains_run"] and soak["active_model"]:
+            _fail("the live soak now promotes a model; rewrite the soak section (§B9)")
+    drift_path = ROOT / "live_drift_phase.json"
+    if drift_path.exists():
+        steps = json.loads(drift_path.read_text(encoding="utf-8"))["drift_phase"]["steps"]
+        if steps[3]["drift"] != "warn":
+            _fail("the drift phase no longer warns on the shifted storm; rewrite the soak section (§B9)")
 
 
 def main() -> None:

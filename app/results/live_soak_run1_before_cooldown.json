@@ -1,0 +1,481 @@
+{
+  "faults_injected": 22,
+  "faults_judged": 19,
+  "faults_caught": 13,
+  "detection_rate": 0.6842,
+  "median_delay_minutes": 1.34,
+  "shown_jumps": 157,
+  "false_jumps": 0,
+  "true_precision_jumps": 1.0,
+  "settings": {
+    "minutes": 120.0,
+    "warmup_s": 900.0,
+    "fault_every_s": 300.0,
+    "job_every_s": 180.0,
+    "retrain_every_s": 600.0,
+    "accuracy": 0.9,
+    "seed": 0,
+    "version": "1.2.0"
+  },
+  "jobs_run": 20,
+  "jobs_skipped": 20,
+  "jobs_failed": 0,
+  "marks": 157,
+  "precision_from_marks": 0.8662420382165605,
+  "shadow_mode": true,
+  "retrains_run": 1,
+  "retrain_calls": 10,
+  "model_versions": 1,
+  "active_model": null,
+  "drift_warn_cycles": 0,
+  "drift_ok_cycles": 0,
+  "monitoring_ok_share": 1.0,
+  "prometheus_scraped_app_metrics": true,
+  "prometheus_alerts_firing_at_end": {
+    "Watchdog": 1
+  },
+  "retrains": [
+    {
+      "t": 720,
+      "ran": false,
+      "promoted": null,
+      "reason": "not due: not enough new marks"
+    },
+    {
+      "t": 1441,
+      "ran": false,
+      "promoted": null,
+      "reason": "not due: not enough new marks"
+    },
+    {
+      "t": 2161,
+      "ran": false,
+      "promoted": null,
+      "reason": "history is not trainable: 7 alerts, 2 labelled as faults"
+    },
+    {
+      "t": 2882,
+      "ran": true,
+      "promoted": false,
+      "reason": null
+    },
+    {
+      "t": 3602,
+      "ran": false,
+      "promoted": null,
+      "reason": "the last model was trained 0.2 h ago (minimum 6 h)"
+    },
+    {
+      "t": 4323,
+      "ran": false,
+      "promoted": null,
+      "reason": "the last model was trained 0.4 h ago (minimum 6 h)"
+    },
+    {
+      "t": 5044,
+      "ran": false,
+      "promoted": null,
+      "reason": "the last model was trained 0.6 h ago (minimum 6 h)"
+    },
+    {
+      "t": 5765,
+      "ran": false,
+      "promoted": null,
+      "reason": "the last model was trained 0.8 h ago (minimum 6 h)"
+    },
+    {
+      "t": 6486,
+      "ran": false,
+      "promoted": null,
+      "reason": "the last model was trained 1.0 h ago (minimum 6 h)"
+    },
+    {
+      "t": 7207,
+      "ran": false,
+      "promoted": null,
+      "reason": "the last model was trained 1.2 h ago (minimum 6 h)"
+    }
+  ],
+  "cycles": [
+    {
+      "t": 180,
+      "job_status": 200,
+      "faults_so_far": 0,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 0,
+      "monitoring": "ok",
+      "precision_from_marks": null
+    },
+    {
+      "t": 360,
+      "job_status": 200,
+      "faults_so_far": 0,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 0,
+      "monitoring": "ok",
+      "precision_from_marks": null
+    },
+    {
+      "t": 540,
+      "job_status": "skipped",
+      "faults_so_far": 0,
+      "monitoring": "ok",
+      "precision_from_marks": null
+    },
+    {
+      "t": 720,
+      "job_status": "skipped",
+      "faults_so_far": 0,
+      "monitoring": "ok",
+      "precision_from_marks": null
+    },
+    {
+      "t": 900,
+      "job_status": "skipped",
+      "faults_so_far": 1,
+      "monitoring": "ok",
+      "precision_from_marks": null
+    },
+    {
+      "t": 1080,
+      "job_status": 200,
+      "faults_so_far": 1,
+      "model_used": "rules_only",
+      "alerts": 2,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 1,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 1260,
+      "job_status": "skipped",
+      "faults_so_far": 2,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 1441,
+      "job_status": "skipped",
+      "faults_so_far": 2,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 1621,
+      "job_status": 200,
+      "faults_so_far": 3,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 3,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 1801,
+      "job_status": 200,
+      "faults_so_far": 4,
+      "model_used": "rules_only",
+      "alerts": 2,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 3,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 1981,
+      "job_status": "skipped",
+      "faults_so_far": 4,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 2161,
+      "job_status": "skipped",
+      "faults_so_far": 5,
+      "monitoring": "ok",
+      "precision_from_marks": 1.0
+    },
+    {
+      "t": 2341,
+      "job_status": 200,
+      "faults_so_far": 5,
+      "model_used": "rules_only",
+      "alerts": 2,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 4,
+      "monitoring": "ok",
+      "precision_from_marks": 0.9090909090909091
+    },
+    {
+      "t": 2521,
+      "job_status": "skipped",
+      "faults_so_far": 6,
+      "monitoring": "ok",
+      "precision_from_marks": 0.9090909090909091
+    },
+    {
+      "t": 2701,
+      "job_status": 200,
+      "faults_so_far": 6,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 5,
+      "monitoring": "ok",
+      "precision_from_marks": 0.9375
+    },
+    {
+      "t": 2882,
+      "job_status": "skipped",
+      "faults_so_far": 7,
+      "monitoring": "ok",
+      "precision_from_marks": 0.9375
+    },
+    {
+      "t": 3062,
+      "job_status": 200,
+      "faults_so_far": 7,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 5,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8095238095238095
+    },
+    {
+      "t": 3242,
+      "job_status": 200,
+      "faults_so_far": 8,
+      "model_used": "rules_only",
+      "alerts": 2,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 6,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8518518518518519
+    },
+    {
+      "t": 3422,
+      "job_status": "skipped",
+      "faults_so_far": 9,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8518518518518519
+    },
+    {
+      "t": 3602,
+      "job_status": "skipped",
+      "faults_so_far": 9,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8518518518518519
+    },
+    {
+      "t": 3782,
+      "job_status": "skipped",
+      "faults_so_far": 10,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8518518518518519
+    },
+    {
+      "t": 3962,
+      "job_status": 200,
+      "faults_so_far": 10,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 8,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8285714285714286
+    },
+    {
+      "t": 4143,
+      "job_status": "skipped",
+      "faults_so_far": 11,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8285714285714286
+    },
+    {
+      "t": 4323,
+      "job_status": "skipped",
+      "faults_so_far": 12,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8285714285714286
+    },
+    {
+      "t": 4503,
+      "job_status": 200,
+      "faults_so_far": 12,
+      "model_used": "rules_only",
+      "alerts": 2,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 10,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8666666666666667
+    },
+    {
+      "t": 4683,
+      "job_status": 200,
+      "faults_so_far": 13,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 11,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8571428571428571
+    },
+    {
+      "t": 4863,
+      "job_status": "skipped",
+      "faults_so_far": 14,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8571428571428571
+    },
+    {
+      "t": 5044,
+      "job_status": 200,
+      "faults_so_far": 14,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 11,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8656716417910447
+    },
+    {
+      "t": 5224,
+      "job_status": 200,
+      "faults_so_far": 15,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 11,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8846153846153846
+    },
+    {
+      "t": 5404,
+      "job_status": "skipped",
+      "faults_so_far": 16,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8846153846153846
+    },
+    {
+      "t": 5584,
+      "job_status": 200,
+      "faults_so_far": 16,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 12,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8777777777777778
+    },
+    {
+      "t": 5765,
+      "job_status": "skipped",
+      "faults_so_far": 17,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8777777777777778
+    },
+    {
+      "t": 5945,
+      "job_status": 200,
+      "faults_so_far": 17,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 13,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8640776699029126
+    },
+    {
+      "t": 6125,
+      "job_status": 200,
+      "faults_so_far": 18,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 13,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8706896551724138
+    },
+    {
+      "t": 6306,
+      "job_status": 200,
+      "faults_so_far": 18,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 13,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8682170542635659
+    },
+    {
+      "t": 6486,
+      "job_status": 200,
+      "faults_so_far": 19,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 13,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8732394366197183
+    },
+    {
+      "t": 6666,
+      "job_status": "skipped",
+      "faults_so_far": 19,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8732394366197183
+    },
+    {
+      "t": 6846,
+      "job_status": "skipped",
+      "faults_so_far": 20,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8732394366197183
+    },
+    {
+      "t": 7026,
+      "job_status": 200,
+      "faults_so_far": 21,
+      "model_used": "rules_only",
+      "alerts": 1,
+      "drift": "n/a",
+      "challenger": null,
+      "shown_jumps": 15,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8662420382165605
+    },
+    {
+      "t": 7207,
+      "job_status": "skipped",
+      "faults_so_far": 22,
+      "monitoring": "ok",
+      "precision_from_marks": 0.8662420382165605
+    }
+  ]
+}

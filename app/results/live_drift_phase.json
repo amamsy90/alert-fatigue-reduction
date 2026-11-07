@@ -1,0 +1,109 @@
+{
+  "faults_injected": 0,
+  "faults_judged": 0,
+  "faults_caught": 0,
+  "detection_rate": null,
+  "median_delay_minutes": null,
+  "shown_jumps": 0,
+  "false_jumps": 0,
+  "true_precision_jumps": null,
+  "settings": {
+    "minutes": 0.0,
+    "warmup_s": 1200,
+    "fault_every_s": 300,
+    "job_every_s": 180,
+    "retrain_every_s": 600,
+    "accuracy": 0.9,
+    "seed": 0,
+    "version": "1.2.0"
+  },
+  "jobs_run": 0,
+  "jobs_skipped": 0,
+  "jobs_failed": 0,
+  "marks": 0,
+  "precision_from_marks": null,
+  "shadow_mode": true,
+  "retrains_run": 0,
+  "retrain_calls": 0,
+  "model_versions": 0,
+  "active_model": null,
+  "drift_warn_cycles": 0,
+  "drift_ok_cycles": 0,
+  "monitoring_ok_share": null,
+  "prometheus_scraped_app_metrics": false,
+  "prometheus_alerts_firing_at_end": {},
+  "retrains": [],
+  "cycles": [],
+  "drift_phase": {
+    "steps": [
+      {
+        "kind": "usual",
+        "alerts": 40,
+        "marked": 0,
+        "model_used": "rules_only",
+        "drift": "n/a",
+        "psi_max": null,
+        "reasons": null,
+        "text_auc": null
+      },
+      {
+        "kind": "usual",
+        "alerts": 40,
+        "marked": 0,
+        "model_used": "rules_only",
+        "drift": "n/a",
+        "psi_max": null,
+        "reasons": null,
+        "text_auc": null
+      },
+      {
+        "kind": "usual",
+        "alerts": 40,
+        "marked": 0,
+        "model_used": "rules_only",
+        "drift": "n/a",
+        "psi_max": null,
+        "reasons": null,
+        "text_auc": null
+      },
+      {
+        "kind": "shifted",
+        "alerts": 40,
+        "marked": 8,
+        "model_used": "rules_only",
+        "drift": "warn",
+        "psi_max": 18.0931,
+        "reasons": [
+          "severity shifted (PSI 18.09 >= 0.25)",
+          "source shifted (PSI 15.25 >= 0.25)",
+          "alert_type shifted (PSI 17.42 >= 0.25)",
+          "message_length shifted (PSI 3.30 >= 0.25)",
+          "message wording changed (classifier AUC 1.00 >= 0.75)"
+        ],
+        "text_auc": 1.0
+      },
+      {
+        "kind": "usual",
+        "alerts": 40,
+        "marked": 0,
+        "model_used": "rules_only",
+        "drift": "warn",
+        "psi_max": 16.6665,
+        "reasons": [
+          "severity shifted (PSI 2.03 >= 0.25)",
+          "source shifted (PSI 1.94 >= 0.25)",
+          "alert_type shifted (PSI 16.67 >= 0.25)",
+          "message_length shifted (PSI 2.07 >= 0.25)"
+        ],
+        "text_auc": 0.5814
+      }
+    ],
+    "retrain": {
+      "ran": true,
+      "promoted": false,
+      "reason": null
+    },
+    "model_versions": 1,
+    "active_model": null
+  }
+}
