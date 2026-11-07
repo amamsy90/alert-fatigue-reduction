@@ -1,0 +1,86 @@
+# Simulated companies for one GPU laptop. Estimates are not measurements.
+# Disable a company (enabled: false) or pass --companies to scripts/up.sh
+# when RAM is tight. Shared observability is extra; see homelab/README.md.
+companies:
+  - id: acme
+    name: Acme Retail
+    enabled: true
+    namespace: company-acme
+    app: online-boutique
+    load:
+      profile: steady
+    alerts:
+      sensitivity: noisy
+    chaos:
+      types: [pod-kill, network-delay, cpu-stress]
+      interval_min_minutes: 20
+      interval_max_minutes: 45
+      duration_min_minutes: 3
+      duration_max_minutes: 6
+    estimate:
+      ram: "1.5-2.5 GB"
+      cpu: "0.5-1.5 cores"
+
+  - id: borealis
+    name: Borealis Shop
+    enabled: true
+    namespace: company-borealis
+    app: otel-demo
+    load:
+      profile: daily
+    alerts:
+      sensitivity: strict
+    chaos:
+      types: [network-loss, memory-stress, http-abort]
+      interval_min_minutes: 30
+      interval_max_minutes: 60
+      duration_min_minutes: 3
+      duration_max_minutes: 6
+    estimate:
+      ram: "3-5 GB"
+      cpu: "1-2.5 cores"
+
+  - id: cassini
+    name: Cassini Market
+    enabled: true
+    namespace: company-cassini
+    app: sock-shop
+    load:
+      profile: bursty
+    alerts:
+      sensitivity: noisy
+    chaos:
+      types: [pod-kill, network-delay, cpu-stress]
+      interval_min_minutes: 25
+      interval_max_minutes: 55
+      duration_min_minutes: 3
+      duration_max_minutes: 6
+    estimate:
+      ram: "1.5-2.5 GB"
+      cpu: "0.5-1.5 cores"
+
+  # DeathStarBench socialNetwork is a real microservice app, and it is not
+  # enabled. Mongo, Redis, Memcached and the media services do not fit beside
+  # the three apps above plus Prometheus, Loki, Tempo and Chaos Mesh.
+  # To add it, set enabled: true, give a manifest_url that applies in
+  # `namespace`, and run it alone (`./scripts/up.sh --companies draco`).
+  - id: draco
+    name: Draco Social
+    enabled: false
+    namespace: company-draco
+    app: manifest
+    manifest_url: ""
+    load:
+      profile: bursty
+    alerts:
+      sensitivity: noisy
+    chaos:
+      types: [pod-kill, network-delay, memory-stress]
+      interval_min_minutes: 20
+      interval_max_minutes: 60
+      duration_min_minutes: 3
+      duration_max_minutes: 6
+    estimate:
+      ram: "4-6 GB"
+      cpu: "1-2 cores"
+    note: "Disabled. DeathStarBench socialNetwork does not fit on the same node as the default three companies."

@@ -1,0 +1,3 @@
+cd /home/ai/work/enh-gaia-wt/app (commit 9fd870e)
+export RANKER_COMPANY_CALIBRATION=1 HYBRID_QUEUE=1 RANKER_TOPOLOGY_FEATURES=1; unset LEARNED_RANKER METRIC_MODEL LLM_EXPLAIN
+/home/ai/work/alert-fatigue-reduction/app/.venv/bin/python ../experiments/run_enhancements.py --data gaia --backend xgboost --device cuda --out ../docs/results/enhancements/gaia-20261104T194507Z

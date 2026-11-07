@@ -124,6 +124,9 @@ def ml_snapshot() -> dict:
         "trace_model": os.environ.get("TRACE_MODEL", "").strip().lower() or "off",
         "llm_lora": os.environ.get("LLM_LORA", "").strip().lower() or "off",
         "log_encoder": os.environ.get("LOG_ENCODER", "").strip().lower() or "off",
+        "ranker_explain": os.environ.get("RANKER_EXPLAIN", "").strip().lower() or "off",
+        "ranker_abstain": os.environ.get("RANKER_ABSTAIN", "").strip().lower() or "off",
+        "ranker_disagree": os.environ.get("RANKER_DISAGREE", "").strip().lower() or "off",
     }
 
 

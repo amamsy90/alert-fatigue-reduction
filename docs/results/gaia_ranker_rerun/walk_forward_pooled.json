@@ -1,0 +1,35 @@
+{
+ "metric_model": {
+  "status": "scored",
+  "decision": "drop",
+  "reason": "the 95% interval for the pooled per-fault catch difference does not lie above zero",
+  "per_fault_catch_delta": {
+   "mean": 0.0,
+   "low": 0.0,
+   "high": 0.0,
+   "n": 1223
+  }
+ },
+ "ranker": {
+  "status": "scored",
+  "decision": "keep",
+  "reason": "the 95% interval for the pooled per-fault catch difference lies above zero",
+  "per_fault_catch_delta": {
+   "mean": 0.0262,
+   "low": 0.0131,
+   "high": 0.0401,
+   "n": 1223
+  }
+ },
+ "both": {
+  "status": "scored",
+  "decision": "keep",
+  "reason": "the 95% interval for the pooled per-fault catch difference lies above zero",
+  "per_fault_catch_delta": {
+   "mean": 0.0286,
+   "low": 0.0164,
+   "high": 0.0417,
+   "n": 1223
+  }
+ }
+}

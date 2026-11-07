@@ -1,0 +1,78 @@
+# kube-prometheus-stack 92.11.0. Keys match that chart's values.yaml.
+# The webhook URL is the ingest path on its own. tplConfig stays false so Helm does not
+# eat Alertmanager templates. Grafana's password is a localhost lab default.
+fullnameOverride: kps
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheusOperator:
+  admissionWebhooks:
+    failurePolicy: Ignore
+
+grafana:
+  adminPassword: homelab
+
+alertmanager:
+  tplConfig: false
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: oncall-queue
+      group_by: ["alertname", "company", "service"]
+      group_wait: 10s
+      group_interval: 2m
+      repeat_interval: 1h
+      routes:
+        - receiver: "null"
+          matchers:
+            - alertname =~ "Watchdog|InfoInhibitor"
+    receivers:
+      - name: "null"
+      - name: oncall-queue
+        webhook_configs:
+          - url: http://oncall-queue.observability.svc.cluster.local:8080/ingest/alertmanager
+            send_resolved: false
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: 12GiB
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 3Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
