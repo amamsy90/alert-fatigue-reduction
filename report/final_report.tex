@@ -116,7 +116,7 @@ Evaluation (\texttt{run\_*.py}) & Scripts write \texttt{results/*.csv}; \texttt{
 \textbf{Changes from the proposal.} The proposal planned an alert classifier as the main result. Measurement showed that on GAIA the metric rules carry the result, so the classifier became an optional component behind the promotion gate. A code review removed five uses of later-in-the-day information (full queue 70.2\% to 69.6\%), and a Prometheus integration test found that a 121~s query step meant live jumps never confirmed; the fetch now uses 60~s steps.
 
 \section{Testing, evaluation and results}
-\textbf{Methods.} The suite has 500 tests: unit tests for detectors, queue and policy; API and pipeline integration tests with outbound calls mocked; AI-specific cases (malformed rows, one-class labels, a worse model not promoted); security tests (login lock, SSRF, CSRF); a Docker integration test against real Prometheus and Alertmanager; and a load test. CI runs lint, type checks, tests on two Python versions, a dependency audit and a Docker build. A script, \texttt{run\_validate.py}, checks every number in the long report against \texttt{app/results/}. Evaluation uses the 55 test days of GAIA MicroSS (1{,}223 faults), an 8-week walk-forward, bootstrap intervals and sign tests.
+\textbf{Methods.} The suite has 514 tests: unit tests for detectors, queue and policy; API and pipeline integration tests with outbound calls mocked; AI-specific cases (malformed rows, one-class labels, a worse model not promoted); security tests (login lock, SSRF, CSRF); a Docker integration test against real Prometheus and Alertmanager; and a load test. CI runs lint, type checks, tests on two Python versions, a dependency audit and a Docker build. A script, \texttt{run\_validate.py}, checks every number in the long report against \texttt{app/results/}. Evaluation uses the 55 test days of GAIA MicroSS (1{,}223 faults), an 8-week walk-forward, bootstrap intervals and sign tests.
 
 \begin{table}[ht]
 \centering\tablefont
@@ -159,7 +159,7 @@ Objective & Design element & Evidence\\
 O1 beat rules & Jump detector, learned threshold & Table~\ref{tab:main}; 8 of 8 weeks; \texttt{experiment}\\
 O2 real time & Causal queue, no later data & \texttt{causality}; median 0.72 min\\
 O3 production & Shadow default, gate, skops, login & \texttt{security}, \texttt{model\_registry}\\
-O4 tested & pytest, CI, load test & 490 passed, 87\% coverage, p95 0.32~s\\
+O4 tested & pytest, CI, load test & 504 passed, 87\% coverage, p95 0.32~s\\
 O5 other teams & \texttt{/evaluate}, NAB, SMD, RCAEval & \texttt{generic}, \texttt{rcaeval\_logs}\\
 \bottomrule
 \end{tabular}

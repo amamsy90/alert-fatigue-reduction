@@ -421,6 +421,30 @@ class QueueStore:
                 conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
         return len(old)
 
+    def history_alerts(self, max_jobs: int = 60) -> list[dict]:
+        """Distinct alerts from the newest `max_jobs` jobs, oldest first.
+
+        Ingest jobs re-score overlapping history, so the same alert appears in many
+        jobs; it is kept once (same source, instant and message). Only the fields a
+        job stored are returned, which is what retraining needs."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT d.alert_id, d.timestamp, d.source, d.severity, d.message FROM decisions d "
+                "WHERE d.job_id IN (SELECT job_id FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT ?) "
+                "ORDER BY d.timestamp, d.id",
+                (max(int(max_jobs), 1),),
+            ).fetchall()
+        seen: set[tuple] = set()
+        out: list[dict] = []
+        for r in rows:
+            key = (r["source"], r["timestamp"], r["message"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"alert_id": r["alert_id"], "timestamp": r["timestamp"], "source": r["source"],
+                        "severity": r["severity"], "message": r["message"]})
+        return out
+
     def recent_jobs(self, limit: int = 30) -> list[dict]:
         """Newest jobs first: id, time, source and meta (for monitoring)."""
         with self._connect() as conn:
