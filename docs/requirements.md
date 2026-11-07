@@ -165,5 +165,5 @@ This document states what the system must do (functional requirements, FR), how 
 - R1 through R8 in `docs/threat_model.md` are closed and tested.
 - FR-21's cuML-versus-sklearn tolerance and the XGBoost CUDA conversion check are skipped on machines without a CUDA device, including CI. The CPU fallback and the skops round-trip are not skipped.
 - FR-24's CUDA image is not built in CI. The CPU `docker build` of `app/Dockerfile` is. GPU memory is asserted as a parser and a missing-`nvidia-smi` result; a live device was not available here.
-- FR-25 and FR-26 stay off. Their torch and XGBoost tests skip in CPU CI. GAIA catch@K for both models is pending until `run_model_ablation.py --data gaia` is run on a machine that has the GAIA folders.
+- FR-25 and FR-26 stay off. Their torch and XGBoost tests skip in CPU CI. GAIA catch@K for both models is pending until `experiments/model_ablation/run_model_ablation.py --data gaia` is run on a machine that has the GAIA folders.
 - FR-27 stays off. The synthetic audit in `app/results/ranker_audit_synthetic.json` is not a GAIA result. GAIA explainability, coverage and disagreement counts stay pending until `run_ranker_audit.py --data gaia` is run on a machine that has the GAIA folders and, for the encoder partner, a hash-checked contrastive encoder.

@@ -1,0 +1,65 @@
+# Defaults are the safe ones: shadow mode, no paging, a password required, one replica.
+
+image:
+  repository: ghcr.io/amamsy90/alert-fatigue-reduction
+  # Empty means v<appVersion> (the tag the release workflow publishes).
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Live paging stays off. Turning it on is a deliberate change here AND the typed word LIVE in the app.
+shadowMode: true
+
+auth:
+  # The password for the web app and API. Required: the chart refuses to render without one
+  # (or an existing Secret), because Live mode and proxied access refuse to work without it.
+  requirePassword: true
+  user: oncall
+  password: ""
+  ingestToken: ""
+  # Name of a Secret you manage, with keys APP_PASSWORD and INGEST_TOKEN (and APP_USER when
+  # serviceMonitor.enabled). When set, the two
+  # values above are ignored and no Secret is created.
+  existingSecret: ""
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""
+  # Use an existing claim instead of creating one.
+  existingClaim: ""
+
+# Settings passed through as environment variables (see deploy/prod.env.example).
+env:
+  JOB_RETENTION: "200"
+  INGEST_DEDUP_HOURS: "24"
+  PROM_ALLOW_PRIVATE: "0"
+# PROM_URL, TRUSTED_PROXIES and similar go here, e.g.:
+#   PROM_URL: http://prometheus.monitoring.svc:9090
+#   PROM_ALLOW_PRIVATE: "1"
+
+# Extra Host header names the app accepts, besides the service's own names.
+allowedHosts: []
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+# Scheduled retraining: a CronJob that calls POST /models/retrain through the service.
+retrain:
+  enabled: false
+  schedule: "17 */6 * * *"
+  image: curlimages/curl:8.10.1
+
+# Needs the Prometheus Operator CRDs; off by default.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+prometheusRule:
+  enabled: false

@@ -1,0 +1,8 @@
+oncall-queue {{ .Chart.AppVersion }} installed as {{ include "oncall.fullname" . }}.
+
+Mode: {{ if .Values.shadowMode }}SHADOW (records what would be paged; nothing is sent){{ else }}shadowMode is false: Live paging also needs a channel and the typed word LIVE in the app{{ end }}.
+
+Reach it from your machine:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "oncall.fullname" . }} 8080:{{ .Values.service.port }}
+Then run the smoke test:
+  python tools/smoke_test.py http://127.0.0.1:8080 --user {{ .Values.auth.user }} --password <the password>

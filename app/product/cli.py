@@ -163,6 +163,17 @@ def tune_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def retrain_cmd(args: argparse.Namespace) -> int:
+    import json
+
+    from .retrain import run_retrain
+    from .store import QueueStore
+
+    report = run_retrain(QueueStore(), trigger="cli", force=args.force)
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m product.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -176,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--jump-bytes", type=float, help="absolute mode rise, e.g. 5e8")
     s.add_argument("--jump-ratio", type=float, help="relative mode rise, e.g. 0.3 for +30%%")
     s.add_argument("--day-offset-hours", type=float)
+    r = sub.add_parser("retrain", help="retrain the alert model from stored history if due (for a scheduler)")
+    r.add_argument("--force", action="store_true", help="retrain even if not due (cooldown and gate still apply)")
     for name, helptext in (("evaluate", "tune on the early part of YOUR data and report how every system does on the rest"),
                            ("tune", "evaluate, then save the best settings for the web app and `score`")):
         e = sub.add_parser(name, help=helptext)
@@ -192,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
         return evaluate_cmd(args)
     if args.command == "tune":
         return tune_cmd(args)
+    if args.command == "retrain":
+        return retrain_cmd(args)
     return score(args)
 
 

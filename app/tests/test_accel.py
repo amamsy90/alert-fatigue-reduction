@@ -108,27 +108,33 @@ def test_training_modules_do_not_import_pickle():
         "ranker_torch",
         "ranker_xgb",
         "optional_models",
-        "model_eval",
         "weight_io",
-        "trace_graph",
-        "trace_model",
-        "trace_eval",
-        "trace_gnn",
         "log_encoder",
         "log_encoder_torch",
         "llm_lora",
     ):
         path = Path(__file__).parents[1] / "src" / f"{module_name}.py"
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                names = [alias.name.split(".", 1)[0] for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                names = [(node.module or "").split(".", 1)[0]]
-            else:
-                continue
-            assert "pickle" not in names
-            assert "joblib" not in names
+        _assert_no_pickle(path)
+
+
+def test_experiment_modules_do_not_import_pickle():
+    root = Path(__file__).parents[1] / "experiments"
+    for name in ("model_ablation/model_eval", "traces/trace_graph", "traces/trace_model",
+                 "traces/trace_eval", "traces/trace_gnn"):
+        _assert_no_pickle(root / f"{name}.py")
+
+
+def _assert_no_pickle(path: Path) -> None:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = [alias.name.split(".", 1)[0] for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = [(node.module or "").split(".", 1)[0]]
+        else:
+            continue
+        assert "pickle" not in names
+        assert "joblib" not in names
 
 
 def test_cuda_version_is_parsed_from_nvidia_smi_text():

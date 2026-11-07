@@ -10,11 +10,17 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from experiments.traces.trace_graph import (
+    _build_graph_loops,
+    baseline_service,
+    build_graph,
+    normalize_spans,
+    root_cause_hit,
+)
+from experiments.traces.trace_model import load_trace_model, trace_model_enabled
 from product.paging import page_job
 from src.config import Config
 from src.entities import Action, Alert, Decision, Fault
-from src.trace_graph import _build_graph_loops, baseline_service, build_graph, normalize_spans, root_cause_hit
-from src.trace_model import load_trace_model, trace_model_enabled
 
 T0 = pd.Timestamp("2026-01-05", tz="UTC")
 FIXTURE = Path(__file__).parent / "fixtures" / "synthetic_traces.csv"
@@ -60,7 +66,7 @@ def test_a_clock_column_alone_is_refused():
 
 
 def test_rcaeval_eval_names_the_cases_fetch_when_cases_are_missing(tmp_path):
-    from run_trace_eval import cases_missing_message
+    from experiments.traces.run_trace_eval import cases_missing_message
 
     message = cases_missing_message(tmp_path)
     assert message is not None
@@ -134,10 +140,10 @@ def test_a_prebuilt_case_graph_is_not_rebuilt(monkeypatch):
     def boom(*_args, **_kwargs):
         raise AssertionError("build_graph should not run when the case graph is already built")
 
-    monkeypatch.setattr("src.trace_model.build_graph", boom)
-    monkeypatch.setattr("src.trace_eval.build_graph", boom)
-    from src.trace_eval import _baseline_ids
-    from src.trace_model import training_graphs
+    monkeypatch.setattr("experiments.traces.trace_model.build_graph", boom)
+    monkeypatch.setattr("experiments.traces.trace_eval.build_graph", boom)
+    from experiments.traces.trace_eval import _baseline_ids
+    from experiments.traces.trace_model import training_graphs
 
     graphs, labels = training_graphs(pd.DataFrame(), [fault], end + pd.Timedelta(days=1), {"case-a": graph})
     assert labels == [graph.services.index("db")]
@@ -147,7 +153,7 @@ def test_a_prebuilt_case_graph_is_not_rebuilt(monkeypatch):
 
 
 def test_max_cases_keeps_the_first_recordings():
-    from run_trace_eval import limit_cases, wanted_span_columns
+    from experiments.traces.run_trace_eval import limit_cases, wanted_span_columns
 
     assert limit_cases(["a", "b", "c"], 2) == ["a", "b"]
     assert limit_cases(["a", "b"], 0) == ["a", "b"]
@@ -215,7 +221,7 @@ def test_the_flag_does_not_change_what_would_be_paged(monkeypatch):
     page, whp = page_job("sample", True, [alert], [decision], [])
     assert page["skipped"] == "mode=sample never pages"
     assert whp["count"] == 1
-    root = Path(__file__).parents[1] / "src" / "trace_model.py"
+    root = Path(__file__).parents[1] / "experiments" / "traces" / "trace_model.py"
     tree = ast.parse(root.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -229,10 +235,10 @@ def _sidecar(path: Path, blob: bytes) -> None:
 
 def test_without_torch_the_eval_still_scores_the_baseline_and_the_queue(monkeypatch):
     """A missing torch install skips the model. It does not invent a catch rate."""
-    from src.trace_eval import TraceSpec, _decision, _model_decision, evaluate_traces, synthetic_traces
-    from src.trace_model import fit_trace_model, trace_model_directory, training_graphs
+    from experiments.traces.trace_eval import TraceSpec, _decision, _model_decision, evaluate_traces, synthetic_traces
+    from experiments.traces.trace_model import fit_trace_model, trace_model_directory, training_graphs
 
-    monkeypatch.setattr("src.trace_model.torch_stack_available", lambda: False)
+    monkeypatch.setattr("experiments.traces.trace_model.torch_stack_available", lambda: False)
     assert trace_model_directory() is None
     spans, metrics, faults = synthetic_traces(seed=1, days=2)
     archive, status = fit_trace_model(spans, faults, spans["time"].min() + pd.Timedelta(days=7))
@@ -289,7 +295,7 @@ def test_load_refuses_a_bad_archive_before_any_weight_library(tmp_path, monkeypa
     _sidecar(meta, json.dumps(payload).encode("utf-8"))
     monkeypatch.setenv("TRACE_MODEL_SHA256", "cd" * 32)
     monkeypatch.setenv("TRACE_MODEL_DIR", str(tmp_path))
-    from src.trace_model import trace_model_directory
+    from experiments.traces.trace_model import trace_model_directory
 
     assert trace_model_directory() == tmp_path
     loaded, status = load_trace_model(tmp_path)
@@ -300,7 +306,7 @@ def test_load_refuses_a_bad_archive_before_any_weight_library(tmp_path, monkeypa
 def test_auto_uses_geometric_when_it_imports():
     pytest.importorskip("torch")
     pytest.importorskip("torch_geometric")
-    from src.trace_gnn import resolve_gnn_backend
+    from experiments.traces.trace_gnn import resolve_gnn_backend
 
     backend, fell_back = resolve_gnn_backend("auto")
     assert backend == "pyg" and fell_back is False
@@ -312,8 +318,8 @@ def test_auto_uses_geometric_when_it_imports():
 def test_tiny_cpu_gnn_trains_and_round_trips(tmp_path):
     pytest.importorskip("torch")
     pytest.importorskip("safetensors")
-    from src.trace_eval import TraceSpec, evaluate_traces, synthetic_traces
-    from src.trace_model import fit_trace_model, save_trace_model
+    from experiments.traces.trace_eval import TraceSpec, evaluate_traces, synthetic_traces
+    from experiments.traces.trace_model import fit_trace_model, save_trace_model
 
     spans, metrics, faults = synthetic_traces(seed=0)
     boundary = spans["time"].min() + pd.Timedelta(days=7)
@@ -349,7 +355,7 @@ def test_tiny_cpu_gnn_trains_and_round_trips(tmp_path):
 
 
 def test_tiny_train_flags_fewer_than_twenty_cases():
-    from src.trace_eval import suite_day, tiny_train
+    from experiments.traces.trace_eval import suite_day, tiny_train
 
     assert tiny_train(7) is True
     assert tiny_train(19) is True
@@ -362,8 +368,8 @@ def test_tiny_train_flags_fewer_than_twenty_cases():
 
 def test_combined_suites_do_not_share_a_series_timestamp():
     """RE2 and RE3 both start on 2024-01-01. The same series id must not repeat a timestamp."""
+    from experiments.traces.run_trace_eval import spread_case
     from run_rcaeval_logs import Case, base_config
-    from run_trace_eval import spread_case
     from src.memory_spikes import detect_jumps
 
     raw = Case("re2ob_cpu", 0, 1_700_000_000, 1_700_000_100, 1_700_001_000, "adservice", "cpu")
@@ -398,8 +404,8 @@ def test_baseline_score_is_an_extra_column_and_a_separate_variant(monkeypatch):
     """The five-feature model stays as it is. The residual copy adds the baseline score."""
     import numpy as np
 
-    from src.trace_eval import TraceSpec, evaluate_traces, synthetic_traces
-    from src.trace_graph import NODE_FEATURES, CallGraph, with_baseline_feature
+    from experiments.traces.trace_eval import TraceSpec, evaluate_traces, synthetic_traces
+    from experiments.traces.trace_graph import NODE_FEATURES, CallGraph, with_baseline_feature
 
     graph = CallGraph(
         ["api", "db"],
@@ -439,8 +445,8 @@ def test_baseline_score_is_an_extra_column_and_a_separate_variant(monkeypatch):
             return {fault.fault_id: fault.component for fault in faults}
         return {fault.fault_id: "other" for fault in faults}
 
-    monkeypatch.setattr("src.trace_eval.fit_trace_model", fake_fit)
-    monkeypatch.setattr("src.trace_eval.predict_services", fake_predict)
+    monkeypatch.setattr("experiments.traces.trace_eval.fit_trace_model", fake_fit)
+    monkeypatch.setattr("experiments.traces.trace_eval.predict_services", fake_predict)
     spans, metrics, faults = synthetic_traces(seed=0)
     report = evaluate_traces(
         spans,
@@ -460,11 +466,11 @@ def test_baseline_score_is_an_extra_column_and_a_separate_variant(monkeypatch):
 def test_rcaeval_report_has_suite_system_and_pooled_counts(monkeypatch):
     import numpy as np
 
-    from run_trace_eval import Recording, score_recordings
-    from src.trace_eval import TraceSpec, suite_day
-    from src.trace_graph import CallGraph
+    from experiments.traces.run_trace_eval import Recording, score_recordings
+    from experiments.traces.trace_eval import TraceSpec, suite_day
+    from experiments.traces.trace_graph import CallGraph
 
-    monkeypatch.setattr("src.trace_model.torch_stack_available", lambda: False)
+    monkeypatch.setattr("experiments.traces.trace_model.torch_stack_available", lambda: False)
 
     def recording(suite: str, system: str, local_day: int) -> Recording:
         start = pd.Timestamp("2024-01-01", tz="UTC") + pd.Timedelta(days=suite_day(local_day, suite), hours=1)
@@ -517,12 +523,12 @@ def test_rcaeval_report_has_suite_system_and_pooled_counts(monkeypatch):
 
 def test_too_few_windows_is_reported_and_not_trained(monkeypatch):
     """A slice with fewer than four root-cause windows is skipped in the JSON, not fit."""
-    from src.trace_eval import TraceSpec, evaluate_traces, model_skip_reason, synthetic_traces
-    from src.trace_model import fit_trace_model
+    from experiments.traces.trace_eval import TraceSpec, evaluate_traces, model_skip_reason, synthetic_traces
+    from experiments.traces.trace_model import fit_trace_model
 
-    monkeypatch.setattr("src.trace_model.torch_stack_available", lambda: True)
+    monkeypatch.setattr("experiments.traces.trace_model.torch_stack_available", lambda: True)
     monkeypatch.setattr(
-        "src.trace_model.training_graphs",
+        "experiments.traces.trace_model.training_graphs",
         lambda *_args, **_kwargs: ([object(), object()], [0, 0]),
     )
     archive, status = fit_trace_model(pd.DataFrame(), [], pd.Timestamp("2026-01-01", tz="UTC"))
@@ -535,7 +541,7 @@ def test_too_few_windows_is_reported_and_not_trained(monkeypatch):
     def fake_fit(*_args, **_kwargs):
         return None, "too-few-windows:2<4"
 
-    monkeypatch.setattr("src.trace_eval.fit_trace_model", fake_fit)
+    monkeypatch.setattr("experiments.traces.trace_eval.fit_trace_model", fake_fit)
     spans, metrics, faults = synthetic_traces(seed=1, days=2)
     report = evaluate_traces(
         spans,
@@ -552,7 +558,7 @@ def test_too_few_windows_is_reported_and_not_trained(monkeypatch):
 
 
 def test_pooled_false_per_day_sums_false_items_and_suite_days():
-    from src.trace_eval import pooled_false_per_day
+    from experiments.traces.trace_eval import pooled_false_per_day
 
     suites = {
         "RE2": {"by_k": {"20": {"queue": {"false_items": 10, "n_days": 5}}}},
@@ -647,8 +653,8 @@ def test_cuda_determinism_seeds_the_fit_and_the_epoch_order(monkeypatch):
 
 def test_seed_rule_keeps_only_a_majority_with_a_positive_mean_delta():
     """One seed above zero is not a keep. More than half, and the pooled interval, are."""
-    from run_trace_eval import parse_seeds, score_seeds
-    from src.trace_eval import seed_level_decision
+    from experiments.traces.run_trace_eval import parse_seeds, score_seeds
+    from experiments.traces.trace_eval import seed_level_decision
 
     assert parse_seeds(42, "") == [42]
     assert parse_seeds(1, "42,0,1,2,3") == [42, 0, 1, 2, 3]

@@ -57,7 +57,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src", "product"]
+source = ["src", "product", "experiments/traces", "experiments/model_ablation"]
 omit = [
     "product/datasets.py",  # downloads NAB over the network
     "*/metric_tcn.py",  # optional torch body; imported only when torch is installed
@@ -65,6 +65,8 @@ omit = [
     "*/ranker_xgb.py",
     "*/trace_gnn.py",
     "*/log_encoder_torch.py",
+    "*/run_*.py",  # experiment scripts moved under experiments/; they were never measured
+    "*/train_*.py",
 ]
 
 [tool.coverage.report]
@@ -90,11 +92,11 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src", "product"]
+files = ["src", "product", "experiments/traces/trace_eval.py", "experiments/traces/trace_gnn.py", "experiments/traces/trace_graph.py", "experiments/traces/trace_model.py", "experiments/model_ablation/model_eval.py"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 check_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["src.metric_tcn", "src.ranker_torch", "src.ranker_xgb", "src.trace_gnn", "src.log_encoder_torch"]
+module = ["src.metric_tcn", "src.ranker_torch", "src.ranker_xgb", "experiments.traces.trace_gnn", "src.log_encoder_torch"]
 ignore_errors = true

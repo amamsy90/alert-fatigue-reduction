@@ -1,0 +1,7 @@
+apiVersion: v2
+name: oncall-queue
+description: AI-assisted on-call queue (one replica, SQLite, shadow mode by default)
+type: application
+version: 0.1.0
+# Must equal product.__version__ (tests/test_helm_chart.py checks it). The default image tag is v<appVersion>.
+appVersion: "1.2.0"
