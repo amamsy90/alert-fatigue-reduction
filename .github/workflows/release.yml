@@ -33,7 +33,7 @@ jobs:
       - name: Build the image
         run: docker build -t oncall-queue:${GITHUB_REF_NAME} -t oncall-queue:latest app
       - name: Scan the image for known vulnerabilities (HIGH and CRITICAL with a fix fail the release)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0 (the un-prefixed tag 0.28.0 no longer resolves)
         with:
           image-ref: oncall-queue:${{ github.ref_name }}
           severity: HIGH,CRITICAL

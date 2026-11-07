@@ -2,6 +2,11 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [1.2.2] - 2026-11-07
+
+### Fixed
+- The release workflow could not start: `aquasecurity/trivy-action@0.28.0` no longer resolves (its tags now carry a `v`). It is pinned to the commit of `v0.28.0`. Release 1.2.1 was tagged but stopped at that step and published nothing; its checks all passed. 1.2.2 has the same code and the fix.
+
 ## [1.2.1] - 2026-11-07
 
 ### Added

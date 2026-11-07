@@ -1,6 +1,6 @@
 # Threat model
 
-**System:** AI-Assisted On-Call Queue web app (`app/product/`) · **Version:** 1.2.1 · **Method:** STRIDE per trust boundary
+**System:** AI-Assisted On-Call Queue web app (`app/product/`) · **Version:** 1.2.2 · **Method:** STRIDE per trust boundary
 
 The app can wake people up (PagerDuty, Slack, Opsgenie), holds the keys to do so, and can be told to call a URL (Prometheus). Those three facts drive this model.
 
