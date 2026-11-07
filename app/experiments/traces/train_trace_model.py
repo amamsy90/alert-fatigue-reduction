@@ -1,16 +1,16 @@
 """Train the optional trace model. Does not page and does not set TRACE_MODEL.
 
-    python train_trace_model.py --data synthetic --device cpu --backend plain --epochs 20 --out results/trace_model
-    python train_trace_model.py --data rcaeval --device cuda --backend auto --epochs 8 --out results/trace_model
+    python -m experiments.traces.train_trace_model --data synthetic --device cpu --backend plain --epochs 20 --out results/trace_model
+    python -m experiments.traces.train_trace_model --data rcaeval --device cuda --backend auto --epochs 8 --out results/trace_model
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+from experiments.traces.trace_eval import synthetic_traces
+from experiments.traces.trace_model import fit_trace_model, save_trace_model
 from src.config import Config
-from src.trace_eval import synthetic_traces
-from src.trace_model import fit_trace_model, save_trace_model
 
 
 def main() -> None:
@@ -25,7 +25,7 @@ def main() -> None:
     if args.data == "rcaeval":
         raise SystemExit(
             "Train on the laptop after traces are downloaded: "
-            "python run_trace_eval.py --data rcaeval --device cuda --backend auto --epochs 8"
+            "python -m experiments.traces.run_trace_eval --data rcaeval --device cuda --backend auto --epochs 8"
         )
     spans, _metrics, faults = synthetic_traces(seed=args.seed)
     origin = spans["time"].min()

@@ -17,11 +17,11 @@ from dataclasses import dataclass, replace
 import numpy as np
 import pandas as pd
 
-from .config import Config
-from .entities import Alert, Fault
-from .eval_stats import bootstrap_mean_ci
-from .memory_spikes import detect_gaps, detect_jumps, detect_leaks
-from .queue import (
+from src.config import Config
+from src.entities import Alert, Fault
+from src.eval_stats import bootstrap_mean_ci
+from src.memory_spikes import detect_gaps, detect_jumps, detect_leaks
+from src.queue import (
     alert_items,
     build_queue,
     n_days_between,
@@ -29,7 +29,8 @@ from .queue import (
     spike_items,
     tune_confirm_thresholds,
 )
-from .ranker import caught_fault_ids
+from src.ranker import caught_fault_ids
+
 from .trace_graph import CallGraph, baseline_service, build_graph, root_cause_hit, with_baseline_feature
 from .trace_model import MIN_WINDOWS, TraceArchive, _window_end, caught_ids, fit_trace_model, predict_services
 
@@ -135,7 +136,7 @@ def _queue_scored(
     tuned = replace(config, confirm_min_rise=threshold, confirm_min_rise_by_series=by_series)
     items = spike_items(test_jumps, tuned) + spike_items(test_leaks, tuned) + spike_items(test_gaps, tuned)
     if alerts:
-        from .baseline import baseline_decisions
+        from src.baseline import baseline_decisions
 
         test_alerts = [alert for alert in alerts if boundary <= alert.timestamp < stop]
         items = items + alert_items(test_alerts, baseline_decisions(test_alerts, tuned))

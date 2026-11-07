@@ -95,6 +95,7 @@ flowchart TB
 | `product/web/*_routes.py` | One module per route group: ops (health, connectors, `/ops/*`), jobs (queue, marks, uploads, ingest, pages), evaluate | context, pipeline, ops, generic |
 | `product/web/context.py` | The queue store in use (`use_store`) and file locations | store |
 | `product/pipeline.py` | `score_alerts` and the job orchestrator: load → label → score → save model → page → store | inputs, labels, paging, src |
+| `product/promotion.py`, `queue_check.py`, `training_report.py` | The promotion gate (pure rule over the held-out report), the three-way held-out queue score it reads, and the batch split and fit summaries; split out of `pipeline.py` | pipeline, model_store, src |
 | `product/inputs.py` | Read one batch for a mode (sample, GAIA, upload, ingest with Prometheus) | src, prometheus_adapter |
 | `product/paging.py` | Decide whether a job may page, send to each channel, move the page marks | ops, pagerduty, notifiers |
 | `product/store.py` | SQLite persistence; one transaction per call | — |

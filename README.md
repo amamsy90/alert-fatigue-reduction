@@ -53,13 +53,13 @@ Open the queue page and press **Run sample**, or post alerts from Alertmanager. 
 
 ```bash
 cd app
-uv run pytest -q                     # 435 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
+uv run pytest -q                     # 436 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py        # the report's 259 checked numbers match app/results/
 ```
 
-**Measured:** Windows 11, Python 3.12: `pytest -q` takes about 2 min (445 tests: 435 passed, 10 skipped). A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
+**Measured:** Windows 11, Python 3.12: `pytest -q` takes about 2 min (446 tests: 436 passed, 10 skipped). A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
 
 ## Evaluation
 
@@ -77,7 +77,7 @@ To check that a fresh clone works with nothing carried over from this machine (c
 python tools/check_fresh_clone.py          # or: --source https://github.com/amamsy90/alert-fatigue-reduction --ref <commit>
 ```
 
-**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `bb635c5`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (435 passed, 10 skipped), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
+**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `bb635c5`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (436 passed, 10 skipped), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
 
 The sample is a smoke-scale check, not the 1,223-fault result in the report; `--full` reproduces that.
 
@@ -110,7 +110,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`docs/`](docs/README.md) | Requirements and traceability, architecture diagrams, decision records, threat model, test plan, deployment and AI governance, MLOps, monitoring, privacy and responsible AI, retrospective |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 445 tests (435 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
+| [`app/tests/`](app/tests) | 446 tests (436 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
 | [`app/examples/gaia_sample/`](app/examples/gaia_sample) | Real 10-day GAIA slice and the recorded counts used by `run_reproduce.py` |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
 | [`figures/`](figures) | Detection-versus-K and walk-forward plots, from `cd app && uv run python make_figures.py` |

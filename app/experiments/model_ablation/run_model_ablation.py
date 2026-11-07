@@ -10,8 +10,8 @@ GAIA is not on the cloud VM. ``--data auto`` uses GAIA when both folders exist
 and the synthetic sample otherwise. A synthetic run does not fill in GAIA
 numbers, and it does not turn the flags on.
 
-    python run_model_ablation.py --data synthetic --backend pointwise --epochs 2
-    python run_model_ablation.py --data gaia --device cuda --backend xgboost --epochs 8 --walk-forward
+    python -m experiments.model_ablation.run_model_ablation --data synthetic --backend pointwise --epochs 2
+    python -m experiments.model_ablation.run_model_ablation --data gaia --device cuda --backend xgboost --epochs 8 --walk-forward
 """
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ import json
 import tempfile
 from pathlib import Path
 
+from experiments.model_ablation.model_eval import EvalSpec, evaluate_models, walk_forward_models
 from src.config import Config
 from src.experiment import load_gaia
-from src.model_eval import EvalSpec, evaluate_models, walk_forward_models
 from src.sample_data import generate_multivariate, load_multivariate
 from src.tracking import record_run
 
@@ -48,7 +48,7 @@ def main() -> None:
     if which == "gaia" and not _gaia_ready():
         raise SystemExit(
             "GAIA folders are not in this run (data/gaia_raw and data/gaia_metrics). "
-            "Nothing was scored. On the laptop: python run_model_ablation.py --data gaia --device cuda --backend xgboost"
+            "Nothing was scored. On the laptop: python -m experiments.model_ablation.run_model_ablation --data gaia --device cuda --backend xgboost"
         )
     if which == "gaia":
         data = load_gaia()

@@ -13,6 +13,11 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 - A Windows job in CI.
 - `README.md`: team and contributions, tested environment, and sections in the brief's order.
 
+### Moved
+
+- The trace-model experiment (`trace_eval`, `trace_gnn`, `trace_graph`, `trace_model`, `run_trace_eval.py`, `train_trace_model.py`) and the metric-model/ranker ablation (`model_eval`, `run_model_ablation.py`) moved from `src/` and `app/` to `app/experiments/traces/` and `app/experiments/model_ablation/`. Nothing in `product/` used them. Run them with `python -m experiments.traces.run_trace_eval` and `python -m experiments.model_ablation.run_model_ablation`.
+- `product/pipeline.py` (853 lines) lost its promotion gate (`promotion.py`), the held-out queue check (`queue_check.py`) and the split and fit summaries (`training_report.py`); it is now about 630 lines. Behaviour is unchanged and `product.pipeline` still exports `promotion_decision` and `promotion_margin`.
+
 ### Fixed
 
 - `run_trace_eval.py` imported the POSIX-only `resource` module at load time, which failed five tests on Windows.
@@ -20,7 +25,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ### Changed
 
 - The viva, demo and speaker notes moved to `presentation/`, the proposal drafts to `docs/history/`, and the generated Word and PDF copies are no longer tracked.
-- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (445 tests: 435 pass, 10 skip).
+- `FINAL_REPORT.md`: 259 checked numbers (was 195), the independent gate test, and corrected test counts (446 tests: 436 pass, 10 skip).
 
 ## [1.1.0] - 2026-10-21
 
