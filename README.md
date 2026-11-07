@@ -2,7 +2,7 @@
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
-**Version:** 1.2.2
+**Version:** 1.2.3
 
 An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Optional ranker, metric, trace and LLM paths stay off by default. Their measurements stay in the report appendices.
 

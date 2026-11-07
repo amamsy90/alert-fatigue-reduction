@@ -1,6 +1,6 @@
 # Architecture
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.2
+**System:** AI-Assisted On-Call Queue · **Version:** 1.2.3
 
 Diagrams are Mermaid; GitHub renders them in place. Each one is drawn from the code, and file names are given so a reader can check.
 
