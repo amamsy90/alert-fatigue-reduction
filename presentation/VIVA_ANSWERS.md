@@ -1,6 +1,6 @@
 # Viva answers
 
-Say these in your own words. The numbers are the ones in `FINAL_REPORT.md` (checked against `app/results/`). `CODE_REVIEW.md` is the earlier review that changed the project; some of its percentages (for example 72.8% and 68.8%) are the old run, before the causal queue. Quote the report, not the review.
+Say these in your own words. The numbers are the ones in `FINAL_REPORT.md` (checked against `app/results/`). An earlier review changed the project; its percentages (for example 72.8% and 68.8%) were the old run, before the causal queue. Quote the report.
 
 There is no language model in this product. A search of the code finds no GPT, OpenAI, or other LLM client.
 

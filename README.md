@@ -125,7 +125,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`app/perf/`](app/perf) | Load test |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 | [`submission/`](submission/README.md) | The proposal as submitted, and how to rebuild the Word copies (not tracked) |
-| `design_specification.md`, `project_plan.md`, `ROADMAP.md`, `VALIDATION.md`, `CODE_REVIEW.md` | Design detail, plan, roadmap, result files, the first review |
+| `design_specification.md`, `VALIDATION.md` | Design detail, result files |
 | [`report/`](report) | The four-page final report (LaTeX source and PDF) |
 | [`presentation/`](presentation) | Demo script, viva answers, speaker notes |
 | [`submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`](submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf) | The proposal as submitted (5 October 2026), with its Word source |

@@ -12,7 +12,7 @@ This is an honest account of how the project was built, what the reviews found, 
 |---|---:|---|
 | 23 Sep | 1 | First version committed in one go: GAIA loader, classifier, jump detector, policy, web app |
 | 24 Sep | 3 | Replaced a 95% target with walk-forward statistics; corrected the fold-7 story |
-| 26 Sep | 8 | First code review (`CODE_REVIEW.md`); causal queue, fair baselines, gap items, *Evaluate my data* |
+| 26 Sep | 8 | First code review; causal queue, fair baselines, gap items, *Evaluate my data* |
 | 27 Sep | 11 | Connectors (PagerDuty, Slack, Opsgenie, Prometheus), shadow mode, hardening, SMD, Docker |
 | 28 Sep | 5+ | Second review: security, reliability and look-ahead fixes; packaging and CI; this documentation |
 
