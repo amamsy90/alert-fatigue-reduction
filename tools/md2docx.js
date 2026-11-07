@@ -1,5 +1,5 @@
 // Markdown -> DOCX for the course final report.
-// node tools/md2docx.js FINAL_REPORT.md submission/Alert_Fatigue_Final_Report_v1.2.0.docx "" figures
+// node tools/md2docx.js FINAL_REPORT.md submission/report.docx "" figures
 // A4, 2.5 cm margins, Times New Roman. LibreOffice may substitute Liberation Serif;
 // the submitted PDF should be exported from Word, which has Times New Roman.
 // Sizes are half-points: title 32 = 16 pt, heading 1 = 28 = 14 pt, heading 2 = 24 = 12 pt.
