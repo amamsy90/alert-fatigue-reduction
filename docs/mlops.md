@@ -1,6 +1,6 @@
 # MLOps and lifecycle
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.3
+**System:** AI-Assisted On-Call Queue · **Version:** 1.2.4
 
 This page explains how the AI part of the system is versioned, reproduced, updated and tracked after it is deployed. The AI component is a cost-sensitive logistic regression that scores log alerts (scikit-learn), next to rule-based metric detectors. No external model API is used.
 
