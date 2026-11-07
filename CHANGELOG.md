@@ -2,7 +2,7 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
-## [Unreleased]
+## [1.2.1] - 2026-11-07
 
 ### Added
 - Live soak: `app/run_live_soak.py` with `app/integration/live/` (a simulated six-service fleet, Prometheus, Alertmanager and the app in Docker Compose). Two real-time two-hour runs: 13 of 19 faults caught, then 18 of 18 after the rig fix, no false jumps, no failed job; a `--drift-phase` that posts alert storms and shows the drift check warning on a shifted mix (`FINAL_REPORT.md` §B9, `app/results/live_soak*.json`, `live_drift_phase.json`). It is a soak test, not a pilot.
