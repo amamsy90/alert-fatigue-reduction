@@ -26,8 +26,8 @@ If another team member receives the project tomorrow:
 ```bash
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
-uv run pytest -q                      # 523 passed, 10 skipped on CPU CI (7 November 2026); the integration test needs Docker (see test_plan.md)
-uv run python run_validate.py         # the report's 259 checked numbers match the committed results
+uv run pytest -q                      # 531 passed, 10 skipped on CPU CI (7 November 2026); the integration test needs Docker (see test_plan.md)
+uv run python run_validate.py         # the report's 278 checked numbers match the committed results
 docker compose up -d                  # the CPU app, built from the hash-pinned lock (dev settings)
 # optional GPU machine: docker compose --profile gpu up --build oncall-queue-gpu
 ```
@@ -46,13 +46,15 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 | **Detector settings change** (jump size, window) | Tuned on *Evaluate my data* against the team's past incidents with a held-out part and a chance line; applying them is an explicit action recorded with the evaluation id. |
 | **The knowledge base / an external AI API changes** | Not applicable: no knowledge base or external model API. |
 
+**A real run.** `app/run_live_replay.py` replays real alerts through the whole loop in minutes (see `FINAL_REPORT.md` §B8), with a simulated engineer; it is not a pilot. A real shadow run is the same loop with real time: deploy with `tools/deploy.sh` (item above), point Alertmanager's webhook at `/ingest/alertmanager`, have the on-call engineer mark items Real or Noise on the queue page, and run `python -m product.cli retrain` from a scheduler. After a week, `/monitoring` and the dashboard `app/deploy/grafana/oncall-queue.json` give precision from marks, drift, model age and the challenger tally. Not done for this report: no real team has run it.
+
 **Delivery.** A release is built once, scanned, given an SBOM, deployed to a throwaway cluster with the Helm chart, smoke-tested and only then published; an upgrade that fails its smoke test is rolled back by `tools/deploy.sh`. See `docs/deployment.md` section 3c.
 
 **Scheduled retraining.** `python -m product.cli retrain` (or `POST /models/retrain`) is what a scheduler runs; it does nothing unless a retrain is due. Due means at least 5 new Real marks since the model was trained, or a model older than 7 days with at least one new mark; never twice within 6 hours, and never while a scoring job is running. It trains on the alerts stored by the last 60 jobs, labelled from the on-call marks, through the same promotion gate as every other job. A promoted model is read back from disk through the hash and allowlist checks and must score real alerts into valid probabilities; if it cannot, the previous version is restored automatically (or live jobs fall back to rules only if there was none) and the card records the failed verification. Every card records the trigger, the reasons, the data fingerprint, the code commit, the batch window and the library versions. Example Kubernetes CronJob command: `python -m product.cli retrain` every 6 hours. `/metrics` exports `oncall_retrain_total{outcome}`, `oncall_model_age_days` and `oncall_model_retrain_due`.
 
 **Shadow challenger.** A model the promotion gate refuses is not thrown away. It stays a candidate, and on every later job the newest candidate decides the same live alerts as the active model without changing anything shown or paged. Its cost on labelled alerts (a miss 10, a false item 1) is added to a running tally in its registry card. After 3 jobs and 30 labelled alerts the tally says `promote` only if the challenger saved at least the gate's margin and won more jobs than it lost; otherwise `keep`. A person reads the recommendation and promotes with `POST /models/{version}/activate`, which can be rolled back. This turns one held-out window into a decision on live data, and it is visible at `/monitoring` (`challenger_shadow`) and `/metrics` (`oncall_challenger_*`).
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On 7 November 2026, Python 3.12 collected 533 tests: 523 passed, 10 skipped, coverage 86%. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On 7 November 2026, Python 3.12 collected 541 tests: 531 passed, 10 skipped, coverage 86%. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 

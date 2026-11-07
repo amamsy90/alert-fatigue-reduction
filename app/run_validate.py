@@ -243,6 +243,19 @@ def computed_numbers() -> dict[str, float]:
                  for a in re2["app"].unique()]
         out["gatesplit.RE2.severity_extra_false.min"] = min(extra)
         out["gatesplit.RE2.severity_extra_false.max"] = max(extra)
+
+    for name, short in (("live_replay_gaia.json", "gaia"), ("live_replay_rcaeval_re2_tt.json", "tt")):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        summary = json.loads(path.read_text(encoding="utf-8"))["summary"]
+        for field in ("days", "alerts", "drift_warn_days", "drift_ok_days", "retrains_run", "retrains_promoted",
+                      "retrains_refused", "model_versions"):
+            out[f"replay.{short}.{field}"] = float(summary[field])
+        if short == "tt":
+            out["replay.tt.marks"] = float(summary["marks"])
+            out["replay.tt.real_marks"] = float(summary["real_marks"])
+            out["replay.tt.precision_from_marks"] = float(summary["precision_from_marks"])
     return out
 
 
@@ -332,6 +345,16 @@ def claims_still_hold() -> None:
         promoted = [f"{a['suite']} {a['app']}" for a in facts["apps"] if a["promoted"]]
         if promoted:
             _fail(f"the independent gate now promotes the classifier on {promoted}; rewrite the independent gate test (§B5)")
+
+
+    for name in ("live_replay_gaia.json", "live_replay_rcaeval_re2_tt.json"):
+        path = ROOT / name
+        if path.exists():
+            replay = json.loads(path.read_text(encoding="utf-8"))["summary"]
+            if replay["retrains_promoted"]:
+                _fail(f"the replay ({name}) now promotes a model; rewrite the replay section (§B8)")
+            if replay["retrains_rolled_back"]:
+                _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§B8)")
 
 
 def main() -> None:

@@ -120,3 +120,49 @@ def test_the_report_is_repeatable_and_json_safe():
     first = drift_report(a, b, seed=3)
     assert first == drift_report(a, b, seed=3)
     json.dumps(first)
+
+
+# --- an ingest job is compared with what earlier jobs stored ---------------------------------
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    for name in ("QUEUE_DB", "MODEL_PATH", "SETTINGS_PATH", "OPS_PATH"):
+        monkeypatch.setenv(name, str(tmp_path / name.lower()))
+    for name in ("APP_PASSWORD", "ALLOW_OPEN_ACCESS"):
+        monkeypatch.delenv(name, raising=False)
+    import product.app as app_mod
+    from product.store import QueueStore
+
+    app_mod.use_store(QueueStore(tmp_path / "queue.db"))
+    return TestClient(app_mod.app)
+
+
+def _day(day: int, *, severity="info", message="cache refresh done on worker", n=70):
+    base = pd.Timestamp("2026-03-02", tz="UTC") + pd.Timedelta(days=day)
+    return [{"timestamp": (base + pd.Timedelta(minutes=20 * i)).isoformat(), "source": f"svc{i % 3}",
+             "severity": severity, "message": message} for i in range(n)]
+
+
+def _ingest(client, rows):
+    client.post("/ingest/alerts", json={"alerts": rows})
+    return client.post("/jobs/run", json={"mode": "ingest", "budget_k": 20}).json()["meta"]["drift"]
+
+
+def test_a_day_is_judged_against_earlier_days_not_against_its_own_halves(client):
+    first = _ingest(client, _day(0))
+    assert first["reference"] == "early versus later part of this batch"  # no history yet: the only comparison there is
+    _ingest(client, _day(1))
+    third = _ingest(client, _day(2))
+    assert third["reference"] == "alerts stored by earlier jobs"
+    assert third["status"] == "ok", third["reasons"]  # an ordinary day after ordinary days
+
+
+def test_a_changed_day_warns_against_the_history(client):
+    for day in range(3):
+        _ingest(client, _day(day))
+    changed = _ingest(client, _day(3, severity="critical", message="out of memory killer invoked on worker"))
+    assert changed["status"] == "warn"
+    assert any("severity" in r for r in changed["reasons"]) and changed["text_auc"] > 0.9

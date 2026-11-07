@@ -178,12 +178,16 @@ class ScoredQueue:
     challenger_decisions: list[Decision] | None = None
 
 
+DRIFT_HISTORY_JOBS = 60
+DRIFT_MIN_REFERENCE = 100  # alerts in earlier jobs before a job is compared with them
+
+
 def batch_drift(alerts: list[Alert], config: Config) -> dict:
     """Drift of the scored window against the training window of the same batch."""
     if len(alerts) < 10:
         return {"status": "n/a", "reason": "fewer than 10 alerts"}
     early, later, _ = split_for_training(alerts, config)
-    return drift_report(early, later)
+    return {**drift_report(early, later), "reference": "early versus later part of this batch"}
 
 
 def score_alerts(
@@ -559,6 +563,18 @@ def _recent_series_medians(metrics: pd.DataFrame | None) -> dict[str, float]:
     return out
 
 
+def _drift_against_history(store: QueueStore, inputs: JobInputs, result: ScoredQueue) -> None:
+    """An ingest job is one day of alerts, so its early and late halves differ by time of day.
+    Compare it with the alerts earlier jobs stored instead (measured on real GAIA: halves of a
+    day warn on every day; a day against its history warns only when volume really moved).
+    Uploads span weeks and keep the early-versus-later split made in score_alerts."""
+    if inputs.source != "ingest" or not result.alerts:
+        return
+    reference = load_alerts_from_dicts(store.history_alerts(DRIFT_HISTORY_JOBS))
+    if len(reference) >= DRIFT_MIN_REFERENCE:
+        result.drift = {**drift_report(reference, result.alerts), "reference": "alerts stored by earlier jobs"}
+
+
 def _labelled_flags(alerts: list[Alert], store: QueueStore) -> list[bool]:
     """Which alerts have a known label. Labels that came with the data cover every alert;
     otherwise an alert is known when it is inside a Real mark or was marked Noise. An unmarked
@@ -667,6 +683,7 @@ def _run_job_locked(
     )
     challenger_info = _shadow_challenger(store, pair, result)
     real_marks = store.feedback_summary()["real"]
+    _drift_against_history(store, inputs, result)
     saved = _save_trained_model(result, real_marks, loaded)
     page, whp = page_job(
         mode,
