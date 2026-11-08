@@ -2,6 +2,14 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [Unreleased]
+
+### Added
+- `skills/`: six project skills (check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release), linked from `AGENTS.md` and the README.
+
+### Changed
+- `ruff` now also enforces McCabe complexity: a function with more than 15 independent paths fails lint and CI (`C90`, `max-complexity = 15` in `app/pyproject.toml`). Six functions were over the limit and were split into small helpers with no change in behaviour: `product/pipeline.score_alerts` (metric events, confirm gate and scorer choice), `product/web/security.require_login` (open-mode refusal, unauthenticated response, rate-limited pass-through), `src/ranker._fill`, `src/ranker_audit.build_ranker_audit`, and `run_validate.computed_numbers` / `claims_still_hold` (one helper per section; the 300 computed numbers are identical before and after).
+
 ## [1.2.4] - 2026-11-07
 
 ### Fixed

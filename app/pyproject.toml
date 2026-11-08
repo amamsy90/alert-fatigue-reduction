@@ -79,13 +79,17 @@ target-version = "py310"
 extend-exclude = ["data", "results", "examples/shop"]
 
 [tool.ruff.lint]
-# Errors, pyflakes, import order, bugbear and pyupgrade. Style nits are left to review.
-select = ["E", "F", "W", "I", "B", "UP"]
+# Errors, pyflakes, import order, bugbear, pyupgrade and McCabe complexity (limit below). Style nits are left to review.
+select = ["E", "F", "W", "I", "B", "UP", "C90"]
 ignore = [
     "E501",  # long lines: tables and messages read better unwrapped
     "B008",  # FastAPI's File(...) / Form(...) defaults are the documented pattern
     "B905",  # zip(strict=...): parallel lists are built together; strict would change behaviour
 ]
+
+[tool.ruff.lint.mccabe]
+# A function with more than 15 independent paths is split into helpers; ruff fails the build otherwise.
+max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E402"]  # tests set env vars before importing the app

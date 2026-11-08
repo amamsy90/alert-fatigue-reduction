@@ -221,6 +221,15 @@ def select_by_score(
     return _fill(clones, score_of, config, threshold)
 
 
+def _takers(ordered: list[QueueItem], running: dict[str, list]) -> int:
+    """Items of a day that still need a slot: alerts riding on an open jump of their service do not."""
+    return sum(
+        1
+        for item in ordered
+        if not (item.kind == "alert" and any(jump.open_at(item.shown_at) for jump in running.get(item.service, [])))
+    )
+
+
 def _fill(
     items: list[QueueItem],
     score_of: dict[int, float],
@@ -247,12 +256,7 @@ def _fill(
         # A score gate that skips items when the day already fits in K leaves
         # slots empty and drops faults the first-come queue would have shown.
         # Count candidates that are not already riding on an earlier jump.
-        takers = 0
-        for item in ordered:
-            if item.kind == "alert" and any(jump.open_at(item.shown_at) for jump in running.get(item.service, [])):
-                continue
-            takers += 1
-        day_threshold = threshold if takers > today else float("-inf")
+        day_threshold = threshold if _takers(ordered, running) > today else float("-inf")
         for item in ordered:
             if item.kind == "alert":
                 jumps = running.get(item.service, [])

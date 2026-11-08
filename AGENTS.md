@@ -22,8 +22,10 @@ From `app/`:
 ```bash
 uv sync --group dev
 uv run pytest -q
-uv run ruff check .
+uv run ruff check .          # also fails any function with more than 15 independent paths (McCabe)
 uv run mypy
 ```
+
+Step-by-step instructions for the recurring jobs (checking a change, adding a regression test, review and simplification, reproducing results, the live soak, cutting a release) are in [`skills/`](skills/README.md).
 
 A behaviour change needs a regression test whose expected result comes from the requirement, not from the function under test.
