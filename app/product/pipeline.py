@@ -14,7 +14,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pandas as pd
 
@@ -190,40 +190,24 @@ def batch_drift(alerts: list[Alert], config: Config) -> dict:
     return {**drift_report(early, later), "reference": "early versus later part of this batch"}
 
 
-def score_alerts(
-    alerts: list[Alert],
-    *,
-    metrics: pd.DataFrame | None = None,
-    budget_k: int = 20,
-    shadow_mode: bool = True,
-    saved: SavedModel | None = None,
-    config: Config | None = None,
-    faults: list[Fault] | None = None,
-    use_saved_detector: bool = True,
-    now: pd.Timestamp | None = None,
-    challenger: SavedModel | None = None,
-) -> ScoredQueue:
-    """Score EVERY alert in the batch and build the day-by-day causal queue.
+class _Scorer(NamedTuple):
+    """What scores a batch: the freshly trained model, the saved one, or severity rules."""
 
-    `now` (live jobs): a series silent since before `now - gap_minutes` is shown
-    as a gap even if no series sent data since (a dead feed).
+    model: Any
+    escalate_threshold: float
+    review_threshold: float
+    label_source: str
+    model_used: str
+    train_count: int
+    training: dict
+    split_at: Any
+    candidate: AlertClassifier | None
+    promoted: bool | None
 
-    Alert scores come from, in order of preference: a model trained on this
-    batch's labels (fit on the early window, reported on the later one), the
-    last saved model, or the severity rule (rules-only mode, no labels needed).
-    Metric jumps and gaps never need labels. `faults` (e.g. GAIA ground truth)
-    lets the jump confirmation threshold be tuned on the early window.
-    """
-    config = config or config_from_env(budget_k)
+
+def _metric_events(metrics: pd.DataFrame | None, config: Config, detector, now: pd.Timestamp | None):
+    """Metric jumps, gaps and leaks. None of them needs labels."""
     has_metrics = metrics is not None and not metrics.empty
-    # Sample mode passes False: that series is bytes sized for the built-in rule.
-    # A detector saved from Evaluate-my-data is for another metric.
-    detector = live_detector() if use_saved_detector else None
-    rise_unit = (
-        ("x normal spread" if detector.kind in ("jump", "delta") else "beyond usual range")
-        if detector is not None
-        else ("GB" if config.memory_jump_mode == "absolute" else "")
-    )
     if has_metrics and detector is not None:
         # Settings the team tuned on its own data ("Evaluate my data" -> Use these settings).
         from src.generic import detect as detect_generic
@@ -241,7 +225,13 @@ def score_alerts(
         else []
     )
 
-    trained = _train(alerts, metrics if has_metrics else None, config, incumbent=saved)
+    return jumps, gaps, leaks
+
+
+def _confirm_gate(config: Config, detector, trained: dict | None, metrics: pd.DataFrame | None, jumps: list,
+                  faults: list[Fault] | None) -> tuple[Config, dict[str, float]]:
+    """The jump confirmation threshold: tuned on the early window when ground truth exists."""
+    has_metrics = metrics is not None and not metrics.empty
     confirm_by_series: dict[str, float] = {}
     # Learn the confirm gate on the early window only, and only when a later
     # window exists. The one-day sample has no later window, so it stays on the
@@ -275,8 +265,11 @@ def score_alerts(
         confirm_by_series = {
             str(sid): float(gate[0]) for sid, gate in detector.levels.items() if gate
         }
+    return config, confirm_by_series
 
-    flags = spike_flags(alerts, jumps, config) if alerts else []
+
+def _select_scorer(trained: dict | None, saved: SavedModel | None, alerts: list[Alert], jumps: list, leaks: list,
+                   gaps: list, flags: list[bool], config: Config, faults: list[Fault] | None) -> _Scorer:
     # The promotion gate runs before any alert is scored: a model fit on this
     # batch scores it only if it beats both "show no log alerts" and the active
     # model on the held-out window. Otherwise it is kept as a candidate and the
@@ -328,6 +321,52 @@ def score_alerts(
         if trained is not None:
             training = not_promoted_training(trained["training"], "rules only (severity) scored this batch")
         split_at = None
+    return _Scorer(model, escalate_threshold, review_threshold, label_source, model_used, train_count, training,
+                   split_at, candidate, promoted)
+
+
+def score_alerts(
+    alerts: list[Alert],
+    *,
+    metrics: pd.DataFrame | None = None,
+    budget_k: int = 20,
+    shadow_mode: bool = True,
+    saved: SavedModel | None = None,
+    config: Config | None = None,
+    faults: list[Fault] | None = None,
+    use_saved_detector: bool = True,
+    now: pd.Timestamp | None = None,
+    challenger: SavedModel | None = None,
+) -> ScoredQueue:
+    """Score EVERY alert in the batch and build the day-by-day causal queue.
+
+    `now` (live jobs): a series silent since before `now - gap_minutes` is shown
+    as a gap even if no series sent data since (a dead feed).
+
+    Alert scores come from, in order of preference: a model trained on this
+    batch's labels (fit on the early window, reported on the later one), the
+    last saved model, or the severity rule (rules-only mode, no labels needed).
+    Metric jumps and gaps never need labels. `faults` (e.g. GAIA ground truth)
+    lets the jump confirmation threshold be tuned on the early window.
+    """
+    config = config or config_from_env(budget_k)
+    has_metrics = metrics is not None and not metrics.empty
+    # Sample mode passes False: that series is bytes sized for the built-in rule.
+    # A detector saved from Evaluate-my-data is for another metric.
+    detector = live_detector() if use_saved_detector else None
+    rise_unit = (
+        ("x normal spread" if detector.kind in ("jump", "delta") else "beyond usual range")
+        if detector is not None
+        else ("GB" if config.memory_jump_mode == "absolute" else "")
+    )
+    jumps, gaps, leaks = _metric_events(metrics, config, detector, now)
+
+    trained = _train(alerts, metrics if has_metrics else None, config, incumbent=saved)
+    config, confirm_by_series = _confirm_gate(config, detector, trained, metrics, jumps, faults)
+
+    flags = spike_flags(alerts, jumps, config) if alerts else []
+    (model, escalate_threshold, review_threshold, label_source, model_used, train_count, training, split_at,
+     candidate, promoted) = _select_scorer(trained, saved, alerts, jumps, leaks, gaps, flags, config, faults)
 
     if model is not None and alerts and model_used == "trained" and split_at is not None:
         # The fit just saw the early rows. Score those with the previous model

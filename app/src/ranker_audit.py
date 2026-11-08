@@ -469,6 +469,30 @@ def global_importance(phi: np.ndarray, names: tuple[str, ...] | list[str]) -> li
     ]
 
 
+def _delta(given: float | None, env_name: str, default, scores: np.ndarray, threshold: float) -> float:
+    """The delta passed in, else the environment setting, else the default for these scores."""
+    if given is not None:
+        return given
+    from_env = _env_float(env_name)
+    return from_env if from_env is not None else default(scores, threshold)
+
+
+def _partner_opinion(items: list[QueueItem], encoder: Any | None, disagree_on: bool):
+    """(known, in_queue, partner name) from the log encoder, or (None, None, "baseline") without one."""
+    if not disagree_on:
+        return None, None, "baseline"
+    if encoder is not None:
+        return _encoder_opinion(items, encoder)
+    if os.environ.get("LOG_ENCODER", "").strip().lower() != "contrastive":
+        return None, None, "baseline"
+    from .log_encoder import load_contrastive_encoder
+
+    loaded, error = load_contrastive_encoder()
+    if loaded is None:
+        return None, None, f"baseline ({error})"
+    return _encoder_opinion(items, loaded)
+
+
 def build_ranker_audit(
     ranker: LearnedRanker,
     items: list[QueueItem],
@@ -514,28 +538,9 @@ def build_ranker_audit(
     scores = np.asarray(ranker.score_frame(frame), dtype=np.float64)
     in_queue, attached, baseline_in = _membership(items, shown, config)
     threshold = float(ranker.threshold)
-    if abstain_delta is None:
-        abstain_delta = _env_float("RANKER_ABSTAIN_DELTA")
-    if abstain_delta is None:
-        abstain_delta = default_abstain_delta(scores, threshold)
-    if disagree_delta is None:
-        disagree_delta = _env_float("RANKER_DISAGREE_DELTA")
-    if disagree_delta is None:
-        disagree_delta = default_disagree_delta(scores, threshold)
-
-    partner = "baseline"
-    encoder_known = None
-    encoder_in = None
-    if disagree_on and encoder is not None:
-        encoder_known, encoder_in, partner = _encoder_opinion(items, encoder)
-    elif disagree_on and encoder is None and os.environ.get("LOG_ENCODER", "").strip().lower() == "contrastive":
-        from .log_encoder import load_contrastive_encoder
-
-        loaded, error = load_contrastive_encoder()
-        if loaded is not None:
-            encoder_known, encoder_in, partner = _encoder_opinion(items, loaded)
-        else:
-            partner = f"baseline ({error})"
+    abstain_delta = _delta(abstain_delta, "RANKER_ABSTAIN_DELTA", default_abstain_delta, scores, threshold)
+    disagree_delta = _delta(disagree_delta, "RANKER_DISAGREE_DELTA", default_disagree_delta, scores, threshold)
+    encoder_known, encoder_in, partner = _partner_opinion(items, encoder, disagree_on)
 
     low_confidence = (
         live_review_mask(scores, in_queue, attached, threshold, abstain_delta)

@@ -367,6 +367,50 @@ def _drop_session(cookie_header: str | None) -> None:
     auth_store.drop_session(token)
 
 
+async def _pass_through(request: Request, call_next):
+    """Hand the request on, unless an ingest path has used up its rate limit."""
+    if request.url.path in INGEST_PATHS:
+        limited = _ingest_rate_response(request)
+        if limited is not None:
+            return limited
+    return await call_next(request)
+
+
+def _no_password_refusal(request: Request) -> Response | None:
+    """With no password set: serve this machine and private networks only, unless the
+    operator says otherwise. A public address must never reach an open queue.
+    Behind a reverse proxy every client looks private, so a forwarded
+    request needs a password too. A loopback client must use a local Host
+    name, so a web page cannot reach the app through DNS rebinding.
+    Returns the refusal, or None to let the request through."""
+    if request.url.path in OPEN_PATHS or os.environ.get("ALLOW_OPEN_ACCESS") == "1":
+        return None
+    client = request.client.host if request.client else None
+    forwarded = any(request.headers.get(h) for h in PROXY_HEADERS)
+    if forwarded or not _is_private(client):
+        return Response(
+            "Set APP_PASSWORD before exposing this app (or ALLOW_OPEN_ACCESS=1).",
+            status_code=403,
+        )
+    if _is_loopback(client) and _host_name(request.headers.get("host")) not in _allowed_hosts():
+        return Response("Unknown Host header (set ALLOWED_HOSTS)", status_code=403)
+    return None
+
+
+def _unauthenticated_response(request: Request, client: str) -> Response:
+    # Only a wrong password counts. A request with no credentials, or a stale
+    # cookie, is just "sign in": counting it would lock a shared (proxy) IP.
+    if request.headers.get("authorization"):
+        locked = _note_login_failure(client)
+        if locked:
+            return _locked_response(locked)
+    return Response(
+        "Login required",
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="On-call alert queue"'},
+    )
+
+
 async def require_login(request: Request, call_next):
     if request.method in UNSAFE_METHODS and _cross_site(request):
         return Response("Cross-site request refused", status_code=403)
@@ -375,30 +419,9 @@ async def require_login(request: Request, call_next):
         if ok is False:
             return Response("Bad ingest token", status_code=401)
         if ok is True:
-            limited = _ingest_rate_response(request)
-            return limited if limited is not None else await call_next(request)
+            return await _pass_through(request, call_next)
     if not _accounts():
-        # No password: serve this machine and private networks only, unless the
-        # operator says otherwise. A public address must never reach an open queue.
-        # Behind a reverse proxy every client looks private, so a forwarded
-        # request needs a password too. A loopback client must use a local Host
-        # name, so a web page cannot reach the app through DNS rebinding.
-        client = request.client.host if request.client else None
-        open_access = os.environ.get("ALLOW_OPEN_ACCESS") == "1"
-        if request.url.path not in OPEN_PATHS and not open_access:
-            forwarded = any(request.headers.get(h) for h in PROXY_HEADERS)
-            if forwarded or not _is_private(client):
-                return Response(
-                    "Set APP_PASSWORD before exposing this app (or ALLOW_OPEN_ACCESS=1).",
-                    status_code=403,
-                )
-            if _is_loopback(client) and _host_name(request.headers.get("host")) not in _allowed_hosts():
-                return Response("Unknown Host header (set ALLOWED_HOSTS)", status_code=403)
-        if request.url.path in INGEST_PATHS:
-            limited = _ingest_rate_response(request)
-            if limited is not None:
-                return limited
-        return await call_next(request)
+        return _no_password_refusal(request) or await _pass_through(request, call_next)
     if request.url.path in OPEN_PATHS or (request.url.path == "/login" and request.method == "POST"):
         return await call_next(request)
     client = login_client_id(request)
@@ -407,26 +430,12 @@ async def require_login(request: Request, call_next):
         return _locked_response(wait)
     identity = _session_identity(request.headers.get("cookie")) or _basic_identity(request.headers.get("authorization"))
     if identity is None:
-        # Only a wrong password counts. A request with no credentials, or a stale
-        # cookie, is just "sign in": counting it would lock a shared (proxy) IP.
-        if request.headers.get("authorization"):
-            locked = _note_login_failure(client)
-            if locked:
-                return _locked_response(locked)
-        return Response(
-            "Login required",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="On-call alert queue"'},
-        )
+        return _unauthenticated_response(request, client)
     request.state.user = identity[0]
     request.state.role = identity[1]
     if identity[1] == "viewer" and request.method in UNSAFE_METHODS and request.url.path not in _ROLE_FREE_POSTS:
         return Response("Operator role required", status_code=403)
-    if request.url.path in INGEST_PATHS:
-        limited = _ingest_rate_response(request)
-        if limited is not None:
-            return limited
-    response = await call_next(request)
+    response = await _pass_through(request, call_next)
     if request.url.path == "/logout" and request.method == "POST":
         _drop_session(request.headers.get("cookie"))
         response.delete_cookie(SESSION_COOKIE, path="/")

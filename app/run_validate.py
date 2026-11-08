@@ -59,9 +59,7 @@ def matches(computed: float, printed: str) -> bool:
     return abs(value - float(number)) <= 0.5 * 10 ** -decimals + 1e-9
 
 
-def computed_numbers() -> dict[str, float]:
-    """Every checkable key, recomputed from the csv files."""
-    out: dict[str, float] = {}
+def _queue_numbers(out: dict[str, float]) -> None:
     q = pd.read_csv(ROOT / "queue_eval_gaia.csv")
     for name in ("logs_severity", "static_p99", "delta_5m", "jumps_hindsight", "jumps_online", "jumps_tuned",
                  "proposed", "p3_ranker", "p3_grouped", "p3_carryover", "delta_5m_carryover", "p3_per_series"):
@@ -72,16 +70,22 @@ def computed_numbers() -> dict[str, float]:
     out["queue.K50.p3_per_series"] = float(_row(q, "p3_per_series", 50)["detection_rate"])
     out["ceiling.K20"] = float(_row(q, "proposed")["oracle_ceiling"])
 
+
+def _miss_numbers(out: dict[str, float]) -> None:
     m = pd.read_csv(ROOT / "miss_causes_gaia.csv")
     miss = m[(m["queue"] == "proposed") & (m["budget_k"] == 20)].iloc[0]
     for col in ("no_metric_data", "budget_full", "no_jump", "below_threshold"):
         out[f"misses.K20.{col}"] = float(miss[col])
 
+
+def _robustness_numbers(out: dict[str, float]) -> None:
     r = pd.read_csv(ROOT / "robustness_gaia.csv").set_index(["shape", "detector"])["detection_rate"]
     for shape, detector in (("step_1g", "jump_0.5g"), ("step_0.25g", "jump_0.5g"),
                             ("ramp_1g", "jump+leak_3h"), ("step_0.5g", "jump_0.5g+threshold")):
         out[f"robustness.{shape}.{detector}"] = float(r[(shape, detector)])
 
+
+def _walkforward_numbers(out: dict[str, float]) -> None:
     s = pd.read_csv(ROOT / "stats_gaia.csv").iloc[0]
     for key, col in (("walkforward.proposed.mean", "mean"), ("walkforward.proposed.ci_low", "ci_low"),
                      ("walkforward.proposed.ci_high", "ci_high"), ("walkforward.proposed.wins", "wins_vs_delta"),
@@ -93,6 +97,8 @@ def computed_numbers() -> dict[str, float]:
                      ("stats.false_jumps_near_fault", "false_jumps_near_fault")):
         out[key] = float(s[col])
 
+
+def _ablation_numbers(out: dict[str, float]) -> None:
     ablation = ROOT / "classifier_ablation_gaia.csv"
     if ablation.exists():  # run_classifier_ablation.py
         a = pd.read_csv(ablation)
@@ -104,6 +110,8 @@ def computed_numbers() -> dict[str, float]:
         out["ablation.K20.shipped"] = float(_row(a, "severity")["detection_rate"])
         out["ablation.false.K20.shipped"] = float(_row(a, "severity")["false_items_per_day"])
 
+
+def _severity_gate_numbers(out: dict[str, float]) -> None:
     notes = ROOT / "classifier_ablation_gaia.json"
     if notes.exists():  # run_classifier_ablation.py: why severity attaches nothing, and the product's gate
         facts = json.loads(notes.read_text(encoding="utf-8"))
@@ -128,6 +136,8 @@ def computed_numbers() -> dict[str, float]:
         out["gate.queue.false_fallback"] = float(check["false_items_fallback"])
         out["gate.margin"] = float(gate["margin"])
 
+
+def _baseline_numbers(out: dict[str, float]) -> None:
     compare = ROOT / "baseline_compare_gaia.csv"
     if compare.exists():  # run_baseline_compare.py (needs GAIA)
         b = pd.read_csv(compare)
@@ -142,6 +152,8 @@ def computed_numbers() -> dict[str, float]:
             out[f"baseline.K{k}.diff_vs_delta.ci_low"] = float(gap["diff_low"])
             out[f"baseline.K{k}.diff_vs_delta.ci_high"] = float(gap["diff_high"])
 
+
+def _nab_numbers(out: dict[str, float]) -> None:
     nab = ROOT / "nab_eval.csv"
     if nab.exists():  # only after tools/fetch_nab.py + run_nab.py
         n = pd.read_csv(nab)
@@ -149,6 +161,8 @@ def computed_numbers() -> dict[str, float]:
         for dataset in mine.index:
             out[f"nab.{dataset}"] = float(mine.loc[dataset, "detection_rate"])
 
+
+def _smd_numbers(out: dict[str, float]) -> None:
     smd = ROOT / "smd_eval.csv"
     if smd.exists():  # only after tools/fetch_smd.py + run_smd.py
         frame = pd.read_csv(smd)
@@ -157,6 +171,8 @@ def computed_numbers() -> dict[str, float]:
             out[f"smd.K{k}.incidents"] = float(yq["incidents_caught"].sum() / yq["incidents"].sum())
             out[f"smd.K{k}.movements"] = float(yq["faults_caught"].sum() / yq["faults"].sum())
 
+
+def _rcaeval_mem_numbers(out: dict[str, float]) -> None:
     rca = ROOT / "rcaeval_mem.csv"
     if rca.exists():  # only after tools/fetch_rcaeval_mem.py + run_rcaeval.py
         frame = pd.read_csv(rca)
@@ -172,12 +188,16 @@ def computed_numbers() -> dict[str, float]:
             out[f"rcaeval.{dataset}.jump_train_false"] = float(fit["train_false"])
             out[f"rcaeval.{dataset}.K5"] = float(yours["detection_rate"])
 
+
+def _resources_numbers(out: dict[str, float]) -> None:
     resources = ROOT / "resources_gaia.json"
     if resources.exists():  # perf/resources.py (needs GAIA)
         used = json.loads(resources.read_text(encoding="utf-8"))
         for field in ("wall_seconds", "peak_rss_mb", "peak_rss_mb_before_job", "db_mb", "db_kb_per_day"):
             out[f"resources.{field}"] = float(used[field])
 
+
+def _rcaeval_log_numbers(out: dict[str, float]) -> None:
     logs = ROOT / "rcaeval_logs.csv"
     if logs.exists():  # only after tools/fetch_rcaeval_re23.py + run_rcaeval_logs.py
         frame = pd.read_csv(logs)
@@ -214,6 +234,8 @@ def computed_numbers() -> dict[str, float]:
                     out[f"{key}.gate.{field}"] = float(check[field])
                 out[f"{key}.gate.saving"] = float(gate["queue_saving"])
 
+
+def _gate_split_numbers(out: dict[str, float]) -> None:
     split = ROOT / "rcaeval_gate_split.csv"
     if split.exists():  # only after tools/fetch_rcaeval_re23.py + run_rcaeval_gate_split.py
         frame = pd.read_csv(split)
@@ -244,6 +266,8 @@ def computed_numbers() -> dict[str, float]:
         out["gatesplit.RE2.severity_extra_false.min"] = min(extra)
         out["gatesplit.RE2.severity_extra_false.max"] = max(extra)
 
+
+def _replay_numbers(out: dict[str, float]) -> None:
     for name, short in (("live_replay_gaia.json", "gaia"), ("live_replay_rcaeval_re2_tt.json", "tt")):
         path = ROOT / name
         if not path.exists():
@@ -256,6 +280,9 @@ def computed_numbers() -> dict[str, float]:
             out["replay.tt.marks"] = float(summary["marks"])
             out["replay.tt.real_marks"] = float(summary["real_marks"])
             out["replay.tt.precision_from_marks"] = float(summary["precision_from_marks"])
+
+
+def _soak_numbers(out: dict[str, float]) -> None:
     for name, short in (("live_soak_run1_before_cooldown.json", "soak1"), ("live_soak.json", "soak")):
         path = ROOT / name
         if not path.exists():
@@ -267,26 +294,58 @@ def computed_numbers() -> dict[str, float]:
             for field in ("median_delay_minutes", "shown_jumps", "jobs_run", "jobs_skipped", "jobs_failed", "marks",
                           "precision_from_marks", "retrains_run", "monitoring_ok_share"):
                 out[f"soak.{field}"] = float(soak[field])
+
+
+def _drift_phase_numbers(out: dict[str, float]) -> None:
     path = ROOT / "live_drift_phase.json"
     if path.exists():
         steps = json.loads(path.read_text(encoding="utf-8"))["drift_phase"]["steps"]
         out["driftphase.shifted_psi_max"] = float(steps[3]["psi_max"])
         out["driftphase.shifted_text_auc"] = float(steps[3]["text_auc"])
         out["driftphase.usual_jobs_with_drift_n_a"] = float(sum(1 for st in steps[:3] if st["drift"] == "n/a"))
+
+
+def computed_numbers() -> dict[str, float]:
+    """Every checkable key, recomputed from the csv files."""
+    out: dict[str, float] = {}
+    for part in (
+        _queue_numbers,
+        _miss_numbers,
+        _robustness_numbers,
+        _walkforward_numbers,
+        _ablation_numbers,
+        _severity_gate_numbers,
+        _baseline_numbers,
+        _nab_numbers,
+        _smd_numbers,
+        _rcaeval_mem_numbers,
+        _resources_numbers,
+        _rcaeval_log_numbers,
+        _gate_split_numbers,
+        _replay_numbers,
+        _soak_numbers,
+        _drift_phase_numbers,
+    ):
+        part(out)
     return out
 
 
-def claims_still_hold() -> None:
-    """Sentences in the report that are not a single number."""
+def _check_queue_claims() -> None:
     q = pd.read_csv(ROOT / "queue_eval_gaia.csv")
     if float(_row(q, "p3_per_series_jumps")["false_items_per_day"]) >= float(_row(q, "jumps_tuned")["false_items_per_day"]):
         _fail("per-series gates no longer cut false items; rewrite the per-series row")
     if float(_row(q, "proposed")["false_items_per_day"]) >= float(_row(q, "delta_5m")["false_items_per_day"]):
         _fail("proposed must show fewer false items a day than delta_5m")
+
+
+def _check_miss_claims() -> None:
     m = pd.read_csv(ROOT / "miss_causes_gaia.csv")
     miss = m[(m["queue"] == "proposed") & (m["budget_k"] == 20)].iloc[0]
     if int(miss["no_jump"]) + int(miss["below_threshold"]) > 15:
         _fail("detector misses grew; the 'misses are data gaps and budget' claim no longer holds")
+
+
+def _check_walkforward_claims() -> None:
     s = pd.read_csv(ROOT / "stats_gaia.csv").iloc[0]
     if int(s["tuned_wins_vs_delta"]) != 8:
         _fail("jumps_tuned must beat delta_5m in all 8 folds")
@@ -294,6 +353,10 @@ def claims_still_hold() -> None:
         _fail("weakest fold is no longer the metric outage week; rewrite the fold-7 paragraph")
     if str(s["injection_tags"]) != "memory_anomalies:1367":
         _fail("every injected fault must still be a memory anomaly")
+
+
+def _check_ablation_claims() -> None:
+    q = pd.read_csv(ROOT / "queue_eval_gaia.csv")
     ablation = ROOT / "classifier_ablation_gaia.csv"
     if ablation.exists():
         a = pd.read_csv(ablation)
@@ -312,6 +375,9 @@ def claims_still_hold() -> None:
             _fail("the promotion gate now promotes the classifier on GAIA; rewrite §5, §9, §12 and §B4")
         if facts["severity_K20"]["alerts_attached"] != 0:
             _fail("the severity row now attaches alerts; rewrite the 'why the severity row attaches no alerts' paragraph")
+
+
+def _check_baseline_claims() -> None:
     compare = ROOT / "baseline_compare_gaia.csv"
     if compare.exists():
         b = pd.read_csv(compare)
@@ -322,12 +388,18 @@ def claims_still_hold() -> None:
         for name in ("zscore", "ewma", "iforest"):
             if float(_row(b, name)["detection_rate"]) >= float(_row(b, "delta_5m")["detection_rate"]):
                 _fail(f"{name} now beats the rate rule at K = 20; rewrite the textbook-detector paragraph (§B1)")
+
+
+def _check_nab_claims() -> None:
     nab = ROOT / "nab_eval.csv"
     if nab.exists():
         n = pd.read_csv(nab)
         tweets = n[(n["queue"] == "your_queue") & (n["budget_k"] == 2) & (n["dataset"] == "realTweets")].iloc[0]
         if float(tweets["detection_rate"]) > float(tweets["chance"]) + 0.05:
             _fail("NAB tweets now beats chance; update the 'no better than chance' sentence")
+
+
+def _check_rcaeval_claims() -> None:
     rca = ROOT / "rcaeval_mem.csv"
     if rca.exists():
         frame = pd.read_csv(rca)
@@ -356,6 +428,9 @@ def claims_still_hold() -> None:
                   "'gate's window is the scored window' caveat (§9, §12, §13, §B5)")
         if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
             _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
+
+
+def _check_gate_split_claim() -> None:
     split = ROOT / "rcaeval_gate_split.json"
     if split.exists():
         facts = json.loads(split.read_text(encoding="utf-8"))
@@ -364,6 +439,7 @@ def claims_still_hold() -> None:
             _fail(f"the independent gate now promotes the classifier on {promoted}; rewrite the independent gate test (§B5)")
 
 
+def _check_replay_claims() -> None:
     for name in ("live_replay_gaia.json", "live_replay_rcaeval_re2_tt.json"):
         path = ROOT / name
         if path.exists():
@@ -373,6 +449,8 @@ def claims_still_hold() -> None:
             if replay["retrains_rolled_back"]:
                 _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§B8)")
 
+
+def _check_soak_claims() -> None:
     soak_path = ROOT / "live_soak.json"
     if soak_path.exists():
         soak = json.loads(soak_path.read_text(encoding="utf-8"))
@@ -387,6 +465,23 @@ def claims_still_hold() -> None:
         steps = json.loads(drift_path.read_text(encoding="utf-8"))["drift_phase"]["steps"]
         if steps[3]["drift"] != "warn":
             _fail("the drift phase no longer warns on the shifted storm; rewrite the soak section (§B9)")
+
+
+def claims_still_hold() -> None:
+    """Sentences in the report that are not a single number."""
+    for check in (
+        _check_queue_claims,
+        _check_miss_claims,
+        _check_walkforward_claims,
+        _check_ablation_claims,
+        _check_baseline_claims,
+        _check_nab_claims,
+        _check_rcaeval_claims,
+        _check_gate_split_claim,
+        _check_replay_claims,
+        _check_soak_claims,
+    ):
+        check()
 
 
 def main() -> None:

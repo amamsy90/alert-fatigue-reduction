@@ -111,6 +111,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | Path | What |
 |---|---|
 | [`FINAL_REPORT.md`](FINAL_REPORT.md) | Main report (sections 1–5) and Appendices A–G |
+| [`skills/`](skills/README.md) | Step-by-step instructions for coding agents and contributors: check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release |
 | [`docs/`](docs/README.md) | Requirements, architecture, ADRs, threat model, test plan, deployment, MLOps, monitoring, privacy |
 | [`docs/results/`](docs/results/homelab_day12/README.md) | Frozen GAIA ranker re-run and home-lab day-12 summaries |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
