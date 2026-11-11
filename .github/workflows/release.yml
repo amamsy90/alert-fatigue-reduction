@@ -45,7 +45,7 @@ jobs:
           output-file: sbom.spdx.json
           artifact-name: sbom-${{ github.ref_name }}.spdx.json
       - name: Throwaway Kubernetes cluster
-        uses: helm/kind-action@v1.10.0
+        uses: helm/kind-action@v1.15.2
         with:
           cluster_name: release-check
       - name: Deploy the built image with Helm and smoke-test it (rolls back on failure)
