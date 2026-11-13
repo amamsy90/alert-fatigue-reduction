@@ -219,7 +219,7 @@ def _rcaeval_log_numbers(out: dict[str, float]) -> None:
             out[f"{key}.diff.ci_low"] = float(diff[1])
             out[f"{key}.diff.ci_high"] = float(diff[2])
             out[f"{key}.placebo"] = float(app["by_k"]["10"]["placebo_caught"])
-            if key == "rcalogs.RE2.tt":  # the "+13.3 over none (+2.2 over severity)" sentences (§5, §12, §13)
+            if key == "rcalogs.RE2.tt":  # the "+13.3 over none (+2.2 over severity)" sentences (§A.4, §A.6, Appendix C)
                 rate = {name: float(rows[rows["queue"] == name].iloc[0]["detection_rate"])
                         for name in ("classifier", "severity", "no_alerts")}
                 out[f"{key}.gain_vs_none"] = rate["classifier"] - rate["no_alerts"]
@@ -364,7 +364,7 @@ def _check_ablation_claims() -> None:
             if int(_row(a, "classifier", k)["faults_caught"]) != int(_row(q, "proposed", k)["faults_caught"]):
                 _fail(f"ablation 'classifier' row at K={k} no longer equals the published full queue")
         if float(_row(a, "classifier")["detection_rate"]) > float(_row(a, "no_alerts")["detection_rate"]):
-            _fail("the classifier now adds catches on GAIA; rewrite the 'adds no catches' sentences (§5, §12, §B4)")
+            _fail("the classifier now adds catches on GAIA; rewrite the 'adds no catches' sentences (§A.4, §A.6, §B4)")
     notes = ROOT / "classifier_ablation_gaia.json"
     if notes.exists():
         facts = json.loads(notes.read_text(encoding="utf-8"))
@@ -372,7 +372,7 @@ def _check_ablation_claims() -> None:
         if gate["queue_check"].get("fallback") != "rules only (severity)":
             _fail("the GAIA gate no longer falls back to severity rules; the 'shipped configuration' row is wrong")
         if gate["promoted"] or gate["model_used"] != "rules_only":
-            _fail("the promotion gate now promotes the classifier on GAIA; rewrite §5, §9, §12 and §B4")
+            _fail("the promotion gate now promotes the classifier on GAIA; rewrite §A.4, §B.2, §A.6 and §B4")
         if facts["severity_K20"]["alerts_attached"] != 0:
             _fail("the severity row now attaches alerts; rewrite the 'why the severity row attaches no alerts' paragraph")
 
@@ -418,14 +418,14 @@ def _check_rcaeval_claims() -> None:
         by_margin = sorted(f"{a['suite']} {a['app']}" for a in facts["apps"]
                            if not a["promotion_gate"]["promoted"] and (a["promotion_gate"].get("queue_saving") or 0) > 0)
         if by_margin != ["RE2 Online Boutique"]:
-            _fail(f"the margin now refuses {by_margin}; rewrite the margin sentences (§9, §B5)")
+            _fail(f"the margin now refuses {by_margin}; rewrite the margin sentences (§B.2, §B5)")
         tt = next(a["promotion_gate"] for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
         if tt["queue_saving"] != tt["margin"]:
             _fail("RE2 Train Ticket no longer passes exactly at the margin; rewrite 'exactly one missed fault' (§B5)")
         tt_app = next(a for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
         if tt["queue_check"]["faults"] != tt_app["test_cases"]:
             _fail("the RE2 Train Ticket gate window is no longer the scored set of test cases; rewrite the "
-                  "'gate's window is the scored window' caveat (§9, §12, §13, §B5)")
+                  "'gate's window is the scored window' caveat (§B.2, §A.6, Appendix C, §B5)")
         if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
             _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
 

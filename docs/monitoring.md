@@ -13,7 +13,7 @@ Counters are per process and reset on restart; model and data signals are read f
 
 | Area | Signal | Where | Target | Why this target |
 |---|---|---|---|---|
-| **AI performance** | Precision from marks: share of marked items the on-call engineer called Real (alerts and jumps, and each separately) | `/monitoring` → `model`; gauge `oncall_precision_from_marks` | ≥ 0.70 once there are ≥ 20 marks | Offline precision is 90–94% at K = 20 (FINAL_REPORT §5); 0.70 leaves room for real-world noise and still means most interruptions are worth it. Fewer than 20 marks is too few to judge. |
+| **AI performance** | Precision from marks: share of marked items the on-call engineer called Real (alerts and jumps, and each separately) | `/monitoring` → `model`; gauge `oncall_precision_from_marks` | ≥ 0.70 once there are ≥ 20 marks | Offline precision is 90–94% at K = 20 (FINAL_REPORT §B1); 0.70 leaves room for real-world noise and still means most interruptions are worth it. Fewer than 20 marks is too few to judge. |
 | **AI performance** | Model used per job (trained / saved / rules only), active model version, promotion decisions | Job meta, `GET /models` | A candidate that fails the gate is not activated | See `docs/mlops.md` |
 | **System performance** | Request latency by route (histogram), p95 of interactive routes | `oncall_http_request_duration_seconds`; `/monitoring` → `latency` | p95 ≤ 1 s | Measured p95 0.32 s at 50 concurrent users; 1 s is where a page starts to feel slow |
 | **System performance** | Requests by route and status class; 5xx rate | `oncall_http_requests_total`; `/monitoring` → `errors` | 5xx ≤ 2% | 0 errors in 3,000 load-test requests; 2% catches a real fault without flapping |

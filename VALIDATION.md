@@ -54,7 +54,7 @@ Everything learned is re-learned before each later week; the week is scored once
 | 7 | 19–26 Aug | 173 | 61% | 51.4% | 52.0% | 50.9% | 54.9% |
 | 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 79.1% | 79.1% |
 
-Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **71.3%** (95% CI 64.5–76.7%; 4 wins, 3 losses, 1 tie, p = 0.5); p3_carryover **74.8%** vs delta_5m_carryover 74.3% (3 of 6 decided weeks, p = 0.66). Numbers after the look-ahead fixes (FINAL_REPORT §5); `run_validate.py` checks them against the report's Checked numbers table. Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
+Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **71.3%** (95% CI 64.5–76.7%; 4 wins, 3 losses, 1 tie, p = 0.5); p3_carryover **74.8%** vs delta_5m_carryover 74.3% (3 of 6 decided weeks, p = 0.66). Numbers after the look-ahead fixes (FINAL_REPORT §B1); `run_validate.py` checks them against the report's Checked numbers table. Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
 
 ## Signals and checks
 
