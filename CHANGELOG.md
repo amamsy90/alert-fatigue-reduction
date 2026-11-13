@@ -129,7 +129,7 @@ These are the measured results already written in `docs/ML_MODELS.md`. This rele
 ## [1.0.5]
 
 ### Changed
-- Report: on RCAEval the promotion gate is run on the same later half of cases that is scored (`product_gate()` in `app/run_rcaeval_logs.py` splits at the ablation's case boundary), so "promoted on RE2 Train Ticket" was decided on its own test set, and the +13.3 points were measured on the same cases. This is now stated in §5, §9, §12, §13 and in the §B5 method and caveats, and listed under future work. The evaluation itself is unchanged (a further split of 45 cases would leave about 22 on each side), so no result number changed. `run_validate.py` now fails if the Train Ticket gate window stops being the scored set. In the product the gate window is the tail of a batch and later batches are scored, so the live design does not overlap.
+- Report: on RCAEval the promotion gate is run on the same later half of cases that is scored (`product_gate()` in `app/run_rcaeval_logs.py` splits at the ablation's case boundary), so "promoted on RE2 Train Ticket" was decided on its own test set, and the +13.3 points were measured on the same cases. This is now stated in §A.4, §B.2, §A.6, Appendix C and in the §B5 method and caveats, and listed under future work. The evaluation itself is unchanged (a further split of 45 cases would leave about 22 on each side), so no result number changed. `run_validate.py` now fails if the Train Ticket gate window stops being the scored set. In the product the gate window is the tail of a batch and later batches are scored, so the live design does not overlap.
 - Stale numbers in shipped documents: `DEMO_SCRIPT.md`, `VIVA_ANSWERS.md`, `VALIDATION.md`, `design_specification.md`, `project_plan.md` and the speaker notes led with 69.6% as "the full queue". They now give the shipped configuration on GAIA (log alerts by severity: 71.0%, 1.4 false items a day, precision 92%) and name 69.6% as the queue with the classifier's alerts, which the gate refuses. The speaker notes also had 70 / 70.2 / 72.5 / 74.4 and "1.3 points"; they now match the report (71.0, 71.3, 72.6, 2.1). `docs/mlops.md` and `docs/test_plan.md` said 295 tests; they say 300 (+1 integration) and the coverage table was re-measured (89.83%).
 - Version 1.0.5: `app/pyproject.toml`, `uv.lock`, `product.__version__`, the doc headers (including `docs/requirements.md`, which still said 1.0.0), the report header and date, `submission/README.md`. The report's Word and PDF copies are regenerated.
 
@@ -148,8 +148,8 @@ These are the measured results already written in `docs/ML_MODELS.md`. This rele
 ## [1.0.4]
 
 ### Changed
-- Report: the RCAEval RE2 Train Ticket gain is stated against both baselines: +13.3 points over no log alerts and +2.2 over severity alerts (one case) at K = 10 (§5, §12, §13). `run_validate.py` checks both (`rcalogs.RE2.tt.gain_vs_none`, `rcalogs.RE2.tt.gain_vs_severity`; 195 numbers).
-- Report §9: the gate margin was chosen after the RCAEval gate results were seen, so those decisions are not an independent test of it; on Train Ticket the saving of 10 comes from 10 fewer false items, not a saved missed fault, although the setting is named `PROMOTION_MIN_SAVING_MISSES`.
+- Report: the RCAEval RE2 Train Ticket gain is stated against both baselines: +13.3 points over no log alerts and +2.2 over severity alerts (one case) at K = 10 (§A.4, §A.6, Appendix C). `run_validate.py` checks both (`rcalogs.RE2.tt.gain_vs_none`, `rcalogs.RE2.tt.gain_vs_severity`; 195 numbers).
+- Report §B.2: the gate margin was chosen after the RCAEval gate results were seen, so those decisions are not an independent test of it; on Train Ticket the saving of 10 comes from 10 fewer false items, not a saved missed fault, although the setting is named `PROMOTION_MIN_SAVING_MISSES`.
 - Version 1.0.4 everywhere: `app/pyproject.toml` and `uv.lock` (were 1.0.0), the API version and the model-card fallback now read `product.__version__` (were hard-coded 1.0.0), the report header, and the doc headers in `docs/` (were 1.0.0). New test `test_the_package_version_matches_pyproject` (301 tests).
 - The report's Word and PDF copies are regenerated.
 
@@ -163,7 +163,7 @@ These are the measured results already written in `docs/ML_MODELS.md`. This rele
 - `docs/deployment.md` said login sessions were in-process (the scaling-path bullet), contradicting §3a (`auth.db` since 1.0.2). The in-process job, evaluation and `ops.json` locks are what keep the app to one worker.
 
 ### Added
-- Report §11 and `docs/privacy_responsible_ai.md`: how to find and erase one person's ID in `queue.db`, `auth.db`, the audit log, evaluation uploads, model files and backups (a data-subject request). Report §7 and §8 now describe the `auth.db` sessions and the live-Prometheus fix from 1.0.2.
+- Report §B.4 and `docs/privacy_responsible_ai.md`: how to find and erase one person's ID in `queue.db`, `auth.db`, the audit log, evaluation uploads, model files and backups (a data-subject request). Report §B.1 and Appendix C now describe the `auth.db` sessions and the live-Prometheus fix from 1.0.2.
 
 ## [1.0.2] — 2026-10-11
 
@@ -202,8 +202,8 @@ These are the measured results already written in `docs/ML_MODELS.md`. This rele
 
 ### Added (code review, 11 October 2026, third round)
 - Second dataset for the alert classifier: `tools/fetch_rcaeval_re23.py` downloads RCAEval RE2 and RE3 logs and metrics (720 files, about 570 MB, SHA-256 of every file pinned in `tools/rcaeval_re23_sha256.txt`; git-ignored), and `run_rcaeval_logs.py` runs the classifier / severity / no-log-alerts ablation and the product's promotion gate on each application (`results/rcaeval_logs.csv`, `.json`; report §B5). On RE2 Train Ticket the classifier adds 13.3 points (95% interval +4.4 to +24.4) and the gate promotes it there and on RE2 Online Boutique; elsewhere it adds at most one case and the gate keeps it out. Tests in `test_rcaeval_logs.py`.
-- `perf/resources.py` measures one GAIA scoring job (35.7 s, 500 MB peak, about 215 KB of database a day); report §7 has an operating-cost estimate with its assumptions and cited prices.
-- UML use-case diagram (`figures/use_cases.svg` and `.png`, drawn by `make_figures.py`), a data-retention table (§11) and numeric retrain and rollback triggers (§9).
+- `perf/resources.py` measures one GAIA scoring job (35.7 s, 500 MB peak, about 215 KB of database a day); report §B.1 has an operating-cost estimate with its assumptions and cited prices.
+- UML use-case diagram (`figures/use_cases.svg` and `.png`, drawn by `make_figures.py`), a data-retention table (§B.4) and numeric retrain and rollback triggers (§B.2).
 - Report §B1: the shipped configuration (the gate keeps the classifier out on GAIA) is its own row, 71.0% at K = 20. `run_validate.py` now checks 189 numbers; 279 tests.
 
 ### Changed (code review, 11 October 2026, third round)
@@ -230,7 +230,7 @@ These are the measured results already written in `docs/ML_MODELS.md`. This rele
 
 ### Added (code review, 10 October 2026)
 - `tools/fetch_gaia.py`: downloads the GAIA MicroSS run tables and the 37 memory series used, without an external unzip tool, and checks each file's SHA-256.
-- `run_classifier_ablation.py` and `results/classifier_ablation_gaia.csv`: the full queue with log alerts chosen by the classifier, by severity, or not at all. At K = 20: 69.6%, 71.0%, 71.2%. The classifier adds no catches on GAIA; the report now says so (§5, §12, §B4). `run_validate.py` checks the six new numbers (75 in all).
+- `run_classifier_ablation.py` and `results/classifier_ablation_gaia.csv`: the full queue with log alerts chosen by the classifier, by severity, or not at all. At K = 20: 69.6%, 71.0%, 71.2%. The classifier adds no catches on GAIA; the report now says so (§A.4, §A.6, §B4). `run_validate.py` checks the six new numbers (75 in all).
 - Report §C1a, use of AI tools.
 
 ### Changed (code review, 10 October 2026)
