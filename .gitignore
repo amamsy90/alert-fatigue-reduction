@@ -20,12 +20,16 @@ __pycache__/
 .venv/
 *.pyc
 
-# Generated Word / PDF copies (rebuild with tools/md2docx.js); the submitted proposal stays tracked
+# Generated Word / PDF copies (rebuild with tools/md2docx.js); the submitted proposal stays tracked.
+# The versioned final-report upload is tracked.
 submission/*.docx
 submission/*.pptx
 submission/Alert_Fatigue_*.pdf
 submission/Project_Proposal.pdf
 !submission/Project_Proposal_200010549_Aishah_Alyammahi.docx
+!submission/Alert_Fatigue_Final_Report_v1.2.0.docx
+!submission/Alert_Fatigue_Final_Report_v1.2.0.pdf
+!submission/Alert_Fatigue_v1.2.0.zip
 
 # Node (tools/md2docx.js)
 node_modules/
