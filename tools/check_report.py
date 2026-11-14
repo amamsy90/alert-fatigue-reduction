@@ -47,7 +47,8 @@ def main() -> int:
         text = pdftotext(pdf, number, number)
         if conclusion is None and re.search(r"5\.?\s+Conclusion", text):
             conclusion = number
-        if appendix is None and re.search(r"Appendix A|^A\s+Walk-forward results", text, re.M):
+        # The heading is "Appendix A." A body mention such as "Appendix A has" is not the start.
+        if appendix is None and re.search(r"Appendix A\.|^A\s+Walk-forward results", text, re.M):
             appendix = number
     if conclusion is None or appendix is None:
         print(f"FAIL: could not find Conclusion ({conclusion}) or Appendix A ({appendix})")
