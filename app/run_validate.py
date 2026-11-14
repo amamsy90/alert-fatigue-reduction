@@ -1,4 +1,4 @@
-"""Check that the result files still match the numbers printed in FINAL_REPORT.md.
+"""Check that the result files still match the numbers printed in the full appendices.
 
 Run after run_queue_eval.py, run_walkforward.py, run_stats.py, run_robustness.py
 (and run_nab.py / run_smd.py / run_rcaeval.py when their data is present).
@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path("results")
-REPORT = Path(__file__).resolve().parent.parent / "FINAL_REPORT.md"
+REPORT = Path(__file__).resolve().parent.parent / "docs" / "report_appendices_full.md"
 TABLE_HEADING = "## Checked numbers"
 
 
