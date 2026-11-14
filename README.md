@@ -51,13 +51,13 @@ Open the queue page and press **Run sample**, or post alerts from Alertmanager. 
 
 ```bash
 cd app
-uv run pytest -q                     # 542 passed, 10 skipped (9 need torch, xgboost or CUDA; the integration test needs Docker)
+uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 530 passed, 22 skipped; line coverage 86.93%
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py        # the report's 300 checked numbers match app/results/
 ```
 
-**Measured:** Windows 11, Python 3.12: `pytest -q` takes about 2 min (552 tests: 542 passed, 10 skipped). A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
+**Measured** on this tree, from `app/`, with no Helm installed: `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` reports 530 passed and 22 skipped, line coverage 86.93%. The same 552 tests were 542 passed and 10 skipped on 7 Nov 2026 when Helm was available, because the 12 chart tests in `tests/test_helm_chart.py` then ran. The older 450 passed and 10 skipped figure is the 1.2.0 suite, before those later tests existed. A Windows 11, Python 3.12 `pytest -q` takes about 2 min. A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
 
 ## Evaluation
 
@@ -75,7 +75,7 @@ To check that a fresh clone works with nothing carried over from this machine (c
 python tools/check_fresh_clone.py          # or: --source https://github.com/amamsy90/alert-fatigue-reduction --ref <commit>
 ```
 
-**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `b8a3cf2`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (542 passed, 10 skipped), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
+**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `b8a3cf2`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (542 passed, 10 skipped, Helm present), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
 
 Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `FINAL_REPORT.md` section B8.
 
@@ -116,7 +116,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`docs/results/`](docs/results/homelab_day12/README.md) | Frozen GAIA ranker re-run and home-lab day-12 summaries |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 552 tests (542 pass on CPU CI; 9 skip without torch, xgboost or CUDA; 1 runs against real Prometheus and Alertmanager) |
+| [`app/tests/`](app/tests) | 552 tests. Without Helm: 530 passed, 22 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85`; coverage 86.93%). Twelve skips need Helm, 9 need torch, xgboost or CUDA, and 1 needs the Docker stack |
 | [`app/examples/gaia_sample/`](app/examples/gaia_sample) | Real 10-day GAIA slice and the recorded counts used by `run_reproduce.py` |
 | [`homelab/`](homelab/README.md) | Single-machine multi-company lab (shadow only) |
 | [`tools/`](tools) | Data fetch scripts, the sample builder, the fresh-clone check and the Word report builder |
