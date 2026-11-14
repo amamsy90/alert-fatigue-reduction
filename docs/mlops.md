@@ -26,7 +26,7 @@ If another team member receives the project tomorrow:
 ```bash
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
-uv run pytest -q                      # 542 passed, 10 skipped on CPU CI (7 November 2026); the integration test needs Docker (see test_plan.md)
+uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 530 passed, 22 skipped; line coverage 86.93% (see test_plan.md)
 uv run python run_validate.py         # the report's 300 checked numbers match the committed results
 docker compose up -d                  # the CPU app, built from the hash-pinned lock (dev settings)
 # optional GPU machine: docker compose --profile gpu up --build oncall-queue-gpu
@@ -54,7 +54,7 @@ To regenerate the published results they also need the GAIA files (`app/data/gai
 
 **Shadow challenger.** A model the promotion gate refuses is not thrown away. It stays a candidate, and on every later job the newest candidate decides the same live alerts as the active model without changing anything shown or paged. Its cost on labelled alerts (a miss 10, a false item 1) is added to a running tally in its registry card. After 3 jobs and 30 labelled alerts the tally says `promote` only if the challenger saved at least the gate's margin and won more jobs than it lost; otherwise `keep`. A person reads the recommendation and promotes with `POST /models/{version}/activate`, which can be rolled back. This turns one held-out window into a decision on live data, and it is visible at `/monitoring` (`challenger_shadow`) and `/metrics` (`oncall_challenger_*`).
 
-**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). On 7 November 2026, Python 3.12 collected 552 tests: 542 passed, 10 skipped, coverage 86%. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
+**Testing a new version before release.** Code: CI on every PR (lint, types, the suite on two Python versions, coverage ≥ 85%, pip-audit, report check, Docker health). From `app/`, `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` collected 552 tests: 530 passed, 22 skipped, line coverage 86.93%. Twelve skips are the Helm chart tests. Models: the promotion gate on held-out alerts, and shadow mode (Live is off by default), so a new model can be watched on real traffic before anyone is paged.
 
 ## 4. Experiment tracking
 
