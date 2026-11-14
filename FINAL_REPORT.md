@@ -62,7 +62,7 @@ The classifier on GAIA catches fewer faults than the same queue with no log aler
 
 ## 4. Deliverables, setup and use
 
-The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Submitted commit: `88d183ca11d4fa82f11431e3658e367d9ccb4b27`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
+The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Submitted commit: `63a646147368f469fc37dde52353193bfed648c5`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
 
 ```bash
 cd app
