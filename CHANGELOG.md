@@ -38,7 +38,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ### Changed
 - Version 1.2.0: `app/pyproject.toml`, `product.__version__`, this changelog, the current doc headers, the README, and the report. The home lab, the day-12 snapshot, the four-page report, and the optional queue checks are in this release. New flags stay off. Live paging is unchanged.
-- On this commit the suite is 450 passed, 10 skipped, line coverage 86%. `run_validate.py` matches 195 checked numbers.
+- The 1.2.0 suite on 4 November 2026 was 450 passed and 10 skipped, line coverage 86%. The current command, from `app/`, is `uv run pytest -q --cov --cov-report=term --cov-fail-under=85`: 530 passed, 22 skipped, line coverage 86.93%. `run_validate.py` matches 300 checked numbers.
 - The four-page report leads with the budgeted jump queue: at K = 20, 72.6% against 68.9% for the Prometheus rate rule and 0% for log severity, the jump detector winning 8 of 8 walk-forward weeks against that rate rule, with fewer false items a day. Ranker KEEP, hybrid, leave-one-company-out, and the optional metric, trace and LLM measurements stay in the appendices. Those flags stay off. Live paging is unchanged.
 - The report answers the proposal feedback and adds the day-12 homelab evaluation (`FINAL_REPORT.md` §B7, `proposal.md`, `docs/results/homelab_day12/`). The GAIA learned ranker re-run is `docs/results/gaia_ranker_rerun/`: at K = 20, 887 against 851 of 1,223, KEEP. `LEARNED_RANKER` stays off.
 
@@ -101,7 +101,7 @@ These are the measured results already written in `docs/ML_MODELS.md`. This rele
 
 ### Changed
 
-- Version 1.1.0: `app/pyproject.toml`, `app/uv.lock`, `product.__version__` (the API version and the model-card fallback), the doc headers, `docs/ML_MODELS.md`, `docs/GPU_LLM_ROLES.md`, the report header and date (21 October 2026), and `submission/README.md`. The Word and PDF copies are not regenerated in this commit. The current suite figure is 450 passed, 10 skipped, line coverage 86% (recorded under 1.2.0). `run_validate.py` still matches 195 checked numbers.
+- Version 1.1.0: `app/pyproject.toml`, `app/uv.lock`, `product.__version__` (the API version and the model-card fallback), the doc headers, `docs/ML_MODELS.md`, `docs/GPU_LLM_ROLES.md`, the report header and date (21 October 2026), and `submission/README.md`. The Word and PDF copies are not regenerated in this commit. The current suite figure is 530 passed, 22 skipped, line coverage 86.93% (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`). `run_validate.py` matches 300 checked numbers.
 
 ### Fixed
 - `certifi` 2026.7.22 to 2026.10.19 (`PYSEC-2026-4320` / GHSA-6q48-6c7w-9gw2). The 2026.7.22 bundle still trusted emSign roots whose intermediates were revoked after a key compromise. The pin was already on `master`; the 1.1.0 `uv.lock` edit had only changed the package version string.
