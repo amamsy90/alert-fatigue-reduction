@@ -44,13 +44,14 @@ function runs(text, base = {}) {
   const font = base.font || FONT;
   const color = base.color || INK;
   const out = [];
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s)]+)/g;
+  const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s)]+)/g;
   let last = 0, m;
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(new TextRun({ text: text.slice(last, m.index), font, size, color, bold: base.bold }));
     const t = m[0];
     if (t.startsWith("**")) out.push(new TextRun({ text: t.slice(2, -2), bold: true, font, size, color }));
     else if (t.startsWith("`")) out.push(new TextRun({ text: t.slice(1, -1), font: MONO, size: Math.max(size, 20), color }));
+    else if (t.startsWith("*")) out.push(new TextRun({ text: t.slice(1, -1), italics: true, font, size, color, bold: base.bold }));
     else if (t.startsWith("[")) {
       const mm = t.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       out.push(linkRun(mm[1], mm[2], { font, size, bold: base.bold }));
@@ -71,12 +72,39 @@ function bodyParagraph(text, extra = {}) {
 }
 
 const border = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+function plainCell(s) {
+  return (s || "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]*)`/g, "$1");
+}
+
 function table(rows) {
   const cols = rows[0].length;
-  const lens = Array.from({ length: cols }, (_, j) => Math.max(...rows.map(r => (r[j] || "").replace(/\*\*/g, "").length)));
-  const wt = lens.map(l => Math.min(Math.max(l, 8), 42));
-  const total = wt.reduce((a, b) => a + b, 0);
-  const widths = wt.map(l => Math.floor(CONTENT_W * l / total));
+  const plains = Array.from({ length: cols }, (_, j) => rows.map(r => plainCell(r[j])));
+  // 10 pt bold Times is about 140 DXA wide per character, plus cell padding.
+  // A short column fits its whole cell (Caught, Precision, 72.6%). A long column
+  // fits its longest word so text wraps on spaces.
+  const CHAR = 140, PAD = 220;
+  const mins = plains.map(cells => {
+    const longestCell = Math.max(...cells.map(p => p.length), 1);
+    const longestWord = Math.max(...cells.map(p => {
+      const words = p.split(/\s+/).filter(Boolean);
+      return words.reduce((m, w) => Math.max(m, w.length), 1);
+    }));
+    return (longestCell <= 12 ? longestCell : longestWord) * CHAR + PAD;
+  });
+  let widths = mins.slice();
+  const minSum = widths.reduce((a, b) => a + b, 0);
+  if (minSum > CONTENT_W) {
+    const scale = CONTENT_W / minSum;
+    widths = widths.map(w => Math.max(1, Math.floor(w * scale)));
+  } else {
+    const extra = CONTENT_W - minSum;
+    const weights = plains.map(cells => Math.max(...cells.map(p => p.length), 1));
+    const wsum = weights.reduce((a, b) => a + b, 0);
+    widths = widths.map((w, j) => w + Math.floor(extra * weights[j] / wsum));
+  }
   widths[widths.length - 1] += CONTENT_W - widths.reduce((a, b) => a + b, 0);
   return new Table({
     width: { size: CONTENT_W, type: WidthType.DXA },
@@ -100,8 +128,9 @@ function table(rows) {
 
 function caption(text) {
   return new Paragraph({
+    style: "Caption",
     spacing: { before: 0, after: 60, line: 240, lineRule: "auto" },
-    children: [new TextRun({ text, font: FONT, size: 20, color: INK })],
+    children: runs(text, { size: 20 }),
   });
 }
 
@@ -127,6 +156,14 @@ function flush() {
     children.push(bodyParagraph(para.join(" ")));
     para = [];
   }
+}
+
+function nextNonEmptyIsTable(from) {
+  for (let j = from; j < lines.length; j++) {
+    if (lines[j].trim() === "") continue;
+    return /^\|/.test(lines[j]);
+  }
+  return false;
 }
 
 let titleDone = false;
@@ -186,7 +223,13 @@ for (let i = 0; i < lines.length; i++) {
     continue;
   }
   if (/^---+\s*$/.test(line)) { flush(); continue; }
-  if (line.trim() === "") { flush(); continue; }
+  if (line.trim() === "") {
+    if (para.length && nextNonEmptyIsTable(i + 1)) {
+      children.push(caption(para.join(" ")));
+      para = [];
+    } else flush();
+    continue;
+  }
   if (expectMembers && !/^!\[/.test(line) && !/^\|/.test(line)) {
     flush();
     children.push(new Paragraph({
@@ -275,6 +318,14 @@ const doc = new Document({
       heading5: { run: H2_RUN },
       heading6: { run: H2_RUN },
     },
+    paragraphStyles: [{
+      id: "Caption",
+      name: "Caption",
+      basedOn: "Normal",
+      quickFormat: true,
+      run: { font: FONT, size: 20, color: INK },
+      paragraph: { spacing: { before: 0, after: 60, line: 240, lineRule: "auto" } },
+    }],
     characterStyles: [{
       id: "Hyperlink",
       name: "Hyperlink",

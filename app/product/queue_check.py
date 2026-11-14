@@ -53,7 +53,7 @@ def queue_check(
     alerts at all. A classifier can be right about single alerts and still
     lower the queue's catches, because the faults its alerts carry are often also
     caught by metric jumps and its alerts take slots the jumps needed (GAIA,
-    FINAL_REPORT.md section B4). None when the held-out window has no fault."""
+    docs/report_appendices_full.md section B4). None when the held-out window has no fault."""
     split_at = trained["split_at"]
     later = [i for i, a in enumerate(alerts) if a.timestamp >= split_at]
     if not later:

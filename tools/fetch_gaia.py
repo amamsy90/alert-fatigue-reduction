@@ -6,17 +6,21 @@ system with 1,367 injected memory faults. Only two parts are used here:
   run tables     MicroSS/run/run.zip            -> app/data/gaia_raw/run/run/run_table_2021-0{7,8}.csv
   memory series  MicroSS/metric/metric_split.*  -> app/data/gaia_metrics/metric/*_docker_memory_usage_total_*.csv
 
-The metric archive is a 35-part split zip (about 1.8 GB). It is downloaded to
-a cache folder, and only the 37 docker_memory_usage_total files are extracted.
-No external unzip tool is needed. Every extracted file is checked against the
-SHA-256 of the copy used for the published results; a mismatch stops the run.
+The metric archive is a 35-part split zip, 1,788,356,895 bytes (1.79 GB)
+compressed. It is downloaded to a cache folder, and only the 37
+docker_memory_usage_total files are extracted. Together with the two run
+tables that is 39 files and 54,728,268 bytes (54.7 MB). No external unzip tool
+is needed. Every extracted file is checked against the SHA-256 of the copy
+used for the published results; a mismatch stops the run.
 
     python tools/fetch_gaia.py              # run tables + memory series
     python tools/fetch_gaia.py --run-only   # run tables only (under 1 MB)
     python tools/fetch_gaia.py --check      # only verify files already in place
-    python tools/fetch_gaia.py --keep-cache # keep the 1.8 GB split archive
+    python tools/fetch_gaia.py --keep-cache # keep the 1.79 GB split archive
 
-Source: https://github.com/CloudWise-OpenSource/GAIA-DataSet (MicroSS).
+Source: https://github.com/CloudWise-OpenSource/GAIA-DataSet commit
+238a9e24ae0b69e7e05dff112652a3fa62db88fd (2022-05-12, "Modified MicroSS run").
+run.zip at that commit is the recorded SHA-256 below.
 """
 from __future__ import annotations
 
@@ -31,7 +35,10 @@ import zlib
 from pathlib import Path
 from urllib.request import urlopen
 
-RAW = "https://raw.githubusercontent.com/CloudWise-OpenSource/GAIA-DataSet/main/MicroSS"
+# Pinned so a later push to main cannot change the files. run.zip at this commit
+# matches RUN_ZIP; each extracted CSV is still checked against EXPECTED.
+GAIA_COMMIT = "238a9e24ae0b69e7e05dff112652a3fa62db88fd"
+RAW = f"https://raw.githubusercontent.com/CloudWise-OpenSource/GAIA-DataSet/{GAIA_COMMIT}/MicroSS"
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
 CACHE = DATA / "gaia_download"
 METRIC_PARTS = [f"metric_split.z{i:02d}" for i in range(1, 35)] + ["metric_split.zip"]

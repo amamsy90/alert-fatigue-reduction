@@ -7,7 +7,7 @@ there). Needs the GAIA data (`python ../tools/fetch_gaia.py`).
 
     python perf/resources.py            # writes results/resources_gaia.json
 
-Feeds the operating-cost section of FINAL_REPORT.md (section 7).
+Feeds the operating-cost paragraph in docs/report_appendices_full.md (Appendix B).
 """
 from __future__ import annotations
 

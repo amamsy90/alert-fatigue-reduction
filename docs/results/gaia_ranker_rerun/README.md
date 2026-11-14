@@ -1,6 +1,6 @@
 # GAIA learned-ranker re-run (Nov 3 2026, ai-ROG RTX 5090)
 
-Slim copy of `gaia-ranker-rerun-20261103T180033Z`. Logs and the experiments-jsonl diff are not included. Numbers in `FINAL_REPORT.md` §A.4 and §B7.2 come from `summary_by_k.csv` and `walk_forward_pooled.json`.
+Slim copy of `gaia-ranker-rerun-20261103T180033Z`. Logs and the experiments-jsonl diff are not included. Numbers in `docs/report_appendices_full.md` §A.4 and §B7.2 come from `summary_by_k.csv` and `walk_forward_pooled.json`.
 
 - Code: clean detached worktree /home/ai/work/gaia-rerun-wt at origin/master 1da70d9 (v1.1.0 course copies; includes PR #26). See git_sha.txt.
 - Command: commands.sh (documented in docs/ML_MODELS.md "Train and score on GAIA"). Seed 42 (script default), bootstrap 4,000 draws, seed 42 (src/model_eval.py defaults). Keep rule unchanged.
