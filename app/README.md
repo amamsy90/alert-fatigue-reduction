@@ -132,7 +132,7 @@ Full guide: [product/CONNECTORS.md](product/CONNECTORS.md).
 
 ## Reproduce the course results (GAIA)
 
-1. Download GAIA MicroSS: `python ../tools/fetch_gaia.py` fetches https://github.com/CloudWise-OpenSource/GAIA-DataSet (about 1.8 GB), extracts only the files used and checks each SHA-256.
+1. Download GAIA MicroSS: `python ../tools/fetch_gaia.py` fetches https://github.com/CloudWise-OpenSource/GAIA-DataSet at commit `238a9e24ae0b69e7e05dff112652a3fa62db88fd` (2022-05-12). The compressed metric archive is 1.79 GB. The script keeps the two run tables and 37 `docker_memory_usage_total` series (54.7 MB) and checks each SHA-256.
 2. It puts the run tables at `data/gaia_raw/run/run` and the memory csv files at `data/gaia_metrics/metric`.
 3. Run:
 

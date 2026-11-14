@@ -2,7 +2,7 @@
 
 Needs `python ../tools/fetch_rcaeval_re23.py` first (about 570 MB, checksummed).
 GAIA is one system; this asks whether the alert classifier's result (it does not
-add catches to the queue, FINAL_REPORT.md section B4) holds on three other
+add catches to the queue, docs/report_appendices_full.md section B4) holds on three other
 applications. Each (suite, application) is scored on its own:
 
   RE2  network/resource faults (cpu, mem, disk, delay, loss, socket), 90 cases each

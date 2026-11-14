@@ -39,7 +39,7 @@ def promotion_decision(training: dict | None, has_incumbent: bool, config: Confi
        Online Boutique: 3 false items in 45 days) does not promote it.
        A model can pass 1 and fail 2: on GAIA it finds most fault-bearing
        alerts, but those faults are also caught by metric jumps and its alerts
-       take slots the jumps needed (FINAL_REPORT.md section B4).
+       take slots the jumps needed (docs/report_appendices_full.md section B4).
     3. If a model is active, its alert cost is no higher than that model's on
        the same alerts.
 

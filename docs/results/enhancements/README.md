@@ -11,7 +11,7 @@ Scored on the committed day-12 snapshot (`homelab/snapshots/day12/day12-rebuilt-
 
 KEEP means the 95% paired bootstrap interval on the per-fault catch difference has lower bound above 0 (4,000 draws, seed 42). A row with no calibration items is not scored and has no rate.
 
-The home-lab tables are in `homelab-20261104T192524Z/summary.csv` and `detection.csv`. The corrected GAIA run is `gaia-20261104T194507Z/` (1,223 faults; at K = 20 proposed 851 and the learned ranker 887). Appendix I quotes both.
+The home-lab tables are in `homelab-20261104T192524Z/summary.csv` and `detection.csv`. The corrected GAIA run is `gaia-20261104T194507Z/` (1,223 faults; at K = 20 proposed 851 and the learned ranker 887). `docs/report_appendices_full.md` Appendix I quotes both.
 
 `gaia-20261104T193400Z-uncorrected/` is the ai-ROG run from before the window fix. Its fault count is not the published 1,223, so those rows are not results. Do not cite them.
 

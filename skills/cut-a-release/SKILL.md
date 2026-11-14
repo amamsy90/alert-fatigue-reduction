@@ -19,6 +19,6 @@ A release is a `v*` tag pushed from `master`. The Release workflow runs the full
 6. Commit, push to `master`, wait for CI to pass, then `git tag vX.Y.Z <commit>` and `git push origin vX.Y.Z`. Do not tag a commit CI has not passed.
 7. Watch the Release run to the end. If a step fails, fix the cause and publish the next patch version; do not move or delete a published tag from a script.
 8. Create the GitHub Release with the changelog entry as its notes (`gh release create vX.Y.Z --notes-file ...`).
-9. Name the release commit in `report/final_report.tex` (Deliverables), rebuild the PDF (`xelatex` twice in `report/`), run `python tools/check_report.py` (main report must end on page 4), and push that as a normal commit.
+9. Name the release commit in `FINAL_REPORT.md` section 4, rebuild `submission/Alert_Fatigue_Final_Report_v1.2.0.docx` and `.pdf` with `node tools/md2docx.js`, run `python tools/check_report.py` (the Conclusion must end on page 4), and push that as a normal commit. The upload is `submission/Alert_Fatigue_Final_Report_v1.2.0.pdf`.
 
 Never force-push `master` unless you mean to rewrite history, and then only from a fresh mirror clone with a backup, never from a working checkout that holds old branches.

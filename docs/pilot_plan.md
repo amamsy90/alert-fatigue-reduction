@@ -37,7 +37,7 @@ Every result so far comes from public benchmarks (GAIA, NAB, SMD, RCAEval). This
 
 - **Engineers stop marking.** Precision is then unknown, and the pilot result is "not measured", not "pass". Keep marking to one shift a day if needed.
 - **The team's faults are not memory faults.** The jump rule works on any numeric series (*Evaluate my data*); add the series the team's incidents show up in during week 0.
-- **The alert classifier is not trained yet.** It needs labels of both kinds. Until the promotion gate passes, alerts are ranked by severity, which is the shipped configuration (`FINAL_REPORT.md` §B1).
+- **The alert classifier is not trained yet.** It needs labels of both kinds. Until the promotion gate passes, alerts are ranked by severity, which is the shipped configuration (`docs/report_appendices_full.md` §B1).
 - **Personal data in alert text.** Filter it at Alertmanager before it reaches the ingest endpoint; message text is cut to 300 characters either way.
 
 ## 5. What is reported

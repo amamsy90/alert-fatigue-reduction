@@ -4,7 +4,7 @@
 
 The decisions, using only the counts already in this file:
 
-- Learned ranker: kept on the PR #26 GAIA run. The 3 November 2026 re-run is `docs/results/gaia_ranker_rerun/`: at K = 20, 887 against the baseline's 851 of 1,223, difference +0.0294, interval [0.0147, 0.0442], KEEP. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 [0.0131, 0.0401]. `LEARNED_RANKER` stays off. The synthetic ranker dropped (see the synthetic table). The homelab day-12 measurement, including the leave-one-company-out drop, is `FINAL_REPORT.md` §B7.
+- Learned ranker: kept on the PR #26 GAIA run. The 3 November 2026 re-run is `docs/results/gaia_ranker_rerun/`: at K = 20, 887 against the baseline's 851 of 1,223, difference +0.0294, interval [0.0147, 0.0442], KEEP. K = 5, 10 and 50 are DROP. Walk-forward pooled is KEEP, +0.0262 [0.0131, 0.0401]. `LEARNED_RANKER` stays off. The synthetic ranker dropped (see the synthetic table). The homelab day-12 measurement is `docs/report_appendices_full.md` §B7. The leave-one-company-out drop is also Appendix B of `FINAL_REPORT.md`.
 - Contrastive log encoder: kept on GAIA (seed 42, 851 to 860 of 1223 faults, 5 of 6 seeds). `LOG_ENCODER` stays unset, and `LLM_TEMPLATE_FEATURES` stays off.
 - Trace model: kept only on the pooled RCAEval RE2+RE3 comparison (commit `f26bf85`, 4 of 5 seeds). Each suite on its own drops. `TRACE_MODEL` stays off.
 - Metric TCN: dropped. The published GAIA extract is the memory channel only. `METRIC_MODEL` stays off.

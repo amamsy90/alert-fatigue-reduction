@@ -13,7 +13,7 @@ running app still has one shared daily budget.
 
 The numbers below that describe RAM, CPU and disk are **estimates**. They were
 not measured on ai-ROG. The day-12 detection rates are in
-`docs/results/homelab_day12/` and in `FINAL_REPORT.md` section 3 and Appendix E.
+`docs/results/homelab_day12/`, in `FINAL_REPORT.md` section 3 and Appendix B, and in `docs/report_appendices_full.md` Appendix E.
 `scripts/evaluate.sh` writes a new score only after a real collection, and a
 run that cannot score says so instead of filling in a rate. The raw snapshot
 is not in this repository.

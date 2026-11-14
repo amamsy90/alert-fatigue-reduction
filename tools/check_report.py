@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that the main report ends by page 4.
 
-Usage: python tools/check_report.py report/final_report.pdf
+Usage: python tools/check_report.py submission/Alert_Fatigue_Final_Report_v1.2.0.pdf
 
 The page where section 5 (Conclusion) ends is the page before Appendix A.
 LibreOffice on this machine embeds Liberation Serif when Times New Roman is
@@ -26,7 +26,7 @@ def pdftotext(pdf: Path, first: int, last: int) -> str:
 
 
 def main() -> int:
-    pdf = Path(sys.argv[1] if len(sys.argv) > 1 else "report/final_report.pdf")
+    pdf = Path(sys.argv[1] if len(sys.argv) > 1 else "submission/Alert_Fatigue_Final_Report_v1.2.0.pdf")
     if not pdf.exists():
         print(f"missing {pdf}", file=sys.stderr)
         return 2

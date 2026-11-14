@@ -14,12 +14,12 @@ Solo project. **Aishah Mohamed Alyammahi** did all of the work: problem definiti
 
 | Item | Value |
 |---|---|
-| Tested OS | Windows 11 (development, tests, resource measurements); Linux container `ghcr.io/astral-sh/uv:python3.14-bookworm` (clean-clone timing); GitHub Actions runs `ubuntu-latest` on Python 3.12 and one other version |
+| Tested OS | Windows 11 with Python 3.12 (development, tests, resource measurements). The app container is `python:3.12-slim` (`app/Dockerfile`). GitHub Actions runs Python 3.10 and 3.12 on `ubuntu-latest`, plus a Windows job on Python 3.12 |
 | Python | 3.12 (development and CI); the project requires `>=3.10,<3.13` (`app/pyproject.toml`) |
 | Hardware | A normal laptop or VM; scoring the GAIA month peaked at 505 MB of memory (measured on the author's 20-logical-CPU laptop). Train Ticket RE2 experiments need several GB of RAM. No GPU needed (the GPU and LLM groups are optional) |
 | Tools | [uv](https://docs.astral.sh/uv/); Docker (optional, for `docker compose up`); Node only to rebuild the Word copies |
 | Paid services | None. No paid API, no external AI service. PagerDuty, Slack and Opsgenie are used only if the operator adds their own credentials |
-| Data | Not in the repository (about 420 MB extracted). Fetch scripts under `tools/` pin the source URL and check SHA-256; see "Benchmark data" below |
+| Data | Not in the repository. GAIA is commit `238a9e24ae0b69e7e05dff112652a3fa62db88fd` of CloudWise-OpenSource/GAIA-DataSet (2022-05-12): a 1.79 GB compressed metric archive, of which this project keeps 54.7 MB (two run tables and 37 memory series). See "Benchmark data" below |
 
 Copy `app/.env.example` to `app/.env` and fill in the placeholders only if you change settings (the Docker default uses `app/deploy/dev.env`); nothing runs live without `APP_PASSWORD`, a channel and the typed word `LIVE`.
 
@@ -57,7 +57,7 @@ uv run mypy
 uv run python run_validate.py        # the report's 300 checked numbers match app/results/
 ```
 
-**Measured** on this tree, from `app/`, with no Helm installed: `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` reports 530 passed and 22 skipped, line coverage 86.93%. The same 552 tests were 542 passed and 10 skipped on 7 Nov 2026 when Helm was available, because the 12 chart tests in `tests/test_helm_chart.py` then ran. The older 450 passed and 10 skipped figure is the 1.2.0 suite, before those later tests existed. A Windows 11, Python 3.12 `pytest -q` takes about 2 min. A clean clone in a Linux container (`ghcr.io/astral-sh/uv:python3.14-bookworm`, 14 Oct 2026, with an earlier 301-test suite) took 8 min 13 s for `uv sync --group dev` with an empty cache and 58 s for the tests. `docker compose up -d --build` serves `/health` about 30 s after the build finishes.
+**Measured** on this tree, from `app/`, with no Helm installed: `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` reports 530 passed and 22 skipped, line coverage 86.93%. The same 552 tests were 542 passed and 10 skipped on 7 Nov 2026 when Helm was available, because the 12 chart tests in `tests/test_helm_chart.py` then ran. The older 450 passed and 10 skipped figure is the 1.2.0 suite, before those later tests existed. A Windows 11, Python 3.12 `pytest -q` takes about 2 min. `docker compose up -d --build` uses `python:3.12-slim` and serves `/health` about 30 s after the build finishes.
 
 ## Evaluation
 
@@ -75,15 +75,15 @@ To check that a fresh clone works with nothing carried over from this machine (c
 python tools/check_fresh_clone.py          # or: --source https://github.com/amamsy90/alert-fatigue-reduction --ref <commit>
 ```
 
-**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `b8a3cf2`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (542 passed, 10 skipped, Helm present), final line `PASS`. A first install with an empty cache takes longer (8 min on the earlier Linux container run above).
+**Measured** (`python tools/check_fresh_clone.py --tests`, Windows 11, Python 3.12.10, commit `b8a3cf2`, 7 Nov 2026): clone 1 s, `uv sync --locked --group dev` 39 s (warm uv cache), `run_reproduce.py` 45 s, `pytest -q` 110 s (542 passed, 10 skipped, Helm present), final line `PASS`. A first install with an empty cache takes longer. The current command, without Helm, is the 530 passed and 22 skipped figure above.
 
-Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `FINAL_REPORT.md` section B8.
+Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `docs/report_appendices_full.md` §B8.
 
-Run the live soak (needs Docker, about 2 hours): the app, a real Prometheus and a real Alertmanager around a simulated fleet with faults injected in real time, a simulated engineer marking the queue, and scheduled retrains. `uv run python run_live_soak.py --minutes 120 --warmup 900` writes `app/results/live_soak.json`; add `--drift-phase` (or `--minutes 0 --drift-phase`) to post alert storms that exercise the drift check. It is a soak test, not production traffic and not a pilot; see `FINAL_REPORT.md` section B9.
+Run the live soak (needs Docker, about 2 hours): the app, a real Prometheus and a real Alertmanager around a simulated fleet with faults injected in real time, a simulated engineer marking the queue, and scheduled retrains. `uv run python run_live_soak.py --minutes 120 --warmup 900` writes `app/results/live_soak.json`; add `--drift-phase` (or `--minutes 0 --drift-phase`) to post alert storms that exercise the drift check. It is a soak test, not production traffic and not a pilot; see `docs/report_appendices_full.md` §B9.
 
 The sample is a smoke-scale check, not the 1,223-fault result in the report; `--full` reproduces that.
 
-`run_validate.py` and the tests need only the committed `app/results/`. To rerun an experiment, fetch its data first (not in the repository, about 420 MB extracted); each script pins its source URL and checks SHA-256 where the source publishes stable files:
+`run_validate.py` and the tests need only the committed `app/results/`. To rerun an experiment, fetch its data first (not in the repository). GAIA's compressed metric archive is 1.79 GB and the memory-and-run subset kept here is 54.7 MB. NAB is about 15 MB, SMD about 240 MB, and RCAEval RE2/RE3 about 570 MB. Each script pins its source and checks SHA-256 where the source publishes stable files:
 
 ```bash
 cd app
@@ -91,10 +91,10 @@ uv run python ../tools/fetch_nab.py            # NAB, MIT licence (~15 MB); then
 uv run python ../tools/fetch_smd.py            # SMD (OmniAnomaly)
 uv run python ../tools/fetch_rcaeval_mem.py    # RCAEval memory cases
 uv run python ../tools/fetch_rcaeval_re23.py   # RCAEval RE2/RE3, checked against tools/rcaeval_re23_sha256.txt
-uv run python ../tools/fetch_gaia.py           # GAIA, ~1.8 GB download, SHA-256 checked (--check to verify only)
+uv run python ../tools/fetch_gaia.py           # GAIA commit 238a9e24, 1.79 GB download, 54.7 MB kept, SHA-256 checked (--check to verify only)
 ```
 
-The full list of experiment commands is in `FINAL_REPORT.md`, Part C.
+The full list of experiment commands is in `docs/report_appendices_full.md`, Appendix G (C1).
 
 Two checks added for the final report (both need the data above):
 
@@ -110,7 +110,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 
 | Path | What |
 |---|---|
-| [`FINAL_REPORT.md`](FINAL_REPORT.md) | Main report (sections 1–5) and Appendices A–G |
+| [`FINAL_REPORT.md`](FINAL_REPORT.md) | Submitted report: sections 1–5, Appendix A (GAIA headline tables) and Appendix B (home-lab leave-one-company-out). The upload is [`submission/Alert_Fatigue_Final_Report_v1.2.0.pdf`](submission/Alert_Fatigue_Final_Report_v1.2.0.pdf) |
 | [`skills/`](skills/README.md) | Step-by-step instructions for coding agents and contributors: check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release |
 | [`docs/`](docs/README.md) | Requirements, architecture, ADRs, threat model, test plan, deployment, MLOps, monitoring, privacy |
 | [`docs/results/`](docs/results/homelab_day12/README.md) | Frozen GAIA ranker re-run and home-lab day-12 summaries |
@@ -127,7 +127,8 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 | [`submission/`](submission/README.md) | The proposal as submitted, and how to rebuild the Word copies (not tracked) |
 | `design_specification.md`, `VALIDATION.md` | Design detail, result files |
-| [`report/`](report) | The four-page final report (LaTeX source and PDF) |
+| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 300 checked numbers. Section ids such as §B8 and §C1 live here |
+| [`report/`](report/README.md) | Superseded LaTeX report. Graders use the PDF in `submission/` |
 | [`presentation/`](presentation) | Demo script, viva answers, speaker notes |
 | [`submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`](submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf) | The proposal as submitted (5 October 2026), with its Word source |
 | [`docs/history/`](docs/history) | Earlier proposal drafts in Markdown, and a pilot offer |
