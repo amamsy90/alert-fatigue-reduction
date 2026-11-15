@@ -21,7 +21,7 @@
 | Performance | Latency, throughput and errors under concurrent users | `perf/load_test.py` against a live server | 50 users: 228 req/s, p95 0.32 s, 0 errors |
 | Reliability | Concurrency and persistence | `test_reliability.py`, `test_app_hardening.py` | concurrent `ops.json` writes keep every change |
 | System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
-| Acceptance of results | Report matches results | `run_validate.py` | 300 checked numbers plus guarded claims |
+| Acceptance of results | Report matches results | `run_validate.py` | 307 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
 | Integration (real services) | The app beside a real Prometheus and Alertmanager in Docker Compose: an alert fired in Alertmanager reaches `/ingest/alertmanager` with the bearer token, the ingest job pulls memory series from Prometheus, and shadow mode records but does not page | `app/integration/docker-compose.yml`, `tests/integration/test_compose.py`, CI `integration` job (skipped locally unless `INTEGRATION_BASE_URL` is set) | found that a 14-day Prometheus fetch used a 121 s step, too coarse for the jump rule to confirm anything |
 
@@ -49,7 +49,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
 | Tests | all pass on Python 3.10 and 3.12 | 530 passed, 22 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`) |
 | Coverage | line coverage ≥ `COVERAGE_MIN` | 86.93% (minimum 85%) |
-| Results | `run_validate.py` passes | 300 numbers match |
+| Results | `run_validate.py` passes | 307 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.

@@ -64,8 +64,14 @@ def _queue_numbers(out: dict[str, float]) -> None:
     for name in ("logs_severity", "static_p99", "delta_5m", "jumps_hindsight", "jumps_online", "jumps_tuned",
                  "proposed", "p3_ranker", "p3_grouped", "p3_carryover", "delta_5m_carryover", "p3_per_series"):
         out[f"queue.K20.{name}"] = float(_row(q, name)["detection_rate"])
-    for name in ("delta_5m", "jumps_tuned", "proposed", "p3_per_series_jumps"):
+    for name in ("delta_5m", "jumps_tuned", "proposed", "p3_per_series_jumps", "delta_5m_carryover"):
         out[f"false.K20.{name}"] = float(_row(q, name)["false_items_per_day"])
+    out["queue.K20.jumps_tuned.caught"] = float(_row(q, "jumps_tuned")["faults_caught"])
+    out["queue.K20.delta_5m_carryover.caught"] = float(_row(q, "delta_5m_carryover")["faults_caught"])
+    out["queue.K50.delta_5m.caught"] = float(_row(q, "delta_5m", 50)["faults_caught"])
+    out["queue.K50.jumps_tuned.caught"] = float(_row(q, "jumps_tuned", 50)["faults_caught"])
+    out["false.K50.delta_5m"] = float(_row(q, "delta_5m", 50)["false_items_per_day"])
+    out["false.K50.jumps_tuned"] = float(_row(q, "jumps_tuned", 50)["false_items_per_day"])
     out["queue.K50.proposed"] = float(_row(q, "proposed", 50)["detection_rate"])
     out["queue.K50.p3_per_series"] = float(_row(q, "p3_per_series", 50)["detection_rate"])
     out["ceiling.K20"] = float(_row(q, "proposed")["oracle_ceiling"])

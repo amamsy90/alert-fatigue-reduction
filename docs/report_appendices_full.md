@@ -941,6 +941,13 @@ AI coding assistants were used while building this project: for code review, ref
 | `false.K20.p3_per_series_jumps` | 0.8 | §B4 |
 | `queue.K20.p3_carryover` | 72.6% | §B4 |
 | `queue.K20.delta_5m_carryover` | 72.5% | §B4 |
+| `queue.K20.jumps_tuned.caught` | 888 | §3 |
+| `false.K20.delta_5m_carryover` | 2.38 | §3 |
+| `queue.K20.delta_5m_carryover.caught` | 887 | §3 |
+| `queue.K50.delta_5m.caught` | 1052 | §3 |
+| `queue.K50.jumps_tuned.caught` | 1049 | §3 |
+| `false.K50.delta_5m` | 3.6 | §3 |
+| `false.K50.jumps_tuned` | 1.36 | §3 |
 | `walkforward.carryover.mean` | 74.8% | §B4 |
 | `walkforward.delta_carryover.mean` | 74.3% | §B4 |
 | `nab.realAWSCloudwatch` | 71% | §B5 |

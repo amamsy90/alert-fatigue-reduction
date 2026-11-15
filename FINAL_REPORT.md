@@ -37,13 +37,24 @@ The queue is first come, first served, and the day stops at K. A memory reading 
 
 ### 2.3 Change from the proposal
 
-The significant change from the proposal is that the submitted system is the **budgeted jump queue**. An early hope of catching 95% of faults does not fit this data. GAIA injects about 22 faults a day, so 84.9% is the best that K = 20 can reach, and 82% of the faults never write a log line. The log classifier is trained and gated. On GAIA it is not what catches the faults. An LLM summary of an incident stayed out of scope, as the proposal said.
+The proposal's 95% detection target was replaced by a walk-forward comparison (`CHANGELOG.md`). GAIA injects about 22 faults a day and 82% never write a log line, so K = 20 cannot pass 84.9%. The submitted system is the budgeted jump queue. The log classifier is trained, and the gate leaves it off on GAIA because it adds no catches there. An LLM summary stayed out of scope, as the proposal said.
+
+### 2.4 Interfaces
+
+Table 1. Component, responsibility, and interface. Routes are listed in full in `docs/report_appendices_full.md`.
+
+| Component | Responsibility | Interface |
+|---|---|---|
+| CLI | Score one batch | `product.cli score`: alerts and metrics CSV in, queue CSV out |
+| HTTP | Ingest and show the queue | `/health`, `/ingest/alertmanager`, `/queue`, `/feedback` |
+| Queue CSV | One shown item per row | `shown_at`, `kind`, `service`, `detail` |
+| Model file | Versioned classifier | zip of `meta.json` and `pipe.skops`; pickle is refused |
 
 ## 3. Testing, evaluation and results
 
 Training uses the first 7 days only. The test period is the next 55 days and holds 1,223 faults. Days are not shuffled. A fault label scores a queue that has already been built. It is not an input to the decision. A fault counts as caught when a shown jump or leak on its service overlaps the injection, or a shown alert carries its id. A monitoring-gap item does not count as a catch.
 
-Table 1. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in `app/results/queue_eval_gaia.csv`.
+Table 2. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in `queue_eval_gaia.csv`.
 
 | Method at K = 20 | Faults caught | False items a day |
 |---|---|---|
@@ -52,17 +63,19 @@ Table 1. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in 
 | Jump detector | 72.6% | 1.0 |
 | Best possible on this data | 84.9% | — |
 
-The jump detector is the row `jumps_tuned`: 888 of 1,223 faults (72.6%) and 1.0 false item a day. The Prometheus rate rule is `delta_5m`: 843 of 1,223 (68.9%) and 2.1 false items a day. Log severity catches 0 of 1,223. The jump detector (`jumps_tuned`) wins all 8 walk-forward weeks against the Prometheus rate rule (`delta_5m`), and on the 55-day test it shows 1.0 false item a day against the rate rule's 2.1. Walk-forward learns every threshold again from the past only, then scores the next week once. Appendix A has that detector and, separately, the full queue on the same weeks. The full queue is a different comparison, and it does not win every week. Median time from the start of a fault to the confirming point is 0.72 minutes.
+The jump detector is `jumps_tuned` and the rate rule is `delta_5m` (Table 2). It wins all 8 walk-forward weeks. Median time to the confirming point is 0.72 minutes. Appendix A has that detector and the full queue. About 22 faults a day, and more than 20 slots on 34 of 55 days, is why the ceiling at K = 20 is 84.9%.
 
-About 22 faults are injected a day, more than 20 slots on 34 of the 55 test days, which is why the best possible result at this budget is 84.9% rather than 100%. When the full queue misses, Appendix A shows that the misses are mostly a monitoring gap or a day whose 20 slots were already full. The jump rule itself fails on only a small share of those misses.
+Success criteria, from the §1 table. Beat the plain rate rule at K = 20: met (888 faults and 1.0 false item a day, against 843 and 2.1, and 8 of 8 weeks). No future data: met (`tests/test_causality.py`). Shadow paging and a versioned model: met (shadow is the default; a model loads as skops and can be rolled back). Another team can run the tests: met (530 passed, 22 skipped, coverage 86.93%).
 
-On this commit, `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` in `app/` reported 530 passed and 22 skipped. Line coverage is 86.93%. Twelve skips are the Helm chart tests, which run only when `helm` is installed. A load test of 50 concurrent users recorded p95 0.32 s and no errors (`docs/report_appendices_full.md`). `uv run python run_validate.py` matched the printed figures (300 checked numbers).
+`delta_5m_carryover` in `queue_eval_gaia.csv` catches 887 of 1,223 faults at K = 20, with 2.38 false items a day, against the detector's 888 and 1.0. At K = 50 the rate rule catches 1,052 and the detector 1,049 (false items 3.6 against 1.36). The detector's advantage is mainly fewer false items, not more catches, once unused slots carry over or the budget is large.
 
-The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on RCAEval, NAB and SMD are in `docs/report_appendices_full.md`.
+On this commit, pytest with coverage in `app/` reported 530 passed and 22 skipped. Line coverage is 86.93%. Twelve skips are the Helm chart tests, which run only when Helm is installed. A load test of 50 users recorded p95 0.32 s and no errors (full appendices, Appendix C). `run_validate.py` matched the printed figures (307 checked numbers).
+
+The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on other fault types are in the full appendices.
 
 ## 4. Deliverables, setup and use
 
-The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Submitted commit: `c3de5067d3219c436dbd6bb8c9cf957d4ec3fa3d`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. The full appendices are in `docs/report_appendices_full.md`. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
+The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Version 1.2.4 (tag v1.2.4) at the submitted commit below. Submitted commit: `c3de5067d3219c436dbd6bb8c9cf957d4ec3fa3d`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. The full appendices are in `docs/report_appendices_full.md`. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
 
 ```bash
 cd app
@@ -85,6 +98,10 @@ Next is a shadow-mode pilot on a real team's alerts. SMD and RCAEval scores for 
 
 The K = 20 comparison, the misses of the full queue, and the walk-forward weeks cited in §3 and §5. The full write-up is in `docs/report_appendices_full.md`.
 
+A two-hour soak of the Docker image, with Prometheus and Alertmanager, caught 18 of 18 judged faults, with no false jump and no failed job (§B9). The one retrain was refused by the gate. The Train Ticket replay kept 8 model versions and promoted none (§B8). This note sits here so the four-page main report can keep the success criteria and the carry-over comparison.
+
+Table 3. K = 20 comparison on the GAIA test period.
+
 | System (K = 20 items a day) | Caught | Share of best possible | Items / day | False / day | Precision |
 |---|---|---|---|---|---|
 | Log severity + exact duplicates | 0.0% | 0% | 0.8 | 0.8 | 0% |
@@ -96,7 +113,7 @@ The K = 20 comparison, the misses of the full queue, and the walk-forward weeks 
 | **Shipped configuration** (the gate keeps the classifier out: jumps + leaks + gaps + log alerts by severity) | **71.0%** | **84%** | 17.6 | 1.4 | 92% |
 | *Old headline: day's jumps ranked by final peak (not real time)* | *72.9%* | *86%* | *17.5* | *1.3* | *93%* |
 
-The full queue misses 372 of the 1,223 test faults at K = 20 (`results/miss_causes_gaia.csv`):
+Table 4. Why the full queue misses 372 of the 1,223 test faults at K = 20 (`miss_causes_gaia.csv`).
 
 | Cause | Faults | Share of misses |
 |---|---|---|
@@ -105,7 +122,7 @@ The full queue misses 372 of the 1,223 test faults at K = 20 (`results/miss_caus
 | Metric data, but no jump overlapped | 4 | 1% |
 | A jump overlapped, but below the confirmation threshold | 4 | 1% |
 
-Walk-forward at K = 20. The detector beats the rate rule in 8 of 8 weeks. The full queue has 4 wins, 3 losses and 1 tie.
+Table 5. Walk-forward at K = 20. The detector beats the rate rule in 8 of 8 weeks. The full queue has 4 wins, 3 losses and 1 tie.
 
 | Fold | Test week | Faults | With metric data | Rate rule | Detector alone | Full queue |
 |---|---|---|---|---|---|---|
@@ -121,7 +138,7 @@ Walk-forward at K = 20. The detector beats the rate rule in 8 of 8 weeks. The fu
 
 ## Appendix B. Home-lab leave-one-company-out
 
-K = 20. Train on the other two companies and test on the held-out company (`ranker/leave_one_company_out.json`). Each comparison is a DROP.
+Table 6. Home-lab leave-one-company-out at K = 20 (`leave_one_company_out.json`). Train on the other two companies. Each comparison is a DROP.
 
 | Company | Baseline | Ranker | CI | Keep |
 |---|---|---|---|---|

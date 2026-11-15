@@ -54,7 +54,7 @@ cd app
 uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 530 passed, 22 skipped; line coverage 86.93%
 uv run ruff check .
 uv run mypy
-uv run python run_validate.py        # the report's 300 checked numbers match app/results/
+uv run python run_validate.py        # the report's 307 checked numbers match app/results/
 ```
 
 **Measured** on this tree, from `app/`, with no Helm installed: `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` reports 530 passed and 22 skipped, line coverage 86.93%. The same 552 tests were 542 passed and 10 skipped on 7 Nov 2026 when Helm was available, because the 12 chart tests in `tests/test_helm_chart.py` then ran. The older 450 passed and 10 skipped figure is the 1.2.0 suite, before those later tests existed. A Windows 11, Python 3.12 `pytest -q` takes about 2 min. `docker compose up -d --build` uses `python:3.12-slim` and serves `/health` about 30 s after the build finishes.
@@ -110,7 +110,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 
 | Path | What |
 |---|---|
-| [`FINAL_REPORT.md`](FINAL_REPORT.md) | Submitted report: sections 1–5, Appendix A (GAIA headline tables) and Appendix B (home-lab leave-one-company-out). The upload is [`submission/Alert_Fatigue_Final_Report_v1.2.0.pdf`](submission/Alert_Fatigue_Final_Report_v1.2.0.pdf) |
+| [`FINAL_REPORT.md`](FINAL_REPORT.md) | Submitted report: sections 1–5, Appendix A (GAIA headline tables) and Appendix B (home-lab leave-one-company-out). The upload is [`submission/Alert_Fatigue_Final_Report.pdf`](submission/Alert_Fatigue_Final_Report.pdf) |
 | [`skills/`](skills/README.md) | Step-by-step instructions for coding agents and contributors: check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release |
 | [`docs/`](docs/README.md) | Requirements, architecture, ADRs, threat model, test plan, deployment, MLOps, monitoring, privacy |
 | [`docs/results/`](docs/results/homelab_day12/README.md) | Frozen GAIA ranker re-run and home-lab day-12 summaries |
@@ -127,7 +127,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 | [`submission/`](submission/README.md) | The versioned report to upload: PDF, Word, and ZIP |
 | `design_specification.md`, `VALIDATION.md` | Design detail, result files |
-| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 300 checked numbers. Section ids such as §B8 and §C1 live here |
+| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 307 checked numbers. Section ids such as §B8 and §C1 live here |
 | [`report/`](report/README.md) | Note that the old LaTeX report is withdrawn. The upload is the PDF in `submission/` |
 
 ## Safety defaults

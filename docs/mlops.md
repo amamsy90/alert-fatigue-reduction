@@ -27,7 +27,7 @@ If another team member receives the project tomorrow:
 git clone https://github.com/amamsy90/alert-fatigue-reduction && cd alert-fatigue-reduction/app
 uv sync --group dev                   # exact versions from uv.lock
 uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 530 passed, 22 skipped; line coverage 86.93% (see test_plan.md)
-uv run python run_validate.py         # the report's 300 checked numbers match the committed results
+uv run python run_validate.py         # the report's 307 checked numbers match the committed results
 docker compose up -d                  # the CPU app, built from the hash-pinned lock (dev settings)
 # optional GPU machine: docker compose --profile gpu up --build oncall-queue-gpu
 ```
