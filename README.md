@@ -125,11 +125,10 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`app/deploy/`](app/deploy) | Settings for development, test and production |
 | [`app/perf/`](app/perf) | Load test |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
-| [`submission/`](submission/README.md) | The proposal as submitted, and how to rebuild the Word copies (not tracked) |
+| [`submission/`](submission/README.md) | The versioned report to upload: PDF, Word, and ZIP |
 | `design_specification.md`, `VALIDATION.md` | Design detail, result files |
 | [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 300 checked numbers. Section ids such as §B8 and §C1 live here |
-| [`report/`](report/README.md) | Superseded LaTeX report. Graders use the PDF in `submission/` |
-| [`submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf`](submission/Project_Proposal_200010549_Aishah_Alyammahi.pdf) | The proposal as submitted (5 October 2026), with its Word source |
+| [`report/`](report/README.md) | Note that the old LaTeX report is withdrawn. The upload is the PDF in `submission/` |
 
 ## Safety defaults
 
