@@ -21,7 +21,7 @@
 | Performance | Latency, throughput and errors under concurrent users | `perf/load_test.py` against a live server | 50 users: 228 req/s, p95 0.32 s, 0 errors |
 | Reliability | Concurrency and persistence | `test_reliability.py`, `test_app_hardening.py` | concurrent `ops.json` writes keep every change |
 | System (experiments) | The whole pipeline on GAIA, NAB, SMD; `experiment.py` also on a synthetic 3-day run | `run_*.py` scripts → `app/results/`; `test_experiment.py` | walk-forward over 8 weeks; later data changes nothing |
-| Acceptance of results | Report matches results | `run_validate.py` | 307 checked numbers plus guarded claims |
+| Acceptance of results | Report matches results | `run_validate.py` | 285 checked numbers plus guarded claims |
 | Deployment smoke | The image builds and answers `/health` | CI `docker` job | |
 | Integration (real services) | The app beside a real Prometheus and Alertmanager in Docker Compose: an alert fired in Alertmanager reaches `/ingest/alertmanager` with the bearer token, the ingest job pulls memory series from Prometheus, and shadow mode records but does not page | `app/integration/docker-compose.yml`, `tests/integration/test_compose.py`, CI `integration` job (skipped locally unless `INTEGRATION_BASE_URL` is set) | found that a 14-day Prometheus fetch used a 121 s step, too coarse for the jump rule to confirm anything |
 
@@ -32,7 +32,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 361 passed, 1 skipped; line coverage 89.67%
+uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 361 passed, 1 skipped; line coverage 90.02%
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -48,41 +48,39 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
 | Tests | all pass on Python 3.10 and 3.12 | 361 passed, 1 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`) |
-| Coverage | line coverage ≥ `COVERAGE_MIN` | 89.67% (minimum 85%) |
-| Results | `run_validate.py` passes | 307 numbers match |
+| Coverage | line coverage ≥ `COVERAGE_MIN` | 90.02% (minimum 85%) |
+| Results | `run_validate.py` passes | 285 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
 **Type budget policy.** mypy was added to a codebase with 39 existing errors (mostly `Optional` narrowing in `pipeline.py` / `settings.py` and the untyped queue payload). Phase 2 fixed all of them, so `MYPY_BUDGET` is now 0: any new type error fails CI.
 
 ## 5. Coverage by module
 
-`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`: 361 passed, 1 skipped, total coverage 89.67%. The one skip is the Docker integration test. Modules under 90% on this run:
+`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`: 361 passed, 1 skipped, total coverage 90.02%. The one skip is the Docker integration test. Modules under 90% on this run:
 
 | Module | Coverage | Note |
 |---|---:|---|
-| `product/prometheus_adapter.py`, `web/security.py`, `notifiers.py`, `llm.py` | 85–89% | untested branches are mostly malformed settings, network errors, and note failures |
+| `product/prometheus_adapter.py` | 89% | network errors |
+| `product/notifiers.py` | 88% | channel failures |
+| `product/web/security.py` | 87% | |
+| `src/generic.py` | 87% | |
 | `product/web/job_routes.py` | 86% | |
-| `product/inputs.py`, `web/evaluate_routes.py`, `backup.py` | 80–84% | error paths (missing GAIA folder, channel test pages, restore failures) |
+| `product/inputs.py` | 84% | missing GAIA folder |
+| `product/web/evaluate_routes.py` | 83% | |
+| `product/backup.py` | 80% | restore failures |
 | `product/web/ops_routes.py` | 78% | channel test pages |
-| `product/logging_config.py` | 55% | the JSON formatter is tested; switching handlers with `LOG_FORMAT=json` at start-up is not |
-| `src/accel.py`, `generic.py`, `weight_io.py`, `experiments/traces/trace_graph.py` | 87–89% | |
-| `src/torch_determinism.py` | 81% | CUDA branches |
-| `src/ranker.py` | 80% | XGBoost and torch rankers skip on CPU CI |
 | `src/metrics.py` | 75% | GAIA-only paths |
-| `src/llm_lora.py` | 73% | training imports torch, which CPU CI does not install |
 | `src/eval_stats.py` | 69% | |
-| `src/log_encoder.py` | 66% | torch training path skipped |
-| `src/gaia_loader.py` | 95% | |
-| `experiments/traces/trace_model.py` | 60% | torch load path skipped |
-| `src/metric_model.py` | 52% | torch training and scoring paths skipped |
-| **Total** | **89.67%** | minimum 85% |
+| `product/logging_config.py` | 55% | the JSON formatter is tested; switching handlers with `LOG_FORMAT=json` at start-up is not |
+| `src/sample_data.py` | 52% | |
+| **Total** | **90.02%** | minimum 85% |
 
 ## 6. Measurable test criteria
 
 | Criterion | Target | Result |
 |---|---|---|
 | Automated tests passing | 100% of tests that run | 361 passed, 1 skipped |
-| Line coverage | ≥ 85% | 89.67% |
+| Line coverage | ≥ 85% | 90.02% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
 | Throughput | ≥ 20 req/s | 167 / 228 req/s |

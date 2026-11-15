@@ -1,6 +1,6 @@
 # Monitoring and evaluation
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.4
+**System:** AI-Assisted On-Call Queue · **Version:** 1.3.0
 
 The running app exposes two endpoints (`product/monitoring.py`):
 
@@ -19,10 +19,7 @@ Counters are per process and reset on restart; model and data signals are read f
 | **System performance** | Requests by route and status class; 5xx rate | `oncall_http_requests_total`; `/monitoring` → `errors` | 5xx ≤ 2% | 0 errors in 3,000 load-test requests; 2% catches a real fault without flapping |
 | **System performance** | Scoring jobs by mode and outcome (ok / failed / busy), job duration | `oncall_jobs_total`, `oncall_job_duration_seconds` | No failed jobs | A failed job means alerts wait in the buffer |
 | **System performance** | Pages by channel and outcome | `oncall_pages_total`; `/monitoring` → `paging` | 0 failed | A failed page is an unseen incident |
-| **Availability** | `/health` (database reachable, no Prometheus call). Also `accel.backend` and `llm.enabled` / `llm.weights` / `llm.last_error` | Docker health check, load balancer | > 99% during a pilot | Checked every 30 s by Docker. Weights are hashed only when `LLM_EXPLAIN` is on |
-| **LLM notes** | Shadow-note latency, timeout rate, fallback rate | `oncall_llm_explain_duration_seconds`, `oncall_llm_timeout_rate`, `oncall_llm_fallback_rate` | Watch in a pilot if notes are turned on | No attempts while `LLM_EXPLAIN` is off, so the default process has no rate. Timeout and fallback are separate outcomes |
-| **GPU** | Memory in use | `oncall_gpu_memory_mebibytes` | Present only when `nvidia-smi` answers | Absent on the CPU image |
-| **Data** | Mean `tpl_prior` of the last job ÷ median of earlier jobs | `/monitoring` → `template_feature_drift` | between 0.5 and 2, and only when `LLM_TEMPLATE_FEATURES` is on | The flag is off (Phase 2b drop), so the check is `n/a` and does not change the verdict |
+| **Availability** | `/health` (database reachable, no Prometheus call) | Docker health check, load balancer | > 99% during a pilot | Checked every 30 s by Docker |
 | **Data** | Alert volume of the last ingest batch ÷ median of the earlier ones | `oncall_alert_volume_ratio`; `/monitoring` → `alert_volume_drift` | between 0.5 and 2 | A batch twice or half the usual size means an alert storm or a broken sender, and the model's inputs have shifted |
 | **Data** | Per series: median of its last hour in the last job ÷ median of the same series in earlier jobs (worst series shown; at least 3 earlier jobs) | `oncall_metric_median_ratio`; `/monitoring` → `metric_value_drift`, `data.metric_drift_series` | between 0.5 and 2 for every series | A series that jumps to a new scale (units change, scrape broken, one service leaking) is input drift the alert-count check would miss. Per series and on the last hour, because ingest jobs re-score the whole history and one fleet-wide median hides a single service |
 | **Data** | Statistical drift between the alerts a model learned from (early window) and the alerts it scores (later window), per job: PSI on severity, source, alert type and message length; KS test on alerts per hour; a classifier two-sample test on message text (`src/drift.py`) | `oncall_input_drift_psi_max`, `oncall_input_text_drift_auc`, `oncall_input_drift_warn`; `/monitoring` → `input_drift`, `data.input_drift` | PSI < 0.25 on every feature, KS p ≥ 0.01, text AUC < 0.75; `n/a` below 30 alerts per window | PSI is the standard score for a shifted feature mix. The text test trains a logistic regression to tell the two windows apart: an AUC near 0.5 means the wording is unchanged, near 1 means it moved, and the terms with the largest weights are listed. It reports only and never changes a decision; the response to a warning is to review the model before promoting it |
@@ -69,8 +66,8 @@ groups:
 | Successful requests under load | ≥ 99% | 100% (3,000 requests) | load tests at 20 and 50 users |
 | Scoring job, 400-alert webhook batch | ≤ 5 s | 0.2 s | `oncall_job_duration_seconds` |
 | Full GAIA month (34,863 alerts) | ≤ 5 min | 54.9 s | `perf/resources.py`, median of 3 runs (`app/results/resources_gaia.json`) |
-| Automated tests passing | 100% of tests that run | 530 passed, 22 skipped | `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/` |
-| Line coverage | ≥ 85% | 86.93% | same command |
+| Automated tests passing | 100% of tests that run | 361 passed, 1 skipped | `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/` |
+| Line coverage | ≥ 85% | 90.02% | same command |
 | Faults caught at K = 20 (detector vs Prometheus rate rule) | beats it | 72.6% vs 68.9%, 8/8 weeks | `run_validate.py` |
 | False items a day at K = 20 | fewer than the rate rule | 1.0 (detector), 1.8 (full queue) vs 2.1 | same |
 | Time from fault start to confirmation | ≤ 1 min | 0.72 min median | same |

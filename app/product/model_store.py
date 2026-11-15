@@ -26,7 +26,6 @@ import pandas as pd
 import skops.io as sio
 
 from src.classifier import AlertClassifier
-from src.tracking import accelerator_snapshot as _accelerator_snapshot
 
 DEFAULT_PATH = Path(__file__).resolve().parent / "data" / "model.pkl"
 RETRAIN_AFTER_DAYS = 7
@@ -320,7 +319,6 @@ def register_model(saved: SavedModel, card: dict, promote: bool) -> dict:
             "escalate_threshold": saved.escalate_threshold,
             "review_threshold": saved.review_threshold,
             "code_version": code_version(),
-            "accelerator": _accelerator_snapshot(),
             "promoted": bool(promote),
             **card,
         }

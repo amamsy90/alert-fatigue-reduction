@@ -11,6 +11,5 @@
 | [mlops.md](mlops.md) | Versioning (code, config, data, models), reproducibility, model updates and the promotion gate, experiment tracking |
 | [monitoring.md](monitoring.md) | `/metrics` and `/monitoring`: AI, system and data signals, targets, alert rules, evaluation criteria |
 | [privacy_responsible_ai.md](privacy_responsible_ai.md) | What data is kept, where, for how long, who sees it; bias, oversight, misuse, safety |
-| [ML_MODELS.md](ML_MODELS.md) | Optional metric TCN and learned ranker, plus the off-by-default ranker audit (reasons, review bucket, disagreement): leakage controls, flags, and how to train on a GPU |
 
 Related, outside this folder: `../design_specification.md` (component detail and configuration), `../FINAL_REPORT.md` (results), `../VALIDATION.md` (result files), `../CHANGELOG.md` (versions), `../.github/workflows/ci.yml` (CI).

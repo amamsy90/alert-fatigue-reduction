@@ -1,6 +1,6 @@
 # Architecture
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.4
+**System:** AI-Assisted On-Call Queue · **Version:** 1.3.0
 
 Diagrams are Mermaid; GitHub renders them in place. Each one is drawn from the code, and file names are given so a reader can check.
 
@@ -99,7 +99,7 @@ flowchart TB
 | `src/drift.py` | Input drift between the training window and the scored window (PSI, KS, classifier two-sample test); stored in each job and read by `product/monitoring.py` | entities, features |
 | `src/challenger.py` | Champion-versus-challenger tally on labelled live alerts and the promote, keep or collecting recommendation; `product/model_store.py` stores it in the candidate's card | entities |
 | `product/retrain.py` | Scheduled retrain: due policy, history from stored jobs, the promotion gate, read-back verification and automatic rollback | pipeline, model_store, store, labels |
-| `app/deploy/helm/`, `tools/deploy.sh`, `tools/smoke_test.py` | Kubernetes install: one replica, shadow default, password required, atomic deploy with a smoke test and rollback | the container image |
+| `tools/smoke_test.py` | Checks a running container: `/health`, shadow mode, the password, `/monitoring` and `/metrics` | the container image |
 | `product/inputs.py` | Read one batch for a mode (sample, GAIA, upload, ingest with Prometheus) | src, prometheus_adapter |
 | `product/paging.py` | Decide whether a job may page, send to each channel, move the page marks | ops, pagerduty, notifiers |
 | `product/store.py` | SQLite persistence; one transaction per call | — |
@@ -190,7 +190,7 @@ flowchart LR
 
 - The compose file publishes the port on `127.0.0.1` only. Sharing it needs `APP_PASSWORD`; a request that arrives through a proxy is refused without one.
 - The image installs exact, hash-checked versions from `requirements.lock` (exported from `uv.lock`) and has a health check on `/health`.
-- `Dockerfile` is the CPU image CI builds. `Dockerfile.gpu` plus the Compose profile `gpu` (`oncall-queue-gpu`) is optional and is not started by `docker compose up`. `/health` reports the active accelerator backend and whether shadow-note weights are enabled, present, or hash-checked. It still does not call Prometheus.
+- `Dockerfile` is the CPU image CI builds. `/health` does not call Prometheus.
 - One process, one worker. The job lock, the evaluation lock and the `ops.json` lock are in-process, so running several workers or replicas is not supported (ADR 0003).
 
 ---
@@ -265,15 +265,3 @@ erDiagram
 `FEEDBACK` keeps the service and time window of the marked item, so marks survive when old jobs are pruned (NFR-9). `INGEST_BUFFER` and `INGEST_SEEN` stand alone: the buffer is acknowledged after a successful job, and fingerprints expire after `INGEST_DEDUP_HOURS`.
 
 Operator state that is not relational lives in `ops.json` (Live override, keys, Prometheus URL, page marks); it is written under a lock through a unique temporary file.
-
----
-
-## 6. Optional GPU training
-
-The classifier can train its head with cuML, or with XGBoost on a CUDA device, and then stores a scikit-learn pipeline. `load_model` does not import those libraries. `src/accel.get_backend` resolves `auto` to sklearn even when cuML is installed; a GPU backend runs only when it is named, and falls back to sklearn when the device or the library is missing. Roles, the install, and what is deliberately not automatic are in `docs/GPU_LLM_ROLES.md`.
-
-A local LLM can attach a short note to the shadow record (`would_have_paged.explanations`) when `LLM_EXPLAIN` is set. The note is written after the page decision, from fields known at that moment, and it is not sent to a channel. Missing weights or a failed completion leave the same items with an empty note list. The GGUF is pinned in `product/llm_pin.json` and checked by SHA-256 at load.
-
-`LLM_TEMPLATE_FEATURES` can add a hash of the log template and a count of earlier copies to the classifier. It is off. The synthetic sample and the GAIA full queue both dropped (`docs/GPU_LLM_ROLES.md`: `hash-v1` 843 vs 851, MiniLM 856 vs 851, of 1223 faults). The default numeric columns stay the ones in `NUMERIC_COLUMNS`. `/monitoring` has a drift check for the mean of those prior counts; the check is `n/a` while the flag is off. Shadow-note latency, timeout rate, fallback rate, and GPU memory (when `nvidia-smi` answers) are on `/metrics`. A note is not a page.
-
-Two further models can sit in front of the same queue. `METRIC_MODEL` (off) may add rule items from a causal forecast-error TCN. It stays off in 1.1.0: the published GAIA extract is memory only, so the TCN is dropped. `LEARNED_RANKER` (off) may skip low-scoring candidates when choosing the K slots. The GAIA ranker was a keep and the flag still stays off. Both load hash-checked files and refuse pickle. Neither pages. `RANKER_EXPLAIN`, `RANKER_ABSTAIN` and `RANKER_DISAGREE` (all off) may attach SHAP reasons, a needs-human-review list, and a disagreement flag to that shadow record. They do not remove a shown item and they are not passed to the pager. Flags, leakage controls and the measured decisions are in `docs/ML_MODELS.md`.

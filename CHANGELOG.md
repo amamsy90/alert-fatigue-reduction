@@ -2,11 +2,6 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
-## [1.3.0] - 2026-11-15
-
-### Removed
-- Optional GPU training, LLM notes, the learned ranker, the metric TCN, trace experiments, the homelab, the Helm chart and the live soak. The jump-detector queue, the web app (shadow by default, Live gate, skops models, Real/Noise marks, rollback), the CLI, the CPU image, and the GAIA evaluation remain. The version moved from 1.2.4 to 1.3.0 because those parts were removed.
-
 ## [Unreleased]
 
 ### Removed
@@ -14,10 +9,15 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 - The uncorrected GAIA run `docs/results/enhancements/gaia-20261104T193400Z-uncorrected/`.
 
 ### Added
-- `skills/`: six project skills (check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release), linked from `AGENTS.md` and the README.
+- `skills/`: five project skills (check a change, add a regression test, review and simplify, reproduce and validate, cut a release), linked from `AGENTS.md` and the README.
 
 ### Changed
-- `ruff` now also enforces McCabe complexity: a function with more than 15 independent paths fails lint and CI (`C90`, `max-complexity = 15` in `app/pyproject.toml`). Six functions were over the limit and were split into small helpers with no change in behaviour: `product/pipeline.score_alerts` (metric events, confirm gate and scorer choice), `product/web/security.require_login` (open-mode refusal, unauthenticated response, rate-limited pass-through), `src/ranker._fill`, `src/ranker_audit.build_ranker_audit`, and `run_validate.computed_numbers` / `claims_still_hold` (one helper per section; the 300 computed numbers are identical before and after).
+- `ruff` now also enforces McCabe complexity: a function with more than 15 independent paths fails lint and CI (`C90`, `max-complexity = 15` in `app/pyproject.toml`). Functions over the limit were split into small helpers with no change in behaviour, including `product/pipeline.score_alerts`, `product/web/security.require_login`, and `run_validate.computed_numbers` / `claims_still_hold`.
+
+## [1.3.0] - 2026-11-15
+
+### Removed
+- Optional GPU training, LLM notes, the learned ranker, the metric TCN, trace experiments, the homelab and the Helm chart. The jump-detector queue, the web app (shadow by default, Live gate, skops models, Real/Noise marks, rollback), the CLI, the CPU image, and the GAIA evaluation remain. The version moved from 1.2.4 to 1.3.0 because those parts were removed.
 
 ## [1.2.4] - 2026-11-07
 

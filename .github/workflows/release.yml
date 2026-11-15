@@ -14,8 +14,8 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
-  # Build once, then scan it, list what is in it, deploy that exact image to a throwaway cluster
-  # with the Helm chart and smoke-test it. Nothing is published unless every step passes.
+  # Build once, then scan it, list what is in it, and check that the container answers /health.
+  # Nothing is published unless every step passes.
   image:
     needs: checks
     runs-on: ubuntu-latest

@@ -81,38 +81,6 @@ def _version(dist_name: str) -> str | None:
         return None
 
 
-def accelerator_snapshot() -> dict:
-    """The saved classifier is scikit-learn. No GPU backend is installed."""
-    return {
-        "backend": "sklearn",
-        "cuda": None,
-        "libraries": {"scikit-learn": _version("scikit-learn")},
-        "available": ["sklearn"],
-    }
-
-
-def ml_snapshot() -> dict:
-    """Torch, safetensors and XGBoost versions, plus the optional-model flags.
-
-    Versions are ``None`` when the package is not installed. The flags default
-    to off. This does not probe a GPU beyond the CUDA version string.
-    """
-    return {
-        "torch": _version("torch"),
-        "safetensors": _version("safetensors"),
-        "xgboost": _version("xgboost"),
-        "cuda": None,
-        "metric_model": os.environ.get("METRIC_MODEL", "").strip().lower() or "off",
-        "learned_ranker": os.environ.get("LEARNED_RANKER", "").strip().lower() or "off",
-        "trace_model": os.environ.get("TRACE_MODEL", "").strip().lower() or "off",
-        "llm_lora": os.environ.get("LLM_LORA", "").strip().lower() or "off",
-        "log_encoder": os.environ.get("LOG_ENCODER", "").strip().lower() or "off",
-        "ranker_explain": os.environ.get("RANKER_EXPLAIN", "").strip().lower() or "off",
-        "ranker_abstain": os.environ.get("RANKER_ABSTAIN", "").strip().lower() or "off",
-        "ranker_disagree": os.environ.get("RANKER_DISAGREE", "").strip().lower() or "off",
-    }
-
-
 def record_run(
     experiment: str,
     *,
@@ -132,12 +100,10 @@ def record_run(
         "code": code_state(),
         "python": platform.python_version(),
         "libraries": versions,
-        "accelerator": accelerator_snapshot(),
         "config": _plain(config) if config is not None else None,
         "data": fingerprint(data) if data else None,
         "outputs": {Path(p).name: _sha256(Path(p)) for p in outputs if Path(p).exists()},
         "metrics": _plain(metrics or {}),
-        "ml": ml_snapshot(),
     }
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a", encoding="utf-8") as fh:

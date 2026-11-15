@@ -1,12 +1,12 @@
 # Deployment, environments and AI governance
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.4
+**System:** AI-Assisted On-Call Queue · **Version:** 1.3.0
 
 ## 1. Where it runs
 
 | Part | Where | Notes |
 |---|---|---|
-| Web app and API (FastAPI, uvicorn) | One Docker container on the team's own server or VM | Non-root user, health check on `/health`, image built from hash-pinned `requirements.lock`. Optional CUDA image: `Dockerfile.gpu` and `docker compose --profile gpu up --build oncall-queue-gpu`. The default image stays CPU |
+| Web app and API (FastAPI, uvicorn) | One Docker container on the team's own server or VM | Non-root user, health check on `/health`, image built from hash-pinned `requirements.lock`. The image is CPU |
 | Database | SQLite file on a Docker volume (`queue-data`) next to the app | One process; ADR 0003 explains why and what would change to scale out |
 | AI model | In the same container: scikit-learn logistic regression, loaded from the model registry on the same volume | No external AI API. Nothing leaves the server to be scored |
 | Metrics source | The team's Prometheus (pulled) and Alertmanager (pushes to `/ingest/alertmanager`) | The Prometheus URL is SSRF-checked |
@@ -50,19 +50,9 @@ The login lock, the ingest rate limit and the audit log key on the client addres
 - **Alternative: uvicorn's own proxy handling.** Start uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` and leave `TRUSTED_PROXIES` empty. Uvicorn then rewrites the client address before the app sees it. Do not use `--forwarded-allow-ips='*'` on a port clients can reach directly: any client could then name its own address.
 - **Without either**, forwarded headers are ignored and every client behind the proxy shares one login lock.
 
-## 3c. Kubernetes with Helm
+## 3c. Release image
 
-The chart is `app/deploy/helm/oncall-queue/`. It keeps the product's safety rules in the manifests: **shadow mode on**, **a password required** (the chart refuses to render without `auth.password` or `auth.existingSecret`), **one replica with the `Recreate` strategy** (SQLite and the job lock live in one process, ADR 0003), a non-root pod with a read-only root filesystem and all capabilities dropped, and probes on `/health`. The queue database, model registry and every model version live on one volume that Helm keeps if the release is removed or rolled back. Writable paths are volumes: `/app/product/data`, `/tmp` and `/app/data/sample_product` (the sample job writes there; a real run of the hardened image found this, so it is a mount and a chart test).
-
-```bash
-ONCALL_PASSWORD=... tools/deploy.sh <release> <namespace>       # install or upgrade, verify, roll back on failure
-```
-
-`tools/deploy.sh` runs `helm upgrade --install --atomic --wait` (Helm rolls the release back by itself if the pod never becomes ready), port-forwards, and runs `tools/smoke_test.py`: `/health`, shadow mode on, the expected version, the password enforced, `/monitoring` with the drift and challenger checks, `/metrics`, and on a first install a sample job. An upgrade skips the sample job so a live queue is not touched. If the smoke test fails the script runs `helm rollback` to the previous revision (on a first install it uninstalls the release). Set `KUBE_CONTEXT` on a shared machine so it cannot touch another cluster.
-
-Optional values: `retrain.enabled=true` adds a CronJob that calls `POST /models/retrain` every 6 hours (the app decides whether a retrain is due); `serviceMonitor.enabled` and `prometheusRule.enabled` add the Prometheus Operator objects, with the alert rules of `docs/monitoring.md`.
-
-**Release pipeline** (`.github/workflows/release.yml`, on a `v*` tag): the whole CI first, then build the image once, check the tag against `CHANGELOG.md`, the chart's `appVersion` and `product.__version__`, scan the image with Trivy (HIGH or CRITICAL with a fix fails the release), write an SBOM (SPDX), deploy that exact image to a throwaway kind cluster with the chart and smoke-test it, and only then publish to GHCR. CI also lints the chart and shellchecks the deploy script on every push.
+**Release pipeline** (`.github/workflows/release.yml`, on a `v*` tag): the whole CI first, then build the image once, check the tag against `CHANGELOG.md` and `product.__version__`, scan the image with Trivy (HIGH or CRITICAL with a fix fails the release), write an SBOM (SPDX), start that image and require `/health` to answer, and only then publish to GHCR. The app runs as one container (ADR 0003).
 
 ## 4. AI governance
 

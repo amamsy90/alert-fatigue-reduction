@@ -39,25 +39,6 @@ CLEARED_ENV = (
     "PROM_QUERY",
     "PROM_SERVICE_LABEL",
     "PROM_ALLOW_PRIVATE",
-    # Optional models. Unset means the default queue and the base note path.
-    "TRACE_MODEL",
-    "TRACE_MODEL_DIR",
-    "TRACE_MODEL_SHA256",
-    "LLM_LORA",
-    "LLM_LORA_DIR",
-    "LLM_LORA_SHA256",
-    "LLM_LORA_BASE",
-    "LOG_ENCODER",
-    "LOG_ENCODER_PATH",
-    "LOG_ENCODER_SHA256",
-    "LOG_ENCODER_DIM",
-    # Ranker audit. Unset means no explanations, no review bucket, no disagreement flags.
-    "RANKER_EXPLAIN",
-    "RANKER_EXPLAIN_MAX",
-    "RANKER_ABSTAIN",
-    "RANKER_ABSTAIN_DELTA",
-    "RANKER_DISAGREE",
-    "RANKER_DISAGREE_DELTA",
 )
 
 

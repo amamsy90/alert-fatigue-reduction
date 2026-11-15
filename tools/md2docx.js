@@ -62,10 +62,13 @@ function runs(text, base = {}) {
   return out;
 }
 
+let pendingBefore = 0;
 function bodyParagraph(text, extra = {}) {
+  const before = pendingBefore;
+  pendingBefore = 0;
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
-    spacing: BODY,
+    spacing: { ...BODY, before },
     keepNext: extra.keepNext,
     children: runs(text, { size: 24 }),
   });
@@ -277,7 +280,10 @@ for (let i = 0; i < lines.length; i++) {
       i++;
     }
     i--;
-    if (rows.length) children.push(table(rows));
+    if (rows.length) {
+      children.push(table(rows));
+      pendingBefore = 120;
+    }
     continue;
   }
   const bullet = line.match(/^(\s*)[-*]\s+(.*)$/);

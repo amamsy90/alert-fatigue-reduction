@@ -1,4 +1,4 @@
-# CPU image. CI builds this file. The optional CUDA image is Dockerfile.gpu.
+# CPU image. CI builds this file.
 FROM python:3.12-slim
 
 # Debian security fixes published since the base image was built (the release scan fails on HIGH or CRITICAL with a fix).

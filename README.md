@@ -4,7 +4,7 @@
 
 **Version:** 1.3.0
 
-An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Optional ranker, metric, trace and LLM paths stay off by default. Their measurements stay in the report appendices.
+An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Version 1.3.0 keeps the jump queue, the web app and the GAIA evaluation.
 
 ## Team and contributions
 
@@ -16,7 +16,7 @@ Solo project. **Aishah Mohamed Alyammahi** did all of the work: problem definiti
 |---|---|
 | Tested OS | Windows 11 with Python 3.12 (development, tests, resource measurements). The app container is `python:3.12-slim` (`app/Dockerfile`). GitHub Actions runs Python 3.10 and 3.12 on `ubuntu-latest`, plus a Windows job on Python 3.12 |
 | Python | 3.12 (development and CI); the project requires `>=3.10,<3.13` (`app/pyproject.toml`) |
-| Hardware | A normal laptop or VM; scoring the GAIA month peaked at 505 MB of memory (measured on the author's 20-logical-CPU laptop). Train Ticket RE2 experiments need several GB of RAM. No GPU needed (the GPU and LLM groups are optional) |
+| Hardware | A normal laptop or VM; scoring the GAIA month peaked at 505 MB of memory (measured on the author's 20-logical-CPU laptop). Train Ticket RE2 experiments need several GB of RAM |
 | Tools | [uv](https://docs.astral.sh/uv/); Docker (optional, for `docker compose up`); Node only to rebuild the Word copies |
 | Paid services | None. No paid API, no external AI service. PagerDuty, Slack and Opsgenie are used only if the operator adds their own credentials |
 | Data | Not in the repository. GAIA is commit `238a9e24ae0b69e7e05dff112652a3fa62db88fd` of CloudWise-OpenSource/GAIA-DataSet (2022-05-12): a 1.79 GB compressed metric archive, of which this project keeps 54.7 MB (two run tables and 37 memory series). See "Benchmark data" below |
@@ -51,13 +51,13 @@ Open the queue page and press **Run sample**, or post alerts from Alertmanager. 
 
 ```bash
 cd app
-uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 361 passed, 1 skipped; line coverage 89.67%
+uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 361 passed, 1 skipped; line coverage 90.02%
 uv run ruff check .
 uv run mypy
-uv run python run_validate.py        # the report's 307 checked numbers match app/results/
+uv run python run_validate.py        # the report's 285 checked numbers match app/results/
 ```
 
-**Measured** on this tree, from `app/`: `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` reports 361 passed and 1 skipped, line coverage 89.67%. The skip is the Docker integration test. Version 1.3.0 removed the Helm chart, the homelab, GPU training, LLM notes and the learned ranker, which is why this is smaller than the 1.2.4 suite. `docker compose up -d --build` uses `python:3.12-slim` and serves `/health`.
+**Measured** on this tree, from `app/`: `uv run pytest -q --cov --cov-report=term --cov-fail-under=85` reports 361 passed and 1 skipped, line coverage 90.02%. The skip is the Docker integration test. Version 1.3.0 removed the Helm chart, the homelab, GPU training, LLM notes and the learned ranker, which is why this is smaller than the 1.2.4 suite. `docker compose up -d --build` uses `python:3.12-slim` and serves `/health`.
 
 ## Evaluation
 
@@ -78,8 +78,6 @@ python tools/check_fresh_clone.py          # or: --source https://github.com/ama
 A first install with an empty cache takes longer than a warm one. The current pytest figure is the 361 passed and 1 skipped measurement above.
 
 Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `docs/report_appendices_full.md` §B8.
-
-Run the live soak (needs Docker, about 2 hours): the app, a real Prometheus and a real Alertmanager around a simulated fleet with faults injected in real time, a simulated engineer marking the queue, and scheduled retrains. `uv run python run_live_soak.py --minutes 120 --warmup 900` writes `app/results/live_soak.json`; add `--drift-phase` (or `--minutes 0 --drift-phase`) to post alert storms that exercise the drift check. It is a soak test, not production traffic and not a pilot; see `docs/report_appendices_full.md` §B9.
 
 The sample is a smoke-scale check, not the 1,223-fault result in the report; `--full` reproduces that.
 
@@ -109,12 +107,12 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | Path | What |
 |---|---|
 | [`FINAL_REPORT.md`](FINAL_REPORT.md) | Submitted report: sections 1–5 and Appendix A (GAIA headline tables). The upload is [`submission/Alert_Fatigue_Final_Report.pdf`](submission/Alert_Fatigue_Final_Report.pdf) |
-| [`skills/`](skills/README.md) | Step-by-step instructions for coding agents and contributors: check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release |
+| [`skills/`](skills/README.md) | Step-by-step instructions for coding agents and contributors: check a change, add a regression test, review and simplify, reproduce and validate, cut a release |
 | [`docs/`](docs/README.md) | Requirements, architecture, ADRs, threat model, test plan, deployment, MLOps, monitoring, privacy |
 | [`app/results/`](app/results) | GAIA evaluation tables checked by `run_validate.py` |
 | [`app/src/`](app/src) | Detection and evaluation library (no HTTP) |
 | [`app/product/`](app/product) | Web app, API, job pipeline, connectors, model registry, monitoring |
-| [`app/tests/`](app/tests) | 362 tests collected. 361 passed, 1 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85`; coverage 89.67%). The skip needs the Docker integration stack |
+| [`app/tests/`](app/tests) | 362 tests collected. 361 passed, 1 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85`; coverage 90.02%). The skip needs the Docker integration stack |
 | [`app/examples/gaia_sample/`](app/examples/gaia_sample) | Real 10-day GAIA slice and the recorded counts used by `run_reproduce.py` |
 | [`tools/`](tools) | Data fetch scripts, the sample builder, the fresh-clone check and the Word report builder |
 | `app/run_*.py` | One script per experiment; results in [`app/results/`](app/results), logged in `app/results/experiments.jsonl` |
@@ -124,7 +122,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 | [`submission/`](submission/README.md) | The versioned report to upload: PDF, Word, and ZIP |
 | `design_specification.md`, `VALIDATION.md` | Design detail, result files |
-| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 307 checked numbers. Section ids such as §B8 and §C1 live here |
+| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 285 checked numbers. Section ids such as §B8 and §C1 live here |
 | [`report/`](report/README.md) | Note that the old LaTeX report is withdrawn. The upload is the PDF in `submission/` |
 
 ## Safety defaults

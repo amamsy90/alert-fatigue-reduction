@@ -26,6 +26,6 @@ uv run ruff check .          # also fails any function with more than 15 indepen
 uv run mypy
 ```
 
-Step-by-step instructions for the recurring jobs (checking a change, adding a regression test, review and simplification, reproducing results, the live soak, cutting a release) are in [`skills/`](skills/README.md).
+Step-by-step instructions for the recurring jobs (checking a change, adding a regression test, review and simplification, reproducing results, cutting a release) are in [`skills/`](skills/README.md).
 
 A behaviour change needs a regression test whose expected result comes from the requirement, not from the function under test.
