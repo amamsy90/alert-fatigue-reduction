@@ -4,4 +4,4 @@ gaia K=5 faults=1223 proposed=239 ranker_status=trained
 gaia K=10 faults=1223 proposed=475 ranker_status=trained
 gaia K=20 faults=1223 proposed=851 ranker_status=trained
 gaia K=50 faults=1223 proposed=1049 ranker_status=trained
-wrote /home/ai/work/enh-gaia-wt/docs/results/enhancements/gaia-20261104T194507Z rows=65 keep=8
+wrote <workdir>/docs/results/enhancements/gaia-20261104T194507Z rows=65 keep=8

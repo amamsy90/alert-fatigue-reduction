@@ -1,7 +1,7 @@
 # Homelab day-12 results
 
 These files are the summaries and analysis scripts from the frozen snapshot
-`day12-rebuilt-20261103T150116Z`, produced on ai-ROG. They are evidence. They
+`day12-rebuilt-20261103T150116Z`, produced on a home-lab GPU machine. They are evidence. They
 are not regenerated in CI, and they contain no raw alert or metric series.
 
 The metric window starts at `2026-10-21T19:15:11Z` (`rebuild_summary.json`
@@ -28,8 +28,8 @@ across 44 series.
 | `worked_example.json`, `worked_example.py` | One test-window alert and the jump that caught its fault |
 
 The Python scripts take a snapshot directory and an output directory as
-arguments. They do not embed a machine path. The JSON files still record the
-directory used on ai-ROG, as the original run wrote it. Reproduce the tables
+arguments. They do not embed a machine path. The JSON path fields name the snapshot
+as `<workdir>/day12-rebuilt-20261103T150116Z`. Reproduce the tables
 with `./homelab/scripts/reproduce_day12.sh`. The raw snapshot is
 `homelab/snapshots/day12/`. `LEARNED_RANKER`, `METRIC_MODEL` and `LLM_EXPLAIN`
 stay off in `summary.json` (`flags_changed` is false). The rebuild file has

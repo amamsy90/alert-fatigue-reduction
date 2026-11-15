@@ -4,6 +4,10 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+### Removed
+- Course-only notes: `presentation/`, `docs/history/`, `docs/retrospective.md`, `docs/enhancement_plan.md`, `docs/pilot_plan.md`, `app/PRODUCTION_PLAN.md`, and `tools/build_rehearsal.py`.
+- The uncorrected GAIA run `docs/results/enhancements/gaia-20261104T193400Z-uncorrected/`.
+
 ### Added
 - `skills/`: six project skills (check a change, add a regression test, review and simplify, reproduce and validate, run the live soak, cut a release), linked from `AGENTS.md` and the README.
 
@@ -40,7 +44,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 - Version 1.2.0: `app/pyproject.toml`, `product.__version__`, this changelog, the current doc headers, the README, and the report. The home lab, the day-12 snapshot, the four-page report, and the optional queue checks are in this release. New flags stay off. Live paging is unchanged.
 - The 1.2.0 suite on 4 November 2026 was 450 passed and 10 skipped, line coverage 86%. The current command, from `app/`, is `uv run pytest -q --cov --cov-report=term --cov-fail-under=85`: 530 passed, 22 skipped, line coverage 86.93%. `run_validate.py` matches 300 checked numbers.
 - The four-page report leads with the budgeted jump queue: at K = 20, 72.6% against 68.9% for the Prometheus rate rule and 0% for log severity, the jump detector winning 8 of 8 walk-forward weeks against that rate rule, with fewer false items a day. Ranker KEEP, hybrid, leave-one-company-out, and the optional metric, trace and LLM measurements stay in the appendices. Those flags stay off. Live paging is unchanged.
-- The report answers the proposal feedback and adds the day-12 homelab evaluation (`docs/report_appendices_full.md` §B7, `proposal.md`, `docs/results/homelab_day12/`). The GAIA learned ranker re-run is `docs/results/gaia_ranker_rerun/`: at K = 20, 887 against 851 of 1,223, KEEP. `LEARNED_RANKER` stays off.
+- The report answers the proposal feedback and adds the day-12 homelab evaluation (`docs/report_appendices_full.md` §B7, `docs/results/homelab_day12/`). The GAIA learned ranker re-run is `docs/results/gaia_ranker_rerun/`: at K = 20, 887 against 851 of 1,223, KEEP. `LEARNED_RANKER` stays off.
 
 ### Added
 - Ranker production audit, all off by default (`RANKER_EXPLAIN`, `RANKER_ABSTAIN`, `RANKER_DISAGREE`). With the flags off the queue, the job JSON and the page set are unchanged. With a flag on, the K queue is still the ranker's selection: explanations and a "needs human review" list are shadow output, and neither list is passed to the pager. `RANKER_EXPLAIN` attaches exact interventional SHAP reasons (the `shap` package is not a dependency; stored trees have no booster, so `pred_contribs` is not used). `RANKER_ABSTAIN` lists dropped items that are not confidently below the score gate. `RANKER_DISAGREE` flags a strong slot disagreement with the contrastive encoder, when that file loads, or with the first-come queue otherwise. An in-queue disagreement stays in the page set. `app/run_ranker_audit.py` writes global importance, worked examples, a hypothetical coverage curve and a disagreement contrast. It does not turn any flag on. Design and the measured synthetic run are in `docs/ML_MODELS.md`. GAIA was not on this machine.

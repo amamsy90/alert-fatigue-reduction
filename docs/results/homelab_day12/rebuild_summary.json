@@ -1,5 +1,5 @@
 {
-  "out": "/home/ai/work/analysis/day12-rebuilt-20261103T150116Z/alerts_rebuilt.csv",
+  "out": "<workdir>/day12-rebuilt-20261103T150116Z/alerts_rebuilt.csv",
   "prom_url": "http://127.0.0.1:9090",
   "requested_start": "2026-10-21T19:15:11Z",
   "read_from": "2026-10-21T18:15:00Z",
