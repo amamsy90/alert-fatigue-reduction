@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# E2, E3 and E4 on GAIA. Run this on ai-ROG, from a worktree that already has the GAIA files.
-# Worktrees on that machine live under /home/ai/work. uv is on PATH. xgboost can use CUDA.
+# E2, E3 and E4 on GAIA. Run this on a home-lab GPU machine, from a worktree that already has the GAIA files.
+# uv is on PATH. xgboost can use CUDA.
 #
 # The three experiment flags are turned on for this process only.
 # LEARNED_RANKER, METRIC_MODEL and LLM_EXPLAIN are not set, and this does not page.
@@ -13,7 +13,7 @@ OUT="${ROOT}/docs/results/enhancements/gaia-${STAMP}"
 mkdir -p "${OUT}"
 if [[ ! -d "${ROOT}/app/data/gaia_raw" || ! -d "${ROOT}/app/data/gaia_metrics" ]]; then
   echo "GAIA folders are not in this worktree (app/data/gaia_raw and app/data/gaia_metrics)." >&2
-  echo "On ai-ROG, run this from a checkout under /home/ai/work that has those folders." >&2
+  echo "Run this from a checkout that has those folders." >&2
   exit 2
 fi
 export RANKER_COMPANY_CALIBRATION=1

@@ -842,7 +842,7 @@ A faster check without GAIA: `cd app && uv sync --group dev && uv run pytest -q 
 
 ### C1a. Use of AI tools
 
-AI coding assistants were used while building this project: for code review, refactoring, test writing and drafting documentation (visible in the repository history as the `claude/*` branches merged through pull requests #2 to #5, and in `AGENTS.md`). The runtime system uses no generative AI or external AI service. Every number in this report comes from the scripts in `app/` and is checked against `app/results/` by `run_validate.py`; the test suite, lint, type checks and the dependency audit run in CI. Design decisions, the evaluation method and the claims made here are the author's responsibility.
+AI coding assistants were used while building this project: for code review, refactoring, test writing and drafting documentation (visible in the repository history as the `claude/*` branches merged in pull requests #2, #3, #4, #5, #9, #10, #14, #15, #16, #17, #18, #19, #20 and #43, and in `AGENTS.md`). The runtime system uses no generative AI or external AI service. Every number in this report comes from the scripts in `app/` and is checked against `app/results/` by `run_validate.py`; the test suite, lint, type checks and the dependency audit run in CI. Design decisions, the evaluation method and the claims made here are the author's responsibility.
 
 ---
 
@@ -861,7 +861,6 @@ AI coding assistants were used while building this project: for code review, ref
 | Monitoring and evaluation | `docs/monitoring.md`, `/metrics`, `/monitoring` |
 | Privacy and responsible AI | `docs/privacy_responsible_ai.md` |
 | Performance results | `app/perf/load_test.py`, `app/results/perf/` |
-| Retrospective | `docs/retrospective.md` |
 | Change history | `CHANGELOG.md` |
 | Validation record | `VALIDATION.md` |
 | This report | `FINAL_REPORT.md` |

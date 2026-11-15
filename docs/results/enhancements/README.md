@@ -13,9 +13,7 @@ KEEP means the 95% paired bootstrap interval on the per-fault catch difference h
 
 The home-lab tables are in `homelab-20261104T192524Z/summary.csv` and `detection.csv`. The corrected GAIA run is `gaia-20261104T194507Z/` (1,223 faults; at K = 20 proposed 851 and the learned ranker 887). `docs/report_appendices_full.md` Appendix I quotes both.
 
-`gaia-20261104T193400Z-uncorrected/` is the ai-ROG run from before the window fix. Its fault count is not the published 1,223, so those rows are not results. Do not cite them.
-
-On ai-ROG, from a worktree that has `app/data/gaia_raw` and `app/data/gaia_metrics`:
+On a home-lab GPU machine, from a worktree that has `app/data/gaia_raw` and `app/data/gaia_metrics`:
 
 ```bash
 ./experiments/run_enhancements_gaia.sh

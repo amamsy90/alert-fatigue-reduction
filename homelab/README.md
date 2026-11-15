@@ -12,7 +12,7 @@ per-company budgets live in the collector and the evaluation script. The
 running app still has one shared daily budget.
 
 The numbers below that describe RAM, CPU and disk are **estimates**. They were
-not measured on ai-ROG. The day-12 detection rates are in
+not measured on a home-lab GPU machine. The day-12 detection rates are in
 `docs/results/homelab_day12/`, in `FINAL_REPORT.md` section 3 and Appendix B, and in `docs/report_appendices_full.md` Appendix E.
 `scripts/evaluate.sh` writes a new score only after a real collection, and a
 run that cannot score says so instead of filling in a rate. The raw snapshot
@@ -48,7 +48,7 @@ it should be run alone.
 
 ## Prerequisites
 
-On ai-ROG (Ubuntu-like, Docker already installed):
+On a home-lab GPU machine (Ubuntu-like, Docker already installed):
 
 - Docker
 - [k3d](https://k3d.io/) v5
@@ -58,7 +58,7 @@ On ai-ROG (Ubuntu-like, Docker already installed):
 - `uv` (the app toolchain; the scripts call `uv run --with pyyaml`)
 - systemd, so `systemd-inhibit` can ask logind not to idle-sleep
 
-The ai-ROG run also needed Chaos Mesh's netfilter modules and a larger inotify
+That run also needed Chaos Mesh's netfilter modules and a larger inotify
 budget. Load the modules from `/etc/modules-load.d/homelab-chaos.conf`:
 
 ```

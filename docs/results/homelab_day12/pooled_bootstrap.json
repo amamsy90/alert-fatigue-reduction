@@ -1,5 +1,5 @@
 {
-  "snapshot": "/home/ai/work/analysis/day12-rebuilt-20261103T150116Z",
+  "snapshot": "<workdir>/day12-rebuilt-20261103T150116Z",
   "split_day": 7,
   "bootstrap_draws": 4000,
   "bootstrap_seed": 42,

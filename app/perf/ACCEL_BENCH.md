@@ -26,7 +26,7 @@ The full GAIA walk-forward (`run_walkforward.py`) also spends time on jump detec
 
 ## Measured on an RTX 5090 Laptop
 
-Run on ai-ROG, 19 Oct 2026. Ubuntu 26.04.1, driver 595.99.02, `nvidia-smi` CUDA 13.2, RTX 5090 Laptop GPU 24 GB. Python 3.12.15, scikit-learn 1.9.1, xgboost 3.4.1, cuml-cu13 26.10.0, torch 2.14.1+cu130. `app/perf/bench_accel.py`, median of 3, warm-up excluded. xgboost-gpu rows are after the fit accepts device `cuda:0`. The GAIA rows use the same timer with the alert list swapped for the GAIA alerts (34,863). The script's own heading still said "synthetic sample" for that wrapper; the counts below are the ones that were timed.
+Run on a home-lab GPU machine, 19 Oct 2026. Ubuntu 26.04.1, driver 595.99.02, `nvidia-smi` CUDA 13.2, RTX 5090 Laptop GPU 24 GB. Python 3.12.15, scikit-learn 1.9.1, xgboost 3.4.1, cuml-cu13 26.10.0, torch 2.14.1+cu130. `app/perf/bench_accel.py`, median of 3, warm-up excluded. xgboost-gpu rows are after the fit accepts device `cuda:0`. The GAIA rows use the same timer with the alert list swapped for the GAIA alerts (34,863). The script's own heading still said "synthetic sample" for that wrapper; the counts below are the ones that were timed.
 
 | Data | Backend | Single fit CPU (s) | GPU (s) | Speedup | Walk-forward 3 refits CPU (s) | GPU (s) | Speedup |
 |---|---|---:|---:|---:|---:|---:|---:|

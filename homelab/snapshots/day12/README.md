@@ -1,7 +1,7 @@
 # Day-12 home-lab snapshot
 
 `day12-rebuilt-20261103T150116Z.tar.xz` is the frozen snapshot used for Table 2
-in `FINAL_REPORT.md`. It was produced on ai-ROG and recompressed with xz.
+in `FINAL_REPORT.md`. It was produced on a home-lab GPU machine and recompressed with xz.
 
 | File | SHA-256 |
 |---|---|

@@ -18,6 +18,16 @@ app/product/data/
 __pycache__/
 .pytest_cache/
 .venv/
+venv/
+env/
+.ipynb_checkpoints/
+.idea/
+.vscode/
+*.egg-info/
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
 *.pyc
 
 # Generated Word / PDF copies (rebuild with tools/md2docx.js); the submitted proposal stays tracked.
