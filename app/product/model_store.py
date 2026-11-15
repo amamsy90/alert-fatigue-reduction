@@ -25,7 +25,6 @@ from pathlib import Path
 import pandas as pd
 import skops.io as sio
 
-from src.accel import TREE_SKOPS_TYPE
 from src.classifier import AlertClassifier
 from src.tracking import accelerator_snapshot as _accelerator_snapshot
 
@@ -37,7 +36,7 @@ MODEL_FORMAT = "oncall-model-v1"
 # is the skops form of an optional XGBoost booster (numeric node arrays only).
 # Anything else beside skops' own sklearn types is refused, so a file cannot
 # name os.system.
-TRUSTED_TYPES = frozenset({"numpy.ravel", TREE_SKOPS_TYPE})
+TRUSTED_TYPES = frozenset({"numpy.ravel"})
 
 
 @dataclass

@@ -22,13 +22,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from .accel import available_backends, cuda_version, get_backend
-
 LOG = Path("results") / "experiments.jsonl"
 GAIA_INPUTS = ("data/gaia_raw/run/run", "data/gaia_metrics")
 LIBRARIES = ("pandas", "numpy", "scikit-learn")
-# Optional. None when the extra is not installed; recorded either way.
-ACCEL_LIBRARIES = ("scikit-learn", "xgboost", "cuml", "lightgbm")
 
 
 def _git(*args: str) -> str | None:
@@ -86,25 +82,12 @@ def _version(dist_name: str) -> str | None:
 
 
 def accelerator_snapshot() -> dict:
-    """Backend, library versions and CUDA version for one experiment or model card.
-
-    ``backend`` is what ``get_backend()`` would train with on this machine.
-    The default (``auto``) is sklearn even when cuML can run. ``ACCEL_BACKEND``
-    selects ``cuml`` or ``xgboost-gpu`` only when that name is set.
-    ``libraries`` includes the optional GPU packages even when they are absent.
-    """
-    versions: dict[str, str | None] = {name: _version(name) for name in ACCEL_LIBRARIES}
-    if versions.get("cuml") is None:
-        for dist_name in ("cuml-cu12", "cuml-cu13", "cuml-cu11"):
-            found = _version(dist_name)
-            if found is not None:
-                versions["cuml"] = found
-                break
+    """The saved classifier is scikit-learn. No GPU backend is installed."""
     return {
-        "backend": get_backend(),
-        "cuda": cuda_version(),
-        "libraries": versions,
-        "available": available_backends(),
+        "backend": "sklearn",
+        "cuda": None,
+        "libraries": {"scikit-learn": _version("scikit-learn")},
+        "available": ["sklearn"],
     }
 
 
@@ -118,7 +101,7 @@ def ml_snapshot() -> dict:
         "torch": _version("torch"),
         "safetensors": _version("safetensors"),
         "xgboost": _version("xgboost"),
-        "cuda": cuda_version(),
+        "cuda": None,
         "metric_model": os.environ.get("METRIC_MODEL", "").strip().lower() or "off",
         "learned_ranker": os.environ.get("LEARNED_RANKER", "").strip().lower() or "off",
         "trace_model": os.environ.get("TRACE_MODEL", "").strip().lower() or "off",

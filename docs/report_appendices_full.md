@@ -1,6 +1,6 @@
 # Full report appendices
 
-These sections were removed from the submitted four-page report. The submitted file keeps Appendix A (the GAIA headline tables) and Appendix B (the home-lab leave-one-company-out table). Nothing in this file was recalculated.
+These sections were removed from the submitted four-page report. The submitted file keeps Appendix A (the GAIA headline tables). Version 1.3.0 removed the homelab, GPU, LLM and learned-ranker code. Numbers below that name those parts are the historical record and were not recalculated. The checked-number table is still what `run_validate.py` reads.
 
 
 ## Appendix A. Requirements, users and design detail
@@ -36,7 +36,7 @@ These sections were removed from the submitted four-page report. The submitted f
 | O1 | Beat the rules a team already runs at a realistic budget | More faults caught at K = 20 than log severity, a static threshold and a Prometheus rate rule, with fewer false items | Detector 72.6% vs 68.9% (rate rule), 1.0 vs 2.1 false items a day; wins 8/8 walk-forward weeks (§B1, §B2) |
 | O2 | Decide in real time | No decision uses later data; confirmation within about a minute | Median 0.72 min; `tests/test_causality.py` (§B1) |
 | O3 | Engineer it for production | Authentication, safe paging, versioned models with rollback, monitoring endpoints, Docker | Done (§B.1, §B.2, §B.3) |
-| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 530 passed, 22 skipped, line coverage 86.93%, 0.32 s (Appendix C) |
+| O4 | Test it properly | ≥ 90% of tests passing, coverage ≥ 85%, p95 ≤ 1 s at 50 users | 361 passed, 1 skipped, line coverage 89.67%, 0.32 s (Appendix C) |
 | O5 | Let another team check it on its own data before trusting it | Evaluate my data works end to end without code, against a chance line | Done; NAB, SMD and RCAEval results reported, including failures (§B5) |
 
 **Expected final product.** A working web application and REST API (FastAPI) with a queue page, Connectors page and *Evaluate my data* page; a backend scoring service; an AI component (a cost-sensitive alert classifier with a model registry) next to rule-based metric detectors; a SQLite store; connectors for Alertmanager, Prometheus, PagerDuty, Slack and Opsgenie; a command-line tool; 443 automated tests (542 pass on CPU CI) and CI; a Docker deployment with per-environment settings; `/metrics` and `/monitoring`; technical documentation (`docs/`); and this report.

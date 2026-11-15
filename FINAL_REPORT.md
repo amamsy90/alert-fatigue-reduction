@@ -19,7 +19,7 @@ Each objective below is paired with the measurement this submission reports. The
 | Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector (`jumps_tuned`) wins 8 of 8 walk-forward weeks against the Prometheus rate rule |
 | Decide with no future data | No decision uses a later point, the end of a jump, or its peak | A jump is shown at the second confirming point. `tests/test_causality.py` checks that rule |
 | Ship with shadow paging and a versioned model | Record what would have been paged until Live is armed. Models are versioned and can be rolled back | Shadow is the default. Live needs `APP_PASSWORD`, a channel, and the typed word LIVE, and only an ingest job may page. Models load as skops |
-| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 530 passed, 22 skipped; line coverage 86.93%; `run_validate.py` matches the printed figures |
+| Let another team run the tests | The checks run from the README on the committed results, with no paid API | 361 passed, 1 skipped; line coverage 89.67%; `run_validate.py` matches the printed figures |
 
 ## 2. Architecture and implementation
 
@@ -65,17 +65,17 @@ Table 2. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in 
 
 The jump detector is `jumps_tuned` and the rate rule is `delta_5m` (Table 2). It wins all 8 walk-forward weeks. Median time to the confirming point is 0.72 minutes. Appendix A has that detector and the full queue. About 22 faults a day, and more than 20 slots on 34 of 55 days, is why the ceiling at K = 20 is 84.9%.
 
-Success criteria, from the §1 table. Beat the plain rate rule at K = 20: met (888 faults and 1.0 false item a day, against 843 and 2.1, and 8 of 8 weeks). No future data: met (`tests/test_causality.py`). Shadow paging and a versioned model: met (shadow is the default; a model loads as skops and can be rolled back). Another team can run the tests: met (530 passed, 22 skipped, coverage 86.93%).
+Success criteria, from the §1 table. Beat the plain rate rule at K = 20: met (888 faults and 1.0 false item a day, against 843 and 2.1, and 8 of 8 weeks). No future data: met (`tests/test_causality.py`). Shadow paging and a versioned model: met (shadow is the default; a model loads as skops and can be rolled back). Another team can run the tests: met (361 passed, 1 skipped, coverage 89.67%).
 
 `delta_5m_carryover` in `queue_eval_gaia.csv` catches 887 of 1,223 faults at K = 20, with 2.38 false items a day, against the detector's 888 and 1.0. At K = 50 the rate rule catches 1,052 and the detector 1,049 (false items 3.6 against 1.36). The detector's advantage is mainly fewer false items, not more catches, once unused slots carry over or the budget is large.
 
-On this commit, pytest with coverage in `app/` reported 530 passed and 22 skipped. Line coverage is 86.93%. Twelve skips are the Helm chart tests, which run only when Helm is installed. A load test of 50 users recorded p95 0.32 s and no errors (full appendices, Appendix C). `run_validate.py` matched the printed figures (307 checked numbers).
+On this commit, pytest with coverage in `app/` reported 361 passed and 1 skipped. Line coverage is 89.67%. The one skip is the Docker integration test, which runs only when that stack is up. A load test of 50 users recorded p95 0.32 s and no errors (full appendices, Appendix C). `run_validate.py` matched the printed figures (307 checked numbers).
 
 The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on other fault types are in the full appendices.
 
 ## 4. Deliverables, setup and use
 
-The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Version 1.2.4 (tag v1.2.4) at the submitted commit below. Submitted commit: `c3de5067d3219c436dbd6bb8c9cf957d4ec3fa3d`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. The full appendices are in `docs/report_appendices_full.md`. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
+The repository is [https://github.com/amamsy90/alert-fatigue-reduction](https://github.com/amamsy90/alert-fatigue-reduction). Version 1.3.0 at the submitted commit below. GPU training, LLM notes, the learned ranker, the homelab and Helm were removed in this version. The jump queue, the web app and the GAIA evaluation remain. Submitted commit: `c3de5067d3219c436dbd6bb8c9cf957d4ec3fa3d`. The delivery is the application, the tests, and this report. From a checkout, run the four commands below. Exact steps are in the README. Shadow mode is the default, so a job records what it would have paged, and an evaluation does not page. The tests and `run_validate.py` read the committed files in `app/results/`. GAIA itself is not in git. `tools/fetch_gaia.py` downloads it (about 1.8 GB) and checks each file by SHA-256. No paid API is required. The full appendices are in `docs/report_appendices_full.md`. PagerDuty, Slack and Opsgenie stay unused while shadow mode is on.
 
 ```bash
 cd app
@@ -88,7 +88,7 @@ uv run python run_validate.py
 
 The budgeted jump queue beats the rules a team already runs, at K items a day, without later data. At K = 20 the jump detector catches 72.6% of 1,223 GAIA test faults, against 68.9% for a Prometheus rate rule and 0% for log severity, with 1.0 false item a day against the rate rule's 2.1. That detector wins all 8 walk-forward weeks against the rate rule. Log severity catches none of these faults, because most of them never log.
 
-GAIA's headline is one fault type, a memory injection. The margin over the rate rule is modest: 3.7 points for the jump detector. The full queue does not win every week (4 wins, 3 losses and 1 tie; Appendix A). The log classifier adds no catches on GAIA, so the gate leaves it inactive. Leave-one-company-out for the homelab ranker is a DROP (Appendix B). About 22 faults a day sets an 84.9% ceiling at K = 20.
+GAIA's headline is one fault type, a memory injection. The margin over the rate rule is modest: 3.7 points for the jump detector. The full queue does not win every week (4 wins, 3 losses and 1 tie; Appendix A). The log classifier adds no catches on GAIA, so the gate leaves it inactive. About 22 faults a day sets an 84.9% ceiling at K = 20.
 
 Next is a shadow-mode pilot on a real team's alerts. SMD and RCAEval scores for other fault types are in `docs/report_appendices_full.md`.
 
@@ -97,8 +97,6 @@ Next is a shadow-mode pilot on a real team's alerts. SMD and RCAEval scores for 
 ## Appendix A. GAIA headline evidence
 
 The K = 20 comparison, the misses of the full queue, and the walk-forward weeks cited in §3 and §5. The full write-up is in `docs/report_appendices_full.md`.
-
-A two-hour soak of the Docker image, with Prometheus and Alertmanager, caught 18 of 18 judged faults, with no false jump and no failed job (§B9). The one retrain was refused by the gate. The Train Ticket replay kept 8 model versions and promoted none (§B8). This note sits here so the four-page main report can keep the success criteria and the carry-over comparison.
 
 Table 3. K = 20 comparison on the GAIA test period.
 
@@ -136,12 +134,3 @@ Table 5. Walk-forward at K = 20. The detector beats the rate rule in 8 of 8 week
 | 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 79.1% |
 | **Mean** | | | | **70.7%** | **74.8%** | **71.3%** (95% CI 64.5–76.7%) |
 
-## Appendix B. Home-lab leave-one-company-out
-
-Table 6. Home-lab leave-one-company-out at K = 20 (`leave_one_company_out.json`). Train on the other two companies. Each comparison is a DROP.
-
-| Company | Baseline | Ranker | CI | Keep |
-|---|---|---|---|---|
-| acme | 32 of 220 | 32 | [0.0, 0.0] | DROP |
-| borealis | 25 of 159 | 25 | [0.0, 0.0] | DROP |
-| cassini | 21 of 180 | 21 | [0.0, 0.0] | DROP |

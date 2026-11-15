@@ -296,50 +296,23 @@ def liveness_fields() -> dict:
 
 
 def _active_backend() -> str:
-    from src.accel import active_backend
-
-    return active_backend()
+    return "sklearn"
 
 
 def _llm_health() -> dict:
-    from product.llm import llm_health
-
-    return llm_health()
+    return {"enabled": False}
 
 
 def _template_encoder_status() -> dict:
-    from src.template_features import encoder_load_status
-
-    return encoder_load_status()
+    return {"enabled": False}
 
 
 def _gpu_memory_mib() -> float | None:
-    from src.accel import gpu_memory_mib
-
-    return gpu_memory_mib()
+    return None
 
 
 def _template_feature_drift(jobs: list[dict]) -> dict:
-    """Skip when ``LLM_TEMPLATE_FEATURES`` is off. Otherwise the same band as alert volume.
-
-    The value is the last job's mean ``tpl_prior`` over the median of earlier jobs.
-    Fewer than four jobs, or a zero baseline, is not judged.
-    """
-    from src.template_features import template_features_enabled
-
-    if not template_features_enabled():
-        return {"status": "n/a", "value": None}
-    values = [
-        float(job["meta"]["template_prior_mean"])
-        for job in jobs
-        if job.get("meta", {}).get("template_prior_mean") is not None
-    ]
-    if len(values) < 4:
-        return {"status": "n/a", "value": None}
-    base = _median(values[1:])
-    if not base:
-        return {"status": "n/a", "value": None}
-    return _check(values[0] / base, lambda v: ALERT_VOLUME_BAND[0] <= v <= ALERT_VOLUME_BAND[1])
+    return {"status": "n/a", "value": None}
 
 
 def _input_drift(last: dict) -> dict:

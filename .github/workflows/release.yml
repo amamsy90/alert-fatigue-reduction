@@ -25,11 +25,11 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           grep -F "[$tag]" CHANGELOG.md
-      - name: Tag matches the chart and the app version
+      - name: Tag matches the app version
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          grep -qE "^appVersion: \"?$tag\"?$" app/deploy/helm/oncall-queue/Chart.yaml
           grep -qF "__version__ = \"$tag\"" app/product/__init__.py
+          grep -qF "version = \"$tag\"" app/pyproject.toml
       - name: Build the image
         run: docker build -t oncall-queue:${GITHUB_REF_NAME} -t oncall-queue:latest app
       - name: Scan the image for known vulnerabilities (HIGH and CRITICAL with a fix fail the release)
@@ -44,19 +44,15 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
           artifact-name: sbom-${{ github.ref_name }}.spdx.json
-      - name: Throwaway Kubernetes cluster
-        uses: helm/kind-action@v1.10.0
-        with:
-          cluster_name: release-check
-      - name: Deploy the built image with Helm and smoke-test it (rolls back on failure)
-        env:
-          ONCALL_PASSWORD: release-check-${{ github.run_id }}
-          KUBE_CONTEXT: kind-release-check
-          IMAGE_TAG: ${{ github.ref_name }}
-          PYTHON: python3
+      - name: Container answers /health
         run: |
-          kind load docker-image "oncall-queue:${GITHUB_REF_NAME}" --name release-check
-          bash tools/deploy.sh release-check release-check --set image.repository=oncall-queue --set image.pullPolicy=Never
+          docker run -d --name oq -p 8080:8080 oncall-queue:${GITHUB_REF_NAME}
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs oq
+          exit 1
       - name: Publish to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin

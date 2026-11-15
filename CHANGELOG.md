@@ -2,6 +2,11 @@
 
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Dates are commit dates.
 
+## [1.3.0] - 2026-11-15
+
+### Removed
+- Optional GPU training, LLM notes, the learned ranker, the metric TCN, trace experiments, the homelab, the Helm chart and the live soak. The jump-detector queue, the web app (shadow by default, Live gate, skops models, Real/Noise marks, rollback), the CLI, the CPU image, and the GAIA evaluation remain. The version moved from 1.2.4 to 1.3.0 because those parts were removed.
+
 ## [Unreleased]
 
 ### Removed

@@ -1,6 +1,6 @@
 # Test plan
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.2.4
+**System:** AI-Assisted On-Call Queue · **Version:** 1.3.0
 
 ## 1. Goals
 
@@ -32,7 +32,7 @@ Outbound HTTP (Prometheus, PagerDuty, Slack, Opsgenie) is always mocked in tests
 ```bash
 cd app
 uv sync --group dev              # locked environment with pytest-cov, ruff, mypy
-uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 530 passed, 22 skipped; line coverage 86.93%
+uv run pytest -q --cov --cov-report=term --cov-fail-under=85   # 361 passed, 1 skipped; line coverage 89.67%
 uv run ruff check .
 uv run mypy
 uv run python run_validate.py    # needs app/results/ (in git)
@@ -47,8 +47,8 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Lock | `requirements.lock` matches `uv.lock` | in sync |
 | Lint | `ruff check` clean | clean |
 | Types | mypy error count ≤ `MYPY_BUDGET` | 0 of 0 |
-| Tests | all pass on Python 3.10 and 3.12 | 530 passed, 22 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`) |
-| Coverage | line coverage ≥ `COVERAGE_MIN` | 86.93% (minimum 85%) |
+| Tests | all pass on Python 3.10 and 3.12 | 361 passed, 1 skipped (`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`) |
+| Coverage | line coverage ≥ `COVERAGE_MIN` | 89.67% (minimum 85%) |
 | Results | `run_validate.py` passes | 307 numbers match |
 | Image | `docker build` and `/health` answers | passes locally |
 
@@ -56,7 +56,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 
 ## 5. Coverage by module
 
-`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`: 530 passed, 22 skipped, total coverage 86.93%. Twelve skips are the Helm chart tests. The bands below are the earlier module notes; the suite total is this run. Modules under 90%:
+`uv run pytest -q --cov --cov-report=term --cov-fail-under=85` from `app/`: 361 passed, 1 skipped, total coverage 89.67%. The one skip is the Docker integration test. Modules under 90% on this run:
 
 | Module | Coverage | Note |
 |---|---:|---|
@@ -75,14 +75,14 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | `src/gaia_loader.py` | 95% | |
 | `experiments/traces/trace_model.py` | 60% | torch load path skipped |
 | `src/metric_model.py` | 52% | torch training and scoring paths skipped |
-| **Total** | **86.93%** | minimum 85% |
+| **Total** | **89.67%** | minimum 85% |
 
 ## 6. Measurable test criteria
 
 | Criterion | Target | Result |
 |---|---|---|
-| Automated tests passing | 100% of tests that run | 530 passed, 22 skipped |
-| Line coverage | ≥ 85% | 86.93% |
+| Automated tests passing | 100% of tests that run | 361 passed, 1 skipped |
+| Line coverage | ≥ 85% | 89.67% |
 | Type errors (mypy) | 0 | 0 |
 | p95 latency, 20 / 50 concurrent users | ≤ 1 s | 0.23 s / 0.32 s |
 | Throughput | ≥ 20 req/s | 167 / 228 req/s |

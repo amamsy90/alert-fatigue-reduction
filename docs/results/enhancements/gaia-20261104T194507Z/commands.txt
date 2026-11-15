@@ -1,3 +1,0 @@
-cd <workdir>/enh-gaia-wt/app (commit fb47fe9)
-export RANKER_COMPANY_CALIBRATION=1 HYBRID_QUEUE=1 RANKER_TOPOLOGY_FEATURES=1; unset LEARNED_RANKER METRIC_MODEL LLM_EXPLAIN
-<workdir>/app/.venv/bin/python ../experiments/run_enhancements.py --data gaia --backend xgboost --device cuda --out ../docs/results/enhancements/gaia-20261104T194507Z

@@ -32,7 +32,6 @@ from src.queue import (
     spike_items,
     tune_confirm_thresholds,
 )
-from src.template_features import template_prior_mean
 
 from .inputs import (  # noqa: F401 — re-exported for callers of product.pipeline
     JobInputs,
@@ -386,9 +385,10 @@ def score_alerts(
         spike_items(jumps, config) + spike_items(leaks, config) + spike_items(gaps, config)
         + alert_items(alerts, decisions)
     )
-    from src.optional_models import finish_queue
+    from src.queue import build_queue
 
-    shown, ml_status = finish_queue(candidates, metrics if has_metrics else None, config)
+    shown = build_queue(candidates, config)
+    ml_status = {"metric_model": "off", "learned_ranker": "off"}
     shown_alerts = {id(item.payload): item for item in shown if item.kind == "alert"}
     final: list[Decision] = []
     for alert, decision in zip(alerts, decisions):
@@ -674,9 +674,6 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         "would_have_paged": whp,
         **feedback_stats,
     }
-    prior_mean = template_prior_mean(result.alerts)
-    if prior_mean is not None:
-        meta["template_prior_mean"] = prior_mean
     if result.drift is not None:
         meta["drift"] = result.drift
     if challenger is not None:
