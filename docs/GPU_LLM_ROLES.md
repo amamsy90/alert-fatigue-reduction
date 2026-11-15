@@ -2,7 +2,7 @@
 
 **Status:** Phase 0 locked. Phase 1 (optional GPU training), Phase 2a (shadow notes), Phase 2b (optional template features, dropped for the default queue), Phase 3 (pinned local LLM) and Phase 4 (optional CUDA image, health fields, LLM and GPU metrics) are in the tree. The default image stays CPU. Explanations and template features stay off.
 
-The queue that pages is still the cost-sensitive logistic classifier plus the jump ranker, at most K items a day, saved as a skops archive, shadow mode unless Live is armed. GPU training and a later local LLM are optional layers. Neither is allowed to become a hard dependency, and neither decides Live paging. Three further optional models (a trace root-cause net, a LoRA adapter for shadow notes, and a contrastive template encoder) are specified in `docs/ML_MODELS.md`. Their flags default off, and none of them can page.
+The queue that pages uses the jump detector rules, at most K items a day, saved as a skops archive, shadow mode unless Live is armed. The learned jump ranker is not used by default. GPU training and a later local LLM are optional layers. Neither is allowed to become a hard dependency, and neither decides Live paging. Three further optional models (a trace root-cause net, a LoRA adapter for shadow notes, and a contrastive template encoder) are specified in `docs/ML_MODELS.md`. Their flags default off, and none of them can page.
 
 ## Roles
 
@@ -125,7 +125,7 @@ Whatever encoder is loaded, its vector is reduced to four numbers with a fixed r
 
 `run_classifier_ablation.py` trains on the first week and scores the later days, the same split as the other classifier ablations. At K = 20 it can also score the GAIA full queue (jumps, leaks, gaps, and log alerts) and write `results/template_feature_ablation_gaia.json` without changing `classifier_ablation_gaia.csv`. The keep rule is the project's 95% bootstrap interval (`src.eval_stats.bootstrap_mean_ci`) on the per-fault catch difference. Keep only when the whole interval is above zero.
 
-This machine has no `data/gaia_raw` or `data/gaia_metrics`, so that full-queue run was not done. `run_validate.py` still checks the published GAIA report numbers; it does not measure this feature.
+The GAIA full-queue run is the table below (843 and 856 against a baseline of 851). `run_validate.py` still checks the published GAIA report numbers; it does not measure this feature.
 
 What was run: `python run_classifier_ablation.py --template-features` on the built-in synthetic sample (`sample_data.generate`, seed 42, 14 days, K = 20). That queue is alerts only. It is not the GAIA full queue.
 

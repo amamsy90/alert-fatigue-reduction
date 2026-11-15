@@ -16,6 +16,6 @@ Run from `app/`. On OneDrive or another synced folder, `uv` may fail to hard-lin
 
 Before `git add`:
 
-- Stage files by name. Never `git add -A` at a folder that can contain a clone, a backup or `.claude/`.
-- Keep out `.env`, `ops.json`, `app/product/data/`, `*.pkl`, `*.db`, `.claude/`, `.cursor/` (AGENTS.md rules 5 and 6).
+- Stage files by name. Never `git add -A` at a folder that can contain a clone or a backup.
+- Keep out `.env`, `ops.json`, `app/product/data/`, `*.pkl`, and `*.db`.
 - A file that must run on Linux (`tools/deploy.sh`) needs the executable bit in git: `git update-index --chmod=+x`.

@@ -77,7 +77,7 @@ flowchart TD
 
 **UML use-case diagram.** Actors on the left are people; actors on the right are the systems the tool talks to. Scoring a batch always includes training and gating a model when labels exist, and paging (which sends only in Live mode); a Real / Noise mark extends training with a new label. The figure is drawn by `app/make_figures.py`.
 
-![UML use-case diagram of the on-call queue](figures/use_cases.svg)
+![UML use-case diagram of the on-call queue](../figures/use_cases.svg)
 
 ### A.4 Why use AI?
 
@@ -329,7 +329,7 @@ The old ranking needed the whole day in advance. Replacing it with a learned con
 
 **Intervals and textbook detectors** (`run_baseline_compare.py`, `results/baseline_compare_gaia.csv`; re-run from the raw GAIA files on 6 November 2026, it reproduces 72.6% and 68.9% exactly). Intervals are 95% bootstrap intervals over the 1,223 test faults. At K = 20 the detector's 72.6% has an interval of 70.1% to 75.1%, and it beats the rate rule by 3.7 points (2.6 to 4.8, paired). At K = 50 the two are tied: the detector is 0.25 points *behind* (interval −0.65 to +0.08), so its advantage exists only where slots are scarce. Three standard detectors go through the same causal queue with their textbook settings, **not tuned**: a z-score rule (3 standard deviations over the previous hour), an exponentially weighted rule (3 standard deviations, 1-hour span) and an isolation forest fitted per series on week 1 (contamination 0.1%). At K = 20 they catch 19.7%, 32.4% and 19.8% with 14.2, 11.4 and 0.3 false items a day. The first two flood the queue with small noise moves and lose slots to it; the forest is quiet but sees only 1 in 5 faults, whatever K is. A tuned version of any of them might do better; the point is that the jump rule's size and confirmation rules, set on week 1 only, are what carry the result.
 
-![Faults caught versus daily budget K](figures/detection_vs_k.svg)
+![Faults caught versus daily budget K](../figures/detection_vs_k.svg)
 
 #### Where the misses come from
 
@@ -368,7 +368,7 @@ Before each later week, **everything learned is re-learned from the past only** 
 
 **Fold 7** is weak because of a **monitoring outage**: every service's metrics stop from 20 Aug 13:18 UTC for 2 days 12 hours, so only 61% of that week's faults have any metric data. The full queue shows this outage as a gap item within 10 minutes. No metric-based method could catch those faults.
 
-![Walk-forward detection by later week](figures/walkforward.svg)
+![Walk-forward detection by later week](../figures/walkforward.svg)
 
 ---
 
@@ -607,7 +607,7 @@ The evaluator's strict rule, same service and episode start inside the fault win
 
 Alerts land on the faulted service far above chance (369 against a shifted mean of 17.4). Every CPU-stress fault (284 of 284) produced an episode on its own service. Network faults appear somewhere else. A network-delay fault fires an alert on its own service only once in 321 faults, while 116 alert on other services. The most common pairs are infrastructure, not business call edges: `acme/cartservice` to `acme/otel-collector` (27) and `acme/frontend` to `acme/otel-collector` (21), and cassini services to `cassini/loadgenerator` or `cassini/front-end`. In acme, the shared OpenTelemetry collector is a hub that many faults show up on. Real multi-service fan-out is rare. Only 26 faults, all in cassini, light up two or more services, against a shifted mean of 9.7. Most faults that alert at all produce one episode (1.14 on average when any episode is present).
 
-No dependency graph is available to the evaluation. Neither the homelab manifests nor `companies.yaml` encode service dependencies. The three applications have public call graphs, but those graphs are not in this repository. The trace-graph model (`src/trace_graph.py`) builds call graphs from spans, and it was evaluated on RCAEval, not on the homelab. The pairs above are observed co-firing only. They are not proven dependencies.
+No dependency graph is available to the evaluation. Neither the homelab manifests nor `companies.yaml` encode service dependencies. The three applications have public call graphs, but those graphs are not in this repository. The trace-graph model (`app/experiments/traces/trace_graph.py`) builds call graphs from spans, and it was evaluated on RCAEval, not on the homelab. The pairs above are observed co-firing only. They are not proven dependencies.
 
 How the same episodes fold down (`topology_stats.json`, `fold_down`; all 1,182 evaluated episodes):
 

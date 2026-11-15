@@ -61,7 +61,8 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | Module | Coverage | Note |
 |---|---:|---|
 | `product/prometheus_adapter.py`, `web/security.py`, `notifiers.py`, `llm.py` | 85–89% | untested branches are mostly malformed settings, network errors, and note failures |
-| `product/inputs.py`, `web/evaluate_routes.py`, `web/job_routes.py`, `backup.py` | 80–84% | error paths (missing GAIA folder, channel test pages, restore failures) |
+| `product/web/job_routes.py` | 86% | |
+| `product/inputs.py`, `web/evaluate_routes.py`, `backup.py` | 80–84% | error paths (missing GAIA folder, channel test pages, restore failures) |
 | `product/web/ops_routes.py` | 78% | channel test pages |
 | `product/logging_config.py` | 55% | the JSON formatter is tested; switching handlers with `LOG_FORMAT=json` at start-up is not |
 | `src/accel.py`, `generic.py`, `weight_io.py`, `experiments/traces/trace_graph.py` | 87–89% | |
@@ -71,7 +72,7 @@ Plain pip also works: `pip install -r requirements.txt pytest && python -m pytes
 | `src/llm_lora.py` | 73% | training imports torch, which CPU CI does not install |
 | `src/eval_stats.py` | 69% | |
 | `src/log_encoder.py` | 66% | torch training path skipped |
-| `src/gaia_loader.py` | 62% | GAIA files are not in the test run |
+| `src/gaia_loader.py` | 95% | |
 | `experiments/traces/trace_model.py` | 60% | torch load path skipped |
 | `src/metric_model.py` | 52% | torch training and scoring paths skipped |
 | **Total** | **86.93%** | minimum 85% |
