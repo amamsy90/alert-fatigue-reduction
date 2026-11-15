@@ -1,7 +1,7 @@
 # Day-12 home-lab snapshot
 
-`day12-rebuilt-20261103T150116Z.tar.xz` is the frozen snapshot used for Table 2
-in `FINAL_REPORT.md`. It was produced on a home-lab GPU machine and recompressed with xz.
+`day12-rebuilt-20261103T150116Z.tar.xz` is the frozen snapshot used for Appendix B
+of `FINAL_REPORT.md`. It was produced on a home-lab GPU machine and recompressed with xz.
 
 | File | SHA-256 |
 |---|---|
@@ -18,7 +18,7 @@ The archive contains:
 
 The two extra rebuilt episodes fall outside the metric window, so the scored file has 1,182 episodes and the rebuild summary has 1,184. `summary.json` `test_end` is `2026-11-02T19:15:03Z`. The cutoff described with the run is `2026-11-02T19:15:11Z`. `rebuild_summary.json` `end` is `2026-11-02T19:15:00Z`.
 
-Reproduce Table 2 from the repository root:
+Reproduce Appendix B of `FINAL_REPORT.md` from the repository root:
 
 ```bash
 ./homelab/scripts/reproduce_day12.sh

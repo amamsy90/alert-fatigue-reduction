@@ -13,10 +13,10 @@ running app still has one shared daily budget.
 
 The numbers below that describe RAM, CPU and disk are **estimates**. They were
 not measured on a home-lab GPU machine. The day-12 detection rates are in
-`docs/results/homelab_day12/`, in `FINAL_REPORT.md` section 3 and Appendix B, and in `docs/report_appendices_full.md` Appendix E.
+`docs/results/homelab_day12/`, in `FINAL_REPORT.md` §5 and Appendix B, and in `docs/report_appendices_full.md` Appendix E.
 `scripts/evaluate.sh` writes a new score only after a real collection, and a
-run that cannot score says so instead of filling in a rate. The raw snapshot
-is not in this repository.
+run that cannot score says so instead of filling in a rate. The frozen day-12
+snapshot is committed in `snapshots/day12/`.
 
 ## Companies
 
@@ -385,7 +385,7 @@ companies' pre-boundary jumps. Both the baseline queue and the ranker see that
 same candidate list. At K=20 it keeps the ranker only when the 95% bootstrap
 interval on the per-fault catch difference has lower bound greater than 0
 (`bootstrap_mean_ci`, 4000 draws, seed 42). That is the rule in
-`src/model_eval.py`. If the training sample is one class, the decision is
+`app/experiments/model_ablation/model_eval.py`. If the training sample is one class, the decision is
 `skipped` and `per_fault_catch_delta` is null. The default, without the flag,
 is `status: off` and no interval.
 
