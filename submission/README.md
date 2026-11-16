@@ -4,4 +4,4 @@
 
 `python tools/check_report.py` checks that the Conclusion ends by page 4.
 
-The report source is `FINAL_REPORT.md` at the repository root. `run_validate.py` checks the 285 numbers in `docs/report_appendices_full.md`.
+The report source is `FINAL_REPORT.md` at the repository root. `run_validate.py` checks the 284 numbers in `docs/report_appendices_full.md`.

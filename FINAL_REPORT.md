@@ -4,7 +4,7 @@ Aishah Mohamed Alyammahi
 
 ## Abstract
 
-On-call engineers can read only a few alerts a day, and 82% of GAIA faults never write a log line. The system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity. The jump detector wins all 8 walk-forward weeks against that rate rule, with fewer false items a day.
+On-call engineers can read only a few alerts a day, and 82% of GAIA faults never write a log line. The system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector alone catches 72.6% of 1,223 test faults, against 68.9% for a rate rule, and it wins all 8 walk-forward weeks. The shipped queue adds leaks, gaps and severity alerts and catches 71.0% with 1.4 false items a day. The full queue's walk-forward record is 4 wins, 3 losses and 1 tie.
 
 ## 1. Motivation and objectives
 
@@ -18,7 +18,7 @@ Table 1. Each objective, the target, and the measurement this submission reports
 
 | Objective | Target | Measured result |
 |---|---|---|
-| Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | 72.6% against 68.9%, and 1.0 against 2.1 false items a day. The jump detector (`jumps_tuned`) wins 8 of 8 walk-forward weeks against the Prometheus rate rule |
+| Beat the rate rule at K = 20 | More faults caught than a Prometheus rate rule, with fewer false items | Detector alone: 72.6% vs 68.9%, 1.0 vs 2.1 false items a day, 8 of 8 weeks. Shipped queue: 71.0%, 1.4 false items a day |
 | Decide with no future data | No decision uses a later point, the end of a jump, or its peak | A jump is shown at the second confirming point. `tests/test_causality.py` checks that rule |
 | Ship with shadow paging and a versioned model | Record what would have been paged until Live is armed. Models are versioned and can be rolled back | Shadow is the default. Live needs `APP_PASSWORD`, a channel, and the typed word LIVE, and only an ingest job may page. Models load as skops |
 | Let another team run the tests | The checks run from the README on the committed results, with no paid API | 361 passed, 1 skipped; line coverage 90.02%; `run_validate.py` matches the printed figures |
@@ -56,22 +56,23 @@ Table 2. Component, responsibility, and interface. Routes are listed in full in 
 
 Training uses the first 7 days only. The test period is the next 55 days and holds 1,223 faults. Days are not shuffled. A fault label scores a queue that has already been built. It is not an input to the decision. A fault counts as caught when a shown jump or leak on its service overlaps the injection, or a shown alert carries its id. A monitoring-gap item does not count as a catch.
 
-Table 3. Method at K = 20 on the GAIA test period (1,223 faults). Counts are in `queue_eval_gaia.csv`.
+Table 3. Method at K = 20 on the GAIA test period (1,223 faults). The detector and the rate rule are in `queue_eval_gaia.csv`. The shipped row is `severity` in `classifier_ablation_gaia.csv`.
 
 | Method at K = 20 | Faults caught | False items a day |
 |---|---|---|
 | Log severity | 0% | — |
 | Prometheus rate rule | 68.9% | 2.1 |
-| Jump detector | 72.6% | 1.0 |
+| Jump detector alone | 72.6% | 1.0 |
+| Shipped queue (leaks, gaps, severity alerts) | 71.0% | 1.4 |
 | Best possible on this data | 84.9% | — |
 
-The jump detector is `jumps_tuned` and the rate rule is `delta_5m` (Table 3). It wins all 8 walk-forward weeks. Median time to the confirming point is 0.72 minutes. Appendix A has that detector and the full queue. About 22 faults a day, and more than 20 slots on 34 of 55 days, is why the ceiling at K = 20 is 84.9%.
+The 72.6% row is the jump detector alone (`jumps_tuned`): 8 of 8 weeks, median confirmation 0.72 minutes. The 71.0% row is the shipped queue (leaks, gaps and severity alerts; the gate leaves the classifier off). The full queue with the classifier on catches 69.6%, and its walk-forward record is 4 wins, 3 losses and 1 tie (Appendix A). The ceiling at K = 20 is 84.9% because 34 of 55 days have more than 20 faults.
 
-Success criteria, from the §1 table. Beat the plain rate rule at K = 20: met (888 faults and 1.0 false item a day, against 843 and 2.1, and 8 of 8 weeks). No future data: met (`tests/test_causality.py`). Shadow paging and a versioned model: met (shadow is the default; a model loads as skops and can be rolled back). Another team can run the tests: met (361 passed, 1 skipped, coverage 90.02%).
+Success criteria, from the §1 table. Beat the rate rule at K = 20: met for the detector alone (888 faults, 1.0 false item a day, against 843 and 2.1, 8 of 8 weeks). No future data: met (`tests/test_causality.py`). Shadow paging and a versioned model: met. Another team can run the tests: met (361 passed, 1 skipped, coverage 90.02%).
 
 `delta_5m_carryover` catches 887 of 1,223 faults at K = 20, with 2.38 false items a day, against the detector's 888 and 1.0. At K = 50 the rate rule catches 1,052 and the detector 1,049 (false items 3.6 against 1.36). The detector's advantage is mainly fewer false items, not more catches, once unused slots carry over or the budget is large.
 
-On this commit, pytest with coverage in `app/` reported 361 passed and 1 skipped. Line coverage is 90.02%. The one skip is the Docker integration test, which runs only when that stack is up. A load test of 50 users recorded p95 0.32 s and no errors (full appendices, Appendix C). `run_validate.py` matched the printed figures (285 checked numbers).
+On this commit, pytest with coverage in `app/` reported 361 passed and 1 skipped. Line coverage is 90.02%. The one skip is the Docker integration test, which runs only when that stack is up. A load test of 50 users recorded p95 0.32 s and no errors (full appendices, Appendix C). `run_validate.py` matched the printed figures (284 checked numbers).
 
 The classifier on GAIA catches fewer faults than the same queue with no log alerts, so the gate leaves it inactive. Results on other fault types are in the full appendices.
 
@@ -88,11 +89,9 @@ uv run python run_validate.py
 
 ## 5. Conclusion
 
-The budgeted jump queue beats the rules a team already runs, at K items a day, without later data. At K = 20 the jump detector catches 72.6% of 1,223 GAIA test faults, against 68.9% for a Prometheus rate rule and 0% for log severity, with 1.0 false item a day against the rate rule's 2.1. That detector wins all 8 walk-forward weeks against the rate rule. Log severity catches none of these faults, because most of them never log.
+At K = 20 the jump detector alone catches 72.6% of 1,223 GAIA test faults, against 68.9% for a rate rule and 0% for log severity, with 1.0 false item a day against 2.1, and it wins all 8 weeks. That 72.6% is the detector, not the shipped queue. The shipped queue catches 71.0% with 1.4 false items a day. The full queue's walk-forward record is 4 wins, 3 losses and 1 tie. The detector's margin is 3.7 points. The classifier adds no catches on GAIA, so the gate leaves it off. About 22 faults a day sets an 84.9% ceiling at K = 20.
 
-GAIA's headline is one fault type, a memory injection. The margin over the rate rule is modest: 3.7 points for the jump detector. The full queue does not win every week (4 wins, 3 losses and 1 tie; Appendix A). The log classifier adds no catches on GAIA, so the gate leaves it inactive. About 22 faults a day sets an 84.9% ceiling at K = 20.
-
-Next is a shadow-mode pilot on a real team's alerts. SMD and RCAEval scores for other fault types are in `docs/report_appendices_full.md`.
+Next is a shadow-mode pilot on a real team's alerts. SMD and RCAEval scores are in `docs/report_appendices_full.md`.
 
 <!-- pagebreak -->
 
