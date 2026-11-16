@@ -17,7 +17,6 @@ from .config import Config
 from .entities import Alert, Fault
 from .features import build_feature_frame
 from .gaia_loader import load_run_folder
-from .jump_ranker import JumpRanker
 from .memory_spikes import Spike, detect_gaps, detect_jumps, detect_leaks, load_metric_folder
 from .policy import bayes_threshold, spike_review_decisions, tune_threshold
 from .queue import (
@@ -42,7 +41,6 @@ SYSTEMS = (
     "jumps_online",       # jump rule, first come, no threshold
     "jumps_tuned",        # + week-1 confirm threshold (metric only)
     "proposed",           # jumps_tuned + leak + gap items + alerts (<= alert_share of K; alerts inside a shown jump ride on it)
-    "p3_ranker",          # Phase 3: proposed, but a learned model (not the rise threshold) decides which jumps to show
     "p3_grouped",         # Phase 3: proposed + items within 2 min on other services share one slot
     "p3_carryover",       # Phase 3: proposed + up to 10 unused slots carried to the next day
     "delta_5m_carryover", # fair partner for p3_carryover: the rate rule with the same carry-over
@@ -107,7 +105,6 @@ def run_window(
     train_jumps = detect_jumps(data.metrics, config, detect_until=train_end)
     test_jumps = detect_jumps(data.metrics, config, detect_from=train_end, detect_until=test_end)
     test_gaps = detect_gaps(data.metrics, config, detect_from=train_end, detect_until=test_end)
-    train_leaks = detect_leaks(data.metrics, config, detect_until=train_end)
     test_leaks = detect_leaks(data.metrics, config, detect_from=train_end, detect_until=test_end)
     # Week-1 only. Series with enough of their own faults get a frozen gate;
     # the rest keep the single global threshold. Score time does not refit.
@@ -136,10 +133,6 @@ def run_window(
         cfg = cfg or tuned
         return spike_items(test_jumps, cfg) + spike_items(test_leaks, cfg) + spike_items(test_gaps, cfg) + learned()
 
-    ranker = JumpRanker(config).fit(train_jumps + train_leaks, train_alerts, train_faults)
-    history = [a for a in data.alerts if a.timestamp < test_end]
-    ranked_metric = ranker.keep(test_jumps + test_leaks + test_gaps, history)
-
     shown = {
         "logs_severity": build_queue(logs, all_alerts),
         "static_p99": build_queue(spike_items(static, config), config),
@@ -148,7 +141,6 @@ def run_window(
         "jumps_online": build_queue(spike_items(test_jumps, config, use_threshold=False), config),
         "jumps_tuned": build_queue(spike_items(test_jumps, tuned), tuned),
         "proposed": build_queue(proposed_items(), tuned),
-        "p3_ranker": build_queue(spike_items(ranked_metric, config, use_threshold=False) + learned(), config),
         "p3_grouped": build_queue(proposed_items(), replace(tuned, group_minutes=2)),
         "p3_carryover": build_queue(proposed_items(), replace(tuned, carry_over_max=10)),
         "delta_5m_carryover": build_queue(spike_items(delta, config), replace(config, carry_over_max=10)),

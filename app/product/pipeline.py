@@ -32,7 +32,6 @@ from src.queue import (
     spike_items,
     tune_confirm_thresholds,
 )
-from src.template_features import template_prior_mean
 
 from .inputs import (  # noqa: F401 — re-exported for callers of product.pipeline
     JobInputs,
@@ -168,8 +167,6 @@ class ScoredQueue:
     # Promotion gate result for a model fit on this batch (None: nothing was fit).
     # A model that fails the gate is returned in `model` only to be kept as a candidate.
     promoted: bool | None = None
-    # Optional metric model / learned ranker. Both are "off" unless the flags are set.
-    optional_models: dict | None = None
     # Input drift between the early window the model learns from and the later one it scores
     # (src/drift.py). Reports only; it never changes a decision.
     drift: dict | None = None
@@ -386,9 +383,9 @@ def score_alerts(
         spike_items(jumps, config) + spike_items(leaks, config) + spike_items(gaps, config)
         + alert_items(alerts, decisions)
     )
-    from src.optional_models import finish_queue
+    from src.queue import build_queue
 
-    shown, ml_status = finish_queue(candidates, metrics if has_metrics else None, config)
+    shown = build_queue(candidates, config)
     shown_alerts = {id(item.payload): item for item in shown if item.kind == "alert"}
     final: list[Decision] = []
     for alert, decision in zip(alerts, decisions):
@@ -429,7 +426,6 @@ def score_alerts(
         rise_unit=rise_unit,
         detector_label=(detector.label() if detector is not None else "built-in memory-jump rule"),
         confirm_by_series=confirm_by_series,
-        optional_models=ml_status,
         drift=batch_drift(alerts, config),
         raw_decisions=decisions,
         challenger_decisions=(
@@ -674,16 +670,10 @@ def _job_meta(result: ScoredQueue, inputs: JobInputs, saved: SavedModel | None, 
         "would_have_paged": whp,
         **feedback_stats,
     }
-    prior_mean = template_prior_mean(result.alerts)
-    if prior_mean is not None:
-        meta["template_prior_mean"] = prior_mean
     if result.drift is not None:
         meta["drift"] = result.drift
     if challenger is not None:
         meta["challenger"] = challenger
-    audit = (result.optional_models or {}).get("ranker_audit")
-    if audit is not None:
-        meta["ranker_audit"] = audit
     return meta
 
 

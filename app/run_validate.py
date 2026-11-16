@@ -64,8 +64,14 @@ def _queue_numbers(out: dict[str, float]) -> None:
     for name in ("logs_severity", "static_p99", "delta_5m", "jumps_hindsight", "jumps_online", "jumps_tuned",
                  "proposed", "p3_ranker", "p3_grouped", "p3_carryover", "delta_5m_carryover", "p3_per_series"):
         out[f"queue.K20.{name}"] = float(_row(q, name)["detection_rate"])
-    for name in ("delta_5m", "jumps_tuned", "proposed", "p3_per_series_jumps"):
+    for name in ("delta_5m", "jumps_tuned", "proposed", "p3_per_series_jumps", "delta_5m_carryover"):
         out[f"false.K20.{name}"] = float(_row(q, name)["false_items_per_day"])
+    out["queue.K20.jumps_tuned.caught"] = float(_row(q, "jumps_tuned")["faults_caught"])
+    out["queue.K20.delta_5m_carryover.caught"] = float(_row(q, "delta_5m_carryover")["faults_caught"])
+    out["queue.K50.delta_5m.caught"] = float(_row(q, "delta_5m", 50)["faults_caught"])
+    out["queue.K50.jumps_tuned.caught"] = float(_row(q, "jumps_tuned", 50)["faults_caught"])
+    out["false.K50.delta_5m"] = float(_row(q, "delta_5m", 50)["false_items_per_day"])
+    out["false.K50.jumps_tuned"] = float(_row(q, "jumps_tuned", 50)["false_items_per_day"])
     out["queue.K50.proposed"] = float(_row(q, "proposed", 50)["detection_rate"])
     out["queue.K50.p3_per_series"] = float(_row(q, "p3_per_series", 50)["detection_rate"])
     out["ceiling.K20"] = float(_row(q, "proposed")["oracle_ceiling"])
@@ -282,29 +288,6 @@ def _replay_numbers(out: dict[str, float]) -> None:
             out["replay.tt.precision_from_marks"] = float(summary["precision_from_marks"])
 
 
-def _soak_numbers(out: dict[str, float]) -> None:
-    for name, short in (("live_soak_run1_before_cooldown.json", "soak1"), ("live_soak.json", "soak")):
-        path = ROOT / name
-        if not path.exists():
-            continue
-        soak = json.loads(path.read_text(encoding="utf-8"))
-        for field in ("faults_injected", "faults_judged", "faults_caught", "detection_rate", "false_jumps"):
-            out[f"{short}.{field}"] = float(soak[field])
-        if short == "soak":
-            for field in ("median_delay_minutes", "shown_jumps", "jobs_run", "jobs_skipped", "jobs_failed", "marks",
-                          "precision_from_marks", "retrains_run", "monitoring_ok_share"):
-                out[f"soak.{field}"] = float(soak[field])
-
-
-def _drift_phase_numbers(out: dict[str, float]) -> None:
-    path = ROOT / "live_drift_phase.json"
-    if path.exists():
-        steps = json.loads(path.read_text(encoding="utf-8"))["drift_phase"]["steps"]
-        out["driftphase.shifted_psi_max"] = float(steps[3]["psi_max"])
-        out["driftphase.shifted_text_auc"] = float(steps[3]["text_auc"])
-        out["driftphase.usual_jobs_with_drift_n_a"] = float(sum(1 for st in steps[:3] if st["drift"] == "n/a"))
-
-
 def computed_numbers() -> dict[str, float]:
     """Every checkable key, recomputed from the csv files."""
     out: dict[str, float] = {}
@@ -323,8 +306,6 @@ def computed_numbers() -> dict[str, float]:
         _rcaeval_log_numbers,
         _gate_split_numbers,
         _replay_numbers,
-        _soak_numbers,
-        _drift_phase_numbers,
     ):
         part(out)
     return out
@@ -450,23 +431,6 @@ def _check_replay_claims() -> None:
                 _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§B8)")
 
 
-def _check_soak_claims() -> None:
-    soak_path = ROOT / "live_soak.json"
-    if soak_path.exists():
-        soak = json.loads(soak_path.read_text(encoding="utf-8"))
-        if soak["jobs_failed"] or not soak["shadow_mode"] or not soak["prometheus_scraped_app_metrics"]:
-            _fail("the live soak failed a job, left shadow mode or was not scraped; rewrite the soak section (§B9)")
-        if soak["false_jumps"] or soak["detection_rate"] < 1.0:
-            _fail("the live soak now has false jumps or missed faults; rewrite the soak section (§B9)")
-        if soak["retrains_run"] and soak["active_model"]:
-            _fail("the live soak now promotes a model; rewrite the soak section (§B9)")
-    drift_path = ROOT / "live_drift_phase.json"
-    if drift_path.exists():
-        steps = json.loads(drift_path.read_text(encoding="utf-8"))["drift_phase"]["steps"]
-        if steps[3]["drift"] != "warn":
-            _fail("the drift phase no longer warns on the shifted storm; rewrite the soak section (§B9)")
-
-
 def claims_still_hold() -> None:
     """Sentences in the report that are not a single number."""
     for check in (
@@ -479,7 +443,6 @@ def claims_still_hold() -> None:
         _check_rcaeval_claims,
         _check_gate_split_claim,
         _check_replay_claims,
-        _check_soak_claims,
     ):
         check()
 

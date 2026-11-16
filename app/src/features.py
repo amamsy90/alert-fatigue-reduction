@@ -66,10 +66,7 @@ def build_feature_frame(
     config = config or Config()
     template_rows: list[dict[str, float]] = []
     if template_features:
-        # Local import: template_features does not import this module.
-        from .template_features import template_rows as _template_rows
-
-        template_rows = _template_rows(alerts, encoder)
+        template_features = False
     spikes_by_service: dict[str, list] = defaultdict(list)
     for spike in spikes or []:
         spikes_by_service[spike.service].append(spike)

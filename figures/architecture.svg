@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="620" viewBox="0 0 1400 620">
+  <rect width="1400" height="620" fill="#ffffff"/>
+  <style>
+    .box { fill: #e8eef5; stroke: #1a365d; stroke-width: 3; }
+    .t { font-family: "Times New Roman", Times, serif; fill: #111; }
+    .h { font-size: 28px; font-weight: 700; }
+    .s { font-size: 22px; }
+  </style>
+  <rect class="box" x="40" y="30" width="300" height="90" rx="8"/>
+  <text class="t h" x="190" y="68" text-anchor="middle">Alertmanager</text>
+  <text class="t s" x="190" y="100" text-anchor="middle">webhook</text>
+  <rect class="box" x="370" y="30" width="300" height="90" rx="8"/>
+  <text class="t h" x="520" y="68" text-anchor="middle">Prometheus</text>
+  <text class="t s" x="520" y="100" text-anchor="middle">metrics pull</text>
+  <rect class="box" x="700" y="30" width="280" height="90" rx="8"/>
+  <text class="t h" x="840" y="68" text-anchor="middle">CSV upload</text>
+  <text class="t s" x="840" y="100" text-anchor="middle">/evaluate</text>
+  <rect class="box" x="1020" y="30" width="340" height="90" rx="8"/>
+  <text class="t h" x="1190" y="68" text-anchor="middle">Real / Noise</text>
+  <text class="t s" x="1190" y="100" text-anchor="middle">labels for retrain</text>
+  <rect class="box" x="40" y="200" width="940" height="140" rx="8"/>
+  <text class="t h" x="510" y="255" text-anchor="middle">Product (app/product)</text>
+  <text class="t s" x="510" y="295" text-anchor="middle">FastAPI, ingest, job, SQLite, model registry</text>
+  <rect class="box" x="1020" y="200" width="340" height="140" rx="8"/>
+  <text class="t h" x="1190" y="250" text-anchor="middle">Paging gate</text>
+  <text class="t s" x="1190" y="288" text-anchor="middle">Shadow unless LIVE</text>
+  <rect class="box" x="40" y="420" width="940" height="150" rx="8"/>
+  <text class="t h" x="510" y="480" text-anchor="middle">Library (app/src)</text>
+  <text class="t s" x="510" y="520" text-anchor="middle">Jump, leak, gap; queue of at most K items</text>
+  <rect class="box" x="1020" y="420" width="340" height="150" rx="8"/>
+  <text class="t h" x="1190" y="480" text-anchor="middle">Evaluation</text>
+  <text class="t s" x="1190" y="520" text-anchor="middle">GAIA, NAB, SMD, RCAEval</text>
+  <line x1="190" y1="120" x2="300" y2="200" stroke="#1a365d" stroke-width="3"/>
+  <line x1="520" y1="120" x2="510" y2="200" stroke="#1a365d" stroke-width="3"/>
+  <line x1="840" y1="120" x2="720" y2="200" stroke="#1a365d" stroke-width="3"/>
+  <line x1="1190" y1="120" x2="1190" y2="200" stroke="#1a365d" stroke-width="3"/>
+  <line x1="510" y1="340" x2="510" y2="420" stroke="#1a365d" stroke-width="3"/>
+  <line x1="980" y1="270" x2="1020" y2="270" stroke="#1a365d" stroke-width="3"/>
+  <line x1="980" y1="495" x2="1020" y2="495" stroke="#1a365d" stroke-width="3"/>
+</svg>

@@ -47,13 +47,11 @@ def test_requests_jobs_and_ingest_are_counted(client):
 
 
 def test_monitoring_reports_every_check(client, monkeypatch):
-    monkeypatch.delenv("LLM_TEMPLATE_FEATURES", raising=False)
     client.get("/connectors")
     body = client.get("/monitoring").json()
     assert set(body["checks"]) == {"latency", "errors", "precision_from_marks", "alert_volume_drift",
-                                   "metric_value_drift", "template_feature_drift", "input_drift", "monitoring_gaps",
+                                   "metric_value_drift", "input_drift", "monitoring_gaps",
                                    "challenger_shadow", "paging"}
-    assert body["checks"]["template_feature_drift"]["status"] == "n/a"
     assert body["checks"]["precision_from_marks"]["status"] == "n/a"  # no marks yet: not judged
     assert body["status"] in ("ok", "warn")
 

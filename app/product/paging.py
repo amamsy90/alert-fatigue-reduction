@@ -18,7 +18,6 @@ import pandas as pd
 from src.entities import Action, Alert, Decision
 from src.memory_spikes import Spike
 
-from .llm import annotate_shadow, empty_explanations
 from .monitoring import record_page
 from .notifiers import notify_opsgenie, notify_slack
 from .ops import (
@@ -143,11 +142,7 @@ def page_job(
     reason = _skip_reason(mode, shadow_mode)
     page = {"sent": 0, "failed": 0, "skipped": reason} if reason else _send(alerts, decisions, fresh, run_at)
     whp = would_have_paged(alerts, decisions, spikes=fresh)
-    try:
-        whp["explanations"] = annotate_shadow(whp, alerts, spikes=fresh, model=model)
-    except Exception:
-        log.exception("shadow notes were skipped")
-        whp["explanations"] = empty_explanations("error")
+    whp["explanations"] = {"enabled": False}
     if mode in PAGEABLE_MODES:
         if seen is None:
             whp["since"] = page_cutoff(run_at).isoformat()

@@ -36,9 +36,9 @@ submission/*.docx
 submission/*.pptx
 submission/Alert_Fatigue_*.pdf
 submission/Project_Proposal.pdf
-!submission/Alert_Fatigue_Final_Report_v1.2.0.docx
-!submission/Alert_Fatigue_Final_Report_v1.2.0.pdf
-!submission/Alert_Fatigue_v1.2.0.zip
+!submission/Alert_Fatigue_Final_Report.docx
+!submission/Alert_Fatigue_Final_Report.pdf
+!submission/Alert_Fatigue_Final_Report.zip
 
 # Node (tools/md2docx.js)
 node_modules/

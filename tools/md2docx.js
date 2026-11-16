@@ -62,10 +62,13 @@ function runs(text, base = {}) {
   return out;
 }
 
+let pendingBefore = 0;
 function bodyParagraph(text, extra = {}) {
+  const before = pendingBefore;
+  pendingBefore = 0;
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
-    spacing: BODY,
+    spacing: { ...BODY, before },
     keepNext: extra.keepNext,
     children: runs(text, { size: 24 }),
   });
@@ -144,7 +147,7 @@ function heading(text, kind, pageBreakBefore) {
     heading: main ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2,
     keepNext: true,
     pageBreakBefore: Boolean(pageBreakBefore),
-    spacing: { before: pageBreakBefore ? 0 : 240, after: 120, line: 276, lineRule: "auto" },
+    spacing: { before: 240, after: 120, line: 276, lineRule: "auto" },
     children: [new TextRun({ text, ...(main ? H1_RUN : H2_RUN) })],
   });
 }
@@ -277,7 +280,10 @@ for (let i = 0; i < lines.length; i++) {
       i++;
     }
     i--;
-    if (rows.length) children.push(table(rows));
+    if (rows.length) {
+      children.push(table(rows));
+      pendingBefore = 120;
+    }
     continue;
   }
   const bullet = line.match(/^(\s*)[-*]\s+(.*)$/);

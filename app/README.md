@@ -62,11 +62,7 @@ Docker (bound to localhost; set `APP_PASSWORD` before sharing — behind a rever
 docker compose up --build
 ```
 
-That builds the CPU image (`Dockerfile`). A CUDA image is optional and is not what CI builds:
-
-```bash
-docker compose --profile gpu up --build oncall-queue-gpu
-```
+That builds the CPU image (`Dockerfile`). CI builds the same file.
 
 ## Connect it to your stack
 
@@ -152,14 +148,11 @@ python run_validate.py        # fails if the docs and the csv files disagree
 
 Every system in the table goes through the same code (`src/experiment.py`, `src/queue.py`). See [../VALIDATION.md](../VALIDATION.md).
 
-Older alert-only experiments live in `experiments/legacy_alerts_only/` (`run_m1`, `run_m2`, `run_m4`, `run_stretch`, `run_memory_clf`; run with `python -m experiments.legacy_alerts_only.run_m1`). They score log alerts only; do not quote them as the system result.
-
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `src/memory_spikes.py` | Jumps (absolute / relative), slow leaks, gaps, old mean + 3σ rule |
-| `src/jump_ranker.py` | Phase 3 learned jump ranker (evaluated; not used by default) |
 | `src/baselines_metric.py` | Static and rate (`delta`) rules — the fair baselines |
 | `src/queue.py` | Causal queue, scorer, oracle ceiling, confirm-threshold tuning |
 | `src/experiment.py` | One window, every system — used by all GAIA results scripts |
@@ -171,4 +164,4 @@ Older alert-only experiments live in `experiments/legacy_alerts_only/` (`run_m1`
 | `product/` | Web app, CLI, store, connectors |
 | `examples/` | Synthetic export for the quick start |
 | `../tools/md2docx.js` | Rebuild the Word copy of the report |
-| `tests/` | 552 tests. `uv run pytest -q --cov --cov-report=term --cov-fail-under=85`: 530 passed, 22 skipped, line coverage 86.93% when Helm is not installed |
+| `tests/` | 361 passed, 1 skipped. `uv run pytest -q --cov --cov-report=term --cov-fail-under=85`: line coverage 90.02%. The skip is the Docker integration test |

@@ -1,4 +1,3 @@
-# Shared by the CPU service and the optional GPU profile.
 x-oncall: &oncall
   ports:
     # Bound to this machine only. Change to "8080:8080" to share it, and set a password first.
@@ -25,25 +24,6 @@ services:
   oncall-queue:
     <<: *oncall
     build: .
-
-  # Not started by `docker compose up`. Name the service so the CPU container stays down:
-  #   docker compose --profile gpu up --build oncall-queue-gpu
-  oncall-queue-gpu:
-    <<: *oncall
-    profiles: ["gpu"]
-    build:
-      context: .
-      dockerfile: Dockerfile.gpu
-    environment:
-      QUEUE_DB: /app/product/data/queue.db
-      NVIDIA_VISIBLE_DEVICES: all
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
 volumes:
   queue-data:
