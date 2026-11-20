@@ -62,7 +62,7 @@ def matches(computed: float, printed: str) -> bool:
 def _queue_numbers(out: dict[str, float]) -> None:
     q = pd.read_csv(ROOT / "queue_eval_gaia.csv")
     for name in ("logs_severity", "static_p99", "delta_5m", "jumps_hindsight", "jumps_online", "jumps_tuned",
-                 "proposed", "p3_ranker", "p3_grouped", "p3_carryover", "delta_5m_carryover", "p3_per_series"):
+                 "proposed", "p3_grouped", "p3_carryover", "delta_5m_carryover", "p3_per_series"):
         out[f"queue.K20.{name}"] = float(_row(q, name)["detection_rate"])
     for name in ("delta_5m", "jumps_tuned", "proposed", "p3_per_series_jumps", "delta_5m_carryover"):
         out[f"false.K20.{name}"] = float(_row(q, name)["false_items_per_day"])
@@ -345,7 +345,7 @@ def _check_ablation_claims() -> None:
             if int(_row(a, "classifier", k)["faults_caught"]) != int(_row(q, "proposed", k)["faults_caught"]):
                 _fail(f"ablation 'classifier' row at K={k} no longer equals the published full queue")
         if float(_row(a, "classifier")["detection_rate"]) > float(_row(a, "no_alerts")["detection_rate"]):
-            _fail("the classifier now adds catches on GAIA; rewrite the 'adds no catches' sentences (§A.4, §A.6, §B4)")
+            _fail("the classifier now adds catches on GAIA; rewrite the 'adds no catches' sentences (§A.4, §A.6, §D4)")
     notes = ROOT / "classifier_ablation_gaia.json"
     if notes.exists():
         facts = json.loads(notes.read_text(encoding="utf-8"))
@@ -353,7 +353,7 @@ def _check_ablation_claims() -> None:
         if gate["queue_check"].get("fallback") != "rules only (severity)":
             _fail("the GAIA gate no longer falls back to severity rules; the 'shipped configuration' row is wrong")
         if gate["promoted"] or gate["model_used"] != "rules_only":
-            _fail("the promotion gate now promotes the classifier on GAIA; rewrite §A.4, §B.2, §A.6 and §B4")
+            _fail("the promotion gate now promotes the classifier on GAIA; rewrite §A.4, §B.2, §A.6 and §D4")
         if facts["severity_K20"]["alerts_attached"] != 0:
             _fail("the severity row now attaches alerts; rewrite the 'why the severity row attaches no alerts' paragraph")
 
@@ -363,12 +363,12 @@ def _check_baseline_claims() -> None:
     if compare.exists():
         b = pd.read_csv(compare)
         if float(_row(b, "delta_5m")["diff_low"]) <= 0:
-            _fail("the detector no longer beats the rate rule at K = 20 with an interval above zero; rewrite §B1")
+            _fail("the detector no longer beats the rate rule at K = 20 with an interval above zero; rewrite §D1")
         if float(_row(b, "delta_5m", 50)["diff_low"]) > 0 or float(_row(b, "delta_5m", 50)["diff_high"]) < 0:
-            _fail("at K = 50 the detector and the rate rule are no longer tied; rewrite the K = 50 sentence (§B1)")
+            _fail("at K = 50 the detector and the rate rule are no longer tied; rewrite the K = 50 sentence (§D1)")
         for name in ("zscore", "ewma", "iforest"):
             if float(_row(b, name)["detection_rate"]) >= float(_row(b, "delta_5m")["detection_rate"]):
-                _fail(f"{name} now beats the rate rule at K = 20; rewrite the textbook-detector paragraph (§B1)")
+                _fail(f"{name} now beats the rate rule at K = 20; rewrite the textbook-detector paragraph (§D1)")
 
 
 def _check_nab_claims() -> None:
@@ -386,29 +386,29 @@ def _check_rcaeval_claims() -> None:
         frame = pd.read_csv(rca)
         yours = frame[frame["queue"] == "your_queue"]
         if (yours["detection_rate"] > 0).any():
-            _fail("RCAEval queue now catches a test fault; update the §B5 paragraph")
+            _fail("RCAEval queue now catches a test fault; update the §E1 paragraph")
         jump = frame[(frame["queue"] == "jump_rule") & (frame["budget_k"] == 5)]
         if (jump["detection_no_budget"] <= jump["chance"]).any():
-            _fail("RCAEval jump rule is no longer above its chance line; update §B5")
+            _fail("RCAEval jump rule is no longer above its chance line; update §E1")
     logs = ROOT / "rcaeval_logs.json"
     if logs.exists():
         facts = json.loads(logs.read_text(encoding="utf-8"))
         promoted = sorted(f"{a['suite']} {a['app']}" for a in facts["apps"] if a["promotion_gate"]["promoted"])
         if promoted != ["RE2 Train Ticket"]:
-            _fail(f"the gate now promotes the classifier on {promoted}; rewrite the RCAEval RE2/RE3 gate sentences (§B5)")
+            _fail(f"the gate now promotes the classifier on {promoted}; rewrite the RCAEval RE2/RE3 gate sentences (§E1)")
         by_margin = sorted(f"{a['suite']} {a['app']}" for a in facts["apps"]
                            if not a["promotion_gate"]["promoted"] and (a["promotion_gate"].get("queue_saving") or 0) > 0)
         if by_margin != ["RE2 Online Boutique"]:
-            _fail(f"the margin now refuses {by_margin}; rewrite the margin sentences (§B.2, §B5)")
+            _fail(f"the margin now refuses {by_margin}; rewrite the margin sentences (§B.2, §E1)")
         tt = next(a["promotion_gate"] for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
         if tt["queue_saving"] != tt["margin"]:
-            _fail("RE2 Train Ticket no longer passes exactly at the margin; rewrite 'exactly one missed fault' (§B5)")
+            _fail("RE2 Train Ticket no longer passes exactly at the margin; rewrite 'exactly one missed fault' (§E1)")
         tt_app = next(a for a in facts["apps"] if a["suite"] == "RE2" and a["app"] == "Train Ticket")
         if tt["queue_check"]["faults"] != tt_app["test_cases"]:
             _fail("the RE2 Train Ticket gate window is no longer the scored set of test cases; rewrite the "
-                  "'gate's window is the scored window' caveat (§B.2, §A.6, Appendix C, §B5)")
+                  "'gate's window is the scored window' caveat (§B.2, §A.6, Appendix C, §E1)")
         if any(a["by_k"]["10"]["classifier_minus_no_alerts"]["cases_lost"] for a in facts["apps"]):
-            _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §B5")
+            _fail("the classifier now loses a case to 'no log alerts' at K = 10 on RCAEval; rewrite §E1")
 
 
 def _check_gate_split_claim() -> None:
@@ -417,7 +417,7 @@ def _check_gate_split_claim() -> None:
         facts = json.loads(split.read_text(encoding="utf-8"))
         promoted = [f"{a['suite']} {a['app']}" for a in facts["apps"] if a["promoted"]]
         if promoted:
-            _fail(f"the independent gate now promotes the classifier on {promoted}; rewrite the independent gate test (§B5)")
+            _fail(f"the independent gate now promotes the classifier on {promoted}; rewrite the independent gate test (§E1)")
 
 
 def _check_replay_claims() -> None:
@@ -426,9 +426,9 @@ def _check_replay_claims() -> None:
         if path.exists():
             replay = json.loads(path.read_text(encoding="utf-8"))["summary"]
             if replay["retrains_promoted"]:
-                _fail(f"the replay ({name}) now promotes a model; rewrite the replay section (§B8)")
+                _fail(f"the replay ({name}) now promotes a model; rewrite the replay section (§E2)")
             if replay["retrains_rolled_back"]:
-                _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§B8)")
+                _fail(f"the replay ({name}) rolled a model back; rewrite the replay section (§E2)")
 
 
 def claims_still_hold() -> None:

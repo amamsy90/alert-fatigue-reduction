@@ -28,8 +28,7 @@ Script: `python run_queue_eval.py` → `app/results/queue_eval_gaia.csv`
 | **proposed** (jumps + leaks + gaps + classifier alerts; refused by the promotion gate on GAIA) | 69.6% | 17.7 | 1.8 | 90% |
 | **shipped** (the same queue with log alerts by severity: what the tool runs on GAIA) | **71.0%** | 17.6 | 1.4 | 92% |
 | jumps_hindsight (old headline, not causal) | 72.9% | 17.5 | 1.3 | 93% |
-| p3_ranker | 69.7% | 17.7 | 1.8 | 90% |
-| p3_grouped (2 min) | 70.7% | 17.6 | 1.9 | 89% |
+| p3_ranker (historical; `run_queue_eval.py` no longer writes this row) | 69.7% | 17.7 | 1.8 | 90% || p3_grouped (2 min) | 70.7% | 17.6 | 1.9 | 89% |
 | p3_carryover (≤ 10 slots) | 72.6% | 18.6 | 2.1 | 89% |
 | delta_5m_carryover | 72.5% | 18.5 | 2.4 | 87% |
 
@@ -54,7 +53,7 @@ Everything learned is re-learned before each later week; the week is scored once
 | 7 | 19–26 Aug | 173 | 61% | 51.4% | 52.0% | 50.9% | 54.9% |
 | 8 | 26–31 Aug | 129 | 91% | 78.3% | 83.7% | 79.1% | 79.1% |
 
-Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **71.3%** (95% CI 64.5–76.7%; 4 wins, 3 losses, 1 tie, p = 0.5); p3_carryover **74.8%** vs delta_5m_carryover 74.3% (3 of 6 decided weeks, p = 0.66). Numbers after the look-ahead fixes (`docs/report_appendices_full.md` §B1); `run_validate.py` checks them against that file's Checked numbers table. Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
+Means: delta_5m **70.7%**; jumps_tuned **74.8%** (8/8 wins, p = 0.0039); proposed **71.3%** (95% CI 64.5–76.7%; 4 wins, 3 losses, 1 tie, p = 0.5); p3_carryover **74.8%** vs delta_5m_carryover 74.3% (3 of 6 decided weeks, p = 0.66). Numbers after the look-ahead fixes (`docs/report_appendices_full.md` §D1); `run_validate.py` checks them against that file's Checked numbers table. Fold 7 is a metric outage on all services (20 Aug 13:18 UTC + 2 d 12 h).
 
 ## Signals and checks
 
