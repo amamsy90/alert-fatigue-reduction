@@ -14,6 +14,15 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ### Changed
 - `ruff` now also enforces McCabe complexity: a function with more than 15 independent paths fails lint and CI (`C90`, `max-complexity = 15` in `app/pyproject.toml`). Functions over the limit were split into small helpers with no change in behaviour, including `product/pipeline.score_alerts`, `product/web/security.require_login`, and `run_validate.computed_numbers` / `claims_still_hold`.
 
+## [1.3.1] - 2026-11-20
+
+### Changed
+- Report: the 72.6% and 8-of-8-weeks figures are named as the jump detector alone. The shipped queue (the gate keeps the classifier out) is reported separately: 71.0% of 1,223 GAIA test faults at K = 20 with 1.4 false items a day. The full queue's walk-forward record stays 4 wins, 3 losses and 1 tie (#58).
+- `run_validate.py` no longer requires the `p3_ranker` row, which the current `run_queue_eval.py` cannot rewrite; it checks 284 numbers (#58).
+- Appendix lettering: `FINAL_REPORT.md` keeps Appendix A (GAIA headline evidence), and the full appendices in `docs/report_appendices_full.md` now run B–H (requirements B, deployment and MLOps C, testing D, GAIA detail E, generality F, reproduction and checked numbers G, interfaces H), so no letter names two different appendices. Cross-references in the report, the READMEs, `VALIDATION.md`, `docs/` and the `run_validate.py` messages were updated.
+- `tools/md2docx.js`: every body paragraph is 0 pt before and 6 pt after, including the paragraph after a table or figure (three had 6 pt before). Headings stay 12 pt before and 6 pt after.
+- Version 1.3.1 in `app/product/__init__.py`, `app/pyproject.toml`, `app/uv.lock`, the README, the `docs/` headers and report section 4. No application behaviour changed.
+
 ## [1.3.0] - 2026-11-15
 
 ### Removed

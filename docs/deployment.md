@@ -1,6 +1,6 @@
 # Deployment, environments and AI governance
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.3.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.3.1
 
 ## 1. Where it runs
 
