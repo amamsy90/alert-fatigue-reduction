@@ -1,6 +1,6 @@
 # Test plan
 
-**System:** AI-Assisted On-Call Queue · **Version:** 1.3.0
+**System:** AI-Assisted On-Call Queue · **Version:** 1.3.1
 
 ## 1. Goals
 

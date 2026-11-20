@@ -62,13 +62,12 @@ function runs(text, base = {}) {
   return out;
 }
 
-let pendingBefore = 0;
+// Body paragraphs are always 0 pt before and 6 pt after (course format rule),
+// including the paragraph that follows a table or figure.
 function bodyParagraph(text, extra = {}) {
-  const before = pendingBefore;
-  pendingBefore = 0;
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
-    spacing: { ...BODY, before },
+    spacing: BODY,
     keepNext: extra.keepNext,
     children: runs(text, { size: 24 }),
   });
@@ -280,10 +279,7 @@ for (let i = 0; i < lines.length; i++) {
       i++;
     }
     i--;
-    if (rows.length) {
-      children.push(table(rows));
-      pendingBefore = 120;
-    }
+    if (rows.length) children.push(table(rows));
     continue;
   }
   const bullet = line.match(/^(\s*)[-*]\s+(.*)$/);

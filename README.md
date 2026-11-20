@@ -2,7 +2,7 @@
 
 *(Alert Fatigue Reduction in Cloud Microservice Operations)*
 
-**Version:** 1.3.0
+**Version:** 1.3.1
 
 An on-call engineer can read only a few alerts a day, and 82% of GAIA faults never write a log line. This system shows at most K items a day, in the order they become known, using memory jumps, slow leaks, and monitoring gaps. At K = 20 the jump detector alone catches 72.6% of 1,223 test faults, against 68.9% for a Prometheus rate rule and 0% for log severity, and it wins all 8 walk-forward weeks. The shipped queue catches 71.0% with 1.4 false items a day. The report is [`FINAL_REPORT.md`](FINAL_REPORT.md). Version 1.3.0 keeps the jump queue, the web app and the GAIA evaluation.
 
@@ -77,7 +77,7 @@ python tools/check_fresh_clone.py          # or: --source https://github.com/ama
 
 A first install with an empty cache takes longer than a warm one. The current pytest figure is the 361 passed and 1 skipped measurement above.
 
-Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `docs/report_appendices_full.md` §E2.
+Replay real alerts through the whole product loop (drift, marks, scheduled retrain, promotion gate), with a simulated engineer, no download: `uv run python run_live_replay.py` (results in `app/results/live_replay_gaia.json`; `--dataset rcaeval:RE2:tt` needs the RCAEval fetch). A replay is not a pilot; see `docs/report_appendices_full.md` §F2.
 
 The sample is a smoke-scale check, not the 1,223-fault result in the report; `--full` reproduces that.
 
@@ -92,7 +92,7 @@ uv run python ../tools/fetch_rcaeval_re23.py   # RCAEval RE2/RE3, checked agains
 uv run python ../tools/fetch_gaia.py           # GAIA commit 238a9e24, 1.79 GB download, 54.7 MB kept, SHA-256 checked (--check to verify only)
 ```
 
-The full list of experiment commands is in `docs/report_appendices_full.md`, Appendix F (§F1).
+The full list of experiment commands is in `docs/report_appendices_full.md`, Appendix G (§G1).
 
 Two checks added for the final report (both need the data above):
 
@@ -122,7 +122,7 @@ uv run python run_rcaeval_gate_split.py   # classifier gate decided on cases tha
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 | [`submission/`](submission/README.md) | The versioned report to upload: PDF, Word, and ZIP |
 | `design_specification.md`, `VALIDATION.md` | Design detail, result files |
-| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 284 checked numbers. Section ids such as §E2 and §F1 live here |
+| [`docs/report_appendices_full.md`](docs/report_appendices_full.md) | Full appendices (requirements through optional checks) and the 284 checked numbers. Section ids such as §F2 and §G1 live here |
 | [`report/`](report/README.md) | Note that the old LaTeX report is withdrawn. The upload is the PDF in `submission/` |
 
 ## Safety defaults
